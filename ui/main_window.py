@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from market.downloader import download_multiple_stocks
+from database.manager import DatabaseManager
 
 
 class MainWindow(QMainWindow):
@@ -20,7 +21,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1000, 700)
 
-        # Main widget
+        # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
@@ -30,18 +31,19 @@ class MainWindow(QMainWindow):
 
         # Download button
         self.download_button = QPushButton("📥 Download Market Data")
-        layout.addWidget(self.download_button)
-
-        # Output window
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-        layout.addWidget(self.output)
-
-        # Button event
         self.download_button.clicked.connect(self.download_data)
 
-    def log(self, message):
-        self.output.append(message)
+        layout.addWidget(self.download_button)
+
+        # Log window
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
+        layout.addWidget(self.output)
+
+    def log(self, text):
+        self.output.append(text)
+        QApplication.processEvents()
 
     def download_data(self):
 
@@ -55,17 +57,30 @@ class MainWindow(QMainWindow):
             "TSLA",
         ]
 
+        self.output.clear()
+
         self.log("Starting download...\n")
 
+        # Download market data
         market = download_multiple_stocks(tickers)
 
+        # Save to SQLite
+        db = DatabaseManager()
+
         for ticker, history in market.items():
-            self.log(f"✅ {ticker}: {len(history)} rows downloaded")
-            self.log(f"    Saved to data/{ticker}.csv")
+
+            rows = db.save_price_history(ticker, history)
+
+            self.log(f"✅ {ticker}: {rows} rows saved")
+
+        total = db.get_total_rows()
 
         self.log("")
-        self.log("✅ Download Complete!")
+        self.log(f"📊 Database contains {total:,} rows")
 
+        db.close()
+
+        self.log("\n✅ Download Complete!")
 
 def run():
 
@@ -75,4 +90,4 @@ def run():
 
     window.show()
 
-    app.exec()
+    sys.exit(app.exec())
