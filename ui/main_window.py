@@ -9,8 +9,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
-from market.downloader import download_multiple_stocks
-from database.manager import DatabaseManager
+from controllers.market_controller import MarketController
 
 
 class MainWindow(QMainWindow):
@@ -18,69 +17,48 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.controller = MarketController()
+
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1000, 700)
 
-        # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # Layout
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
-        # Download button
         self.download_button = QPushButton("📥 Download Market Data")
-        self.download_button.clicked.connect(self.download_data)
+        self.download_button.clicked.connect(self.download_market)
 
         layout.addWidget(self.download_button)
 
-        # Log window
         self.output = QTextEdit()
         self.output.setReadOnly(True)
 
         layout.addWidget(self.output)
 
-    def log(self, text):
-        self.output.append(text)
+    def log(self, message):
+        self.output.append(message)
         QApplication.processEvents()
 
-    def download_data(self):
-
-        tickers = [
-            "AAPL",
-            "MSFT",
-            "NVDA",
-            "META",
-            "AMZN",
-            "GOOGL",
-            "TSLA",
-        ]
+    def download_market(self):
 
         self.output.clear()
 
-        self.log("Starting download...\n")
+        self.log("Downloading market data...")
+        self.log("")
 
-        # Download market data
-        market = download_multiple_stocks(tickers)
+        results, total = self.controller.download_market()
 
-        # Save to SQLite
-        db = DatabaseManager()
-
-        for ticker, history in market.items():
-
-            rows = db.save_price_history(ticker, history)
-
-            self.log(f"✅ {ticker}: {rows} rows saved")
-
-        total = db.get_total_rows()
+        for ticker, rows in results.items():
+            self.log(f"✅ {ticker}: {rows} rows stored")
 
         self.log("")
-        self.log(f"📊 Database contains {total:,} rows")
+        self.log(f"📊 Database Rows : {total:,}")
+        self.log("")
+        self.log("Download Complete ✅")
 
-        db.close()
-
-        self.log("\n✅ Download Complete!")
 
 def run():
 
