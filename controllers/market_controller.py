@@ -1,33 +1,59 @@
 from services.market_service import MarketService
 
-from services.database_service import DatabaseService
-
 
 class MarketController:
+    """
+    Controller responsible for all market-related actions.
+    """
 
     def __init__(self):
-
         self.market = MarketService()
 
-        self.database = DatabaseService()
+    # --------------------------------------------------
+    # Universe
+    # --------------------------------------------------
 
-    def download_market(self):
+    def update_universe(self):
+        """
+        Import the master universe CSV into SQLite.
+        """
 
-        market = self.market.download_market()
+        imported = self.market.import_universe()
 
-        results = {}
+        total = self.market.total_stocks()
 
-        for ticker, history in market.items():
+        return imported, total
 
-            rows = self.database.save_price_history(
-                ticker,
-                history,
-            )
+    # --------------------------------------------------
+    # Prices
+    # --------------------------------------------------
 
-            results[ticker] = rows
+    def download_prices(self):
+        """
+        Download price history for every active stock.
+        """
 
-        total = self.database.total_rows()
+        market = self.market.download_prices()
 
-        self.database.close()
+        if not market:
+            return {}, self.market.total_price_rows()
 
-        return results, total
+        results = self.market.save_market_data(market)
+
+        total_rows = self.market.total_price_rows()
+
+        return results, total_rows
+
+    # --------------------------------------------------
+    # Statistics
+    # --------------------------------------------------
+
+    def get_statistics(self):
+
+        return {
+            "stocks": self.market.total_stocks(),
+            "rows": self.market.total_price_rows(),
+        }
+
+    def close(self):
+        self.market.close()

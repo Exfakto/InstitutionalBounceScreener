@@ -1,16 +1,83 @@
+from market.universe import UniverseManager
 from market.downloader import download_multiple_stocks
 
-from config.settings import (
-    DEFAULT_TICKERS,
-    DOWNLOAD_PERIOD,
-)
+from database.manager import DatabaseManager
 
 
 class MarketService:
+    """
+    Business logic for market operations.
+    """
 
-    def download_market(self):
+    def __init__(self):
+        self.db = DatabaseManager()
+        self.universe = UniverseManager()
 
-        return download_multiple_stocks(
-            DEFAULT_TICKERS,
-            DOWNLOAD_PERIOD,
-        )
+    # --------------------------------------------------
+    # Universe
+    # --------------------------------------------------
+
+    def import_universe(self):
+        """
+        Import the master universe into SQLite using a batch transaction.
+        """
+
+        dataframe = self.universe.load_master_universe()
+
+        return self.db.add_stocks(dataframe)
+
+    def get_active_tickers(self):
+        """
+        Return all active tickers from the database.
+        """
+
+        return self.db.get_all_tickers()
+
+    # --------------------------------------------------
+    # Market Data
+    # --------------------------------------------------
+
+    def download_prices(self):
+        """
+        Download market data for every active ticker.
+        """
+
+        tickers = self.get_active_tickers()
+
+        if not tickers:
+            return {}
+
+        return download_multiple_stocks(tickers)
+
+    def save_market_data(self, market):
+        """
+        Save downloaded market data into SQLite.
+        """
+
+        results = {}
+
+        for ticker, history in market.items():
+
+            rows = self.db.save_price_history(
+                ticker,
+                history,
+            )
+
+            results[ticker] = rows
+
+        return results
+
+    # --------------------------------------------------
+    # Statistics
+    # --------------------------------------------------
+
+    def total_stocks(self):
+        return self.db.stock_count()
+
+    def total_price_rows(self):
+        return self.db.get_total_rows()
+
+    # --------------------------------------------------
+
+    def close(self):
+        self.db.close()
