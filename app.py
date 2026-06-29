@@ -1,9 +1,4 @@
-from database.database import Database
+from ui.main_window import run
 
-db = Database()
-
-db.initialize()
-
-db.close()
-
-print("Database created successfully!")
+if __name__ == "__main__":
+    run()
