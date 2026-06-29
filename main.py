@@ -1,3 +1,5 @@
-from ui.main_window import run
+from app import main
 
-run()
+
+if __name__ == "__main__":
+    main()

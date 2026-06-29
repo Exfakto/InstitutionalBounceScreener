@@ -77,6 +77,9 @@ class MarketService:
     def total_price_rows(self):
         return self.db.get_total_rows()
 
+    def total_indicator_rows(self):
+        return self.db.indicator_count()
+
     # --------------------------------------------------
 
     def close(self):

@@ -1,6 +1,8 @@
 import os
 import yfinance as yf
 
+from config.logging_config import logger
+
 
 def download_stock(ticker, period="1y"):
     """
@@ -33,7 +35,7 @@ def download_multiple_stocks(tickers, period="1y"):
 
     for ticker in tickers:
 
-        print(f"Downloading {ticker}...")
+        logger.info("Downloading %s", ticker)
 
         history = download_stock(ticker, period)
 

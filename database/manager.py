@@ -1,5 +1,6 @@
 from pathlib import Path
 import sqlite3
+import pandas as pd
 
 from database.schema import (
     PRICE_HISTORY_TABLE,
@@ -186,6 +187,59 @@ class DatabaseManager:
 
         return inserted
 
+    def get_price_history(self, ticker):
+        """
+        Returns all historical prices for a ticker.
+
+        Returns
+        -------
+        pandas.DataFrame
+        """
+
+        query = """
+        SELECT
+            date,
+            open,
+            high,
+            low,
+            close,
+            volume
+        FROM price_history
+        WHERE ticker = ?
+        ORDER BY date
+        """
+
+        dataframe = pd.read_sql_query(
+            query,
+            self.connection,
+            params=(ticker,),
+        )
+
+        if dataframe.empty:
+            return dataframe
+
+        dataframe.rename(
+            columns={
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                "volume": "Volume",
+            },
+            inplace=True,
+        )
+
+        dataframe["date"] = pd.to_datetime(
+            dataframe["date"]
+        )
+
+        dataframe.set_index(
+            "date",
+            inplace=True,
+        )
+
+        return dataframe
+
     def get_total_rows(self):
 
         self.cursor.execute(
@@ -253,6 +307,45 @@ class DatabaseManager:
             """,
             values,
         )
+
+    def save_sma(self, dataframe):
+        """
+        Save SMA calculations into technical_indicators.
+        """
+
+        rows = []
+
+        for date, row in dataframe.iterrows():
+
+            rows.append(
+                (
+                    row["ticker"],
+                    str(date.date()),
+                    row["sma20"],
+                    row["sma50"],
+                    row["sma200"],
+                )
+            )
+
+        self.cursor.executemany(
+            """
+            INSERT OR REPLACE INTO technical_indicators
+            (
+                ticker,
+                date,
+                sma20,
+                sma50,
+                sma200
+            )
+            VALUES
+            (
+                ?, ?, ?, ?, ?
+            )
+            """,
+            rows,
+        )
+
+        self.connection.commit()
 
     def indicator_count(self):
 

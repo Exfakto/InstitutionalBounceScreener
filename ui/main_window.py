@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from controllers.market_controller import MarketController
+from controllers.indicator_controller import IndicatorController
 
 from ui.widgets.statistics_card import StatisticsCard
 from ui.widgets.activity_log import ActivityLog
@@ -25,6 +26,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.controller = MarketController()
+        self.indicator_controller = IndicatorController()
 
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1200, 800)
@@ -57,11 +59,11 @@ class MainWindow(QMainWindow):
 
         self.universe_card = StatisticsCard("Universe Stocks")
         self.database_card = StatisticsCard("Price Records")
-        self.status_card = StatisticsCard("Status", "Ready")
+        self.indicator_card = StatisticsCard("Indicator Rows")
 
         stats_layout.addWidget(self.universe_card, 0, 0)
         stats_layout.addWidget(self.database_card, 0, 1)
-        stats_layout.addWidget(self.status_card, 0, 2)
+        stats_layout.addWidget(self.indicator_card, 0, 2)
 
         main_layout.addLayout(stats_layout)
 
@@ -79,11 +81,15 @@ class MainWindow(QMainWindow):
         self.download_button = QPushButton("📥 Download Prices")
         self.download_button.clicked.connect(self.download_prices)
 
+        self.indicators_button = QPushButton("Calculate Indicators")
+        self.indicators_button.clicked.connect(self.calculate_indicators)
+
         self.screen_button = QPushButton("▶ Run Screener")
         self.screen_button.setEnabled(False)
 
         operations_layout.addWidget(self.update_button)
         operations_layout.addWidget(self.download_button)
+        operations_layout.addWidget(self.indicators_button)
         operations_layout.addWidget(self.screen_button)
 
         operations.setLayout(operations_layout)
@@ -132,6 +138,8 @@ class MainWindow(QMainWindow):
 
         self.database_card.set_value(f'{stats["rows"]:,}')
 
+        self.indicator_card.set_value(f'{stats["indicator_rows"]:,}')
+
     # ----------------------------------------------------------
 
     def update_universe(self):
@@ -174,3 +182,51 @@ class MainWindow(QMainWindow):
 
         self.log("")
         self.log(f"Database Rows: {total:,}")
+
+    # ----------------------------------------------------------
+
+    def calculate_indicators(self):
+
+        self.progress.set_status("Calculating indicators...")
+        self.progress.set_progress(20)
+
+        self.log_widget.clear_log()
+
+        results = self.indicator_controller.calculate_indicators()
+
+        self.progress.set_progress(100)
+
+        self.progress.set_status("Ready")
+
+        self.refresh_statistics()
+
+        self.log("Calculated indicators")
+        self.log(f'Tickers: {results["tickers"]:,}')
+        self.log(f'Processed: {results["processed"]:,}')
+        self.log(
+            f'Processed tickers: {self.format_ticker_list(results["processed_tickers"])}'
+        )
+        self.log(f'Skipped: {results["skipped"]:,}')
+        self.log(
+            f'Skipped tickers: {self.format_ticker_list(results["skipped_tickers"])}'
+        )
+        self.log(f'Indicator rows written: {results["rows"]:,}')
+        self.log(f'Elapsed time: {results["elapsed_seconds"]:.2f}s')
+
+    # ----------------------------------------------------------
+
+    def format_ticker_list(self, tickers):
+
+        if not tickers:
+            return "None"
+
+        return ", ".join(tickers)
+
+    # ----------------------------------------------------------
+
+    def closeEvent(self, event):
+
+        self.controller.close()
+        self.indicator_controller.close()
+
+        super().closeEvent(event)

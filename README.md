@@ -23,13 +23,15 @@ The goal is to identify stocks that repeatedly bounce from institutional support
 - Desktop application (PySide6)
 - Market data download
 - Save historical prices to CSV
+- SQLite database storage
+- Technical indicator engine foundation
+- SMA20, SMA50, and SMA200 calculations
+- Dashboard workflow for calculating indicators
 - Git version control
 
 ### Planned
 
-- SQLite database
 - Automatic market updates
-- Technical indicators
 - Institutional Support Engine
 - Ranking engine
 - Professional dashboard
@@ -51,6 +53,6 @@ The goal is to identify stocks that repeatedly bounce from institutional support
 
 ## Project Status
 
-Version 0.1
+Version 0.9.0
 
-Development in progress.
+Indicator Engine Foundation released.

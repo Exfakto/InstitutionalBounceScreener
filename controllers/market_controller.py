@@ -53,6 +53,7 @@ class MarketController:
         return {
             "stocks": self.market.total_stocks(),
             "rows": self.market.total_price_rows(),
+            "indicator_rows": self.market.total_indicator_rows(),
         }
 
     def close(self):

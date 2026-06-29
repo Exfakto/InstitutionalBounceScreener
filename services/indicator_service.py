@@ -1,30 +1,81 @@
+from time import perf_counter
+
 from database.manager import DatabaseManager
-from indicators.sma import SMAIndicator
+from config.logging_config import logger
+from indicators.moving_averages.sma import SMAIndicator
 
 
 class IndicatorService:
+    """
+    Business workflow for calculating technical indicators.
+    """
 
     def __init__(self):
         self.db = DatabaseManager()
+        self.sma = SMAIndicator()
+
+    def calculate_indicators(self):
+        """
+        Calculate all currently supported indicators.
+        """
+
+        return self.calculate_sma()
 
     def calculate_sma(self):
+        """
+        Calculate and persist SMA20, SMA50 and SMA200 for all active tickers.
+        """
 
         tickers = self.db.get_all_tickers()
 
+        results = {
+            "tickers": len(tickers),
+            "processed": 0,
+            "processed_tickers": [],
+            "skipped": 0,
+            "skipped_tickers": [],
+            "rows": 0,
+            "elapsed_seconds": 0.0,
+        }
+
+        started_at = perf_counter()
+
+        logger.info("Starting SMA calculation for %s tickers", len(tickers))
+
         for ticker in tickers:
 
-            print(f"Calculating SMA: {ticker}")
+            logger.info("Calculating SMA for %s", ticker)
 
-            df = self.db.get_price_history(ticker)
+            dataframe = self.db.get_price_history(ticker)
 
-            if df.empty:
+            if dataframe.empty:
+                logger.info("Skipping %s because no price history exists", ticker)
+                results["skipped"] += 1
+                results["skipped_tickers"].append(ticker)
                 continue
 
-            df = SMAIndicator.calculate(df)
-            df["ticker"] = ticker
+            dataframe = self.sma.calculate(dataframe)
+            dataframe["ticker"] = ticker
 
-            self.db.save_sma(df)
+            self.db.save_sma(dataframe)
+
+            results["processed"] += 1
+            results["processed_tickers"].append(ticker)
+            results["rows"] += len(dataframe)
 
         self.db.commit()
 
-        print("Done.")
+        results["elapsed_seconds"] = perf_counter() - started_at
+
+        logger.info(
+            "Finished SMA calculation: %s processed, %s skipped, %s rows in %.2fs",
+            results["processed"],
+            results["skipped"],
+            results["rows"],
+            results["elapsed_seconds"],
+        )
+
+        return results
+
+    def close(self):
+        self.db.close()
