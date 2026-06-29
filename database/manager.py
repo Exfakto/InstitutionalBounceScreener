@@ -4,8 +4,8 @@ import sqlite3
 from database.schema import (
     PRICE_HISTORY_TABLE,
     STOCKS_TABLE,
+    TECHNICAL_INDICATORS_TABLE,
 )
-
 
 DATABASE_NAME = "InstitutionalBounce.db"
 DATABASE_PATH = Path("data") / DATABASE_NAME
@@ -21,6 +21,7 @@ class DatabaseManager:
     - Initialize database schema
     - Manage the stock universe
     - Store price history
+    - Store technical indicators
     - Provide database statistics
     """
 
@@ -40,12 +41,10 @@ class DatabaseManager:
     # ==========================================================
 
     def initialize(self):
-        """
-        Create all required tables if they do not exist.
-        """
 
         self.cursor.execute(STOCKS_TABLE)
         self.cursor.execute(PRICE_HISTORY_TABLE)
+        self.cursor.execute(TECHNICAL_INDICATORS_TABLE)
 
         self.connection.commit()
 
@@ -61,9 +60,6 @@ class DatabaseManager:
         sector="",
         industry="",
     ):
-        """
-        Insert or update a single stock.
-        """
 
         self.cursor.execute(
             """
@@ -90,9 +86,6 @@ class DatabaseManager:
         self.connection.commit()
 
     def add_stocks(self, dataframe):
-        """
-        Import an entire DataFrame using one SQL transaction.
-        """
 
         rows = []
 
@@ -129,9 +122,6 @@ class DatabaseManager:
         return len(rows)
 
     def get_all_tickers(self):
-        """
-        Return every active ticker.
-        """
 
         self.cursor.execute(
             """
@@ -145,9 +135,6 @@ class DatabaseManager:
         return [row[0] for row in self.cursor.fetchall()]
 
     def stock_count(self):
-        """
-        Number of stocks currently in the universe.
-        """
 
         self.cursor.execute(
             """
@@ -163,10 +150,6 @@ class DatabaseManager:
     # ==========================================================
 
     def save_price_history(self, ticker, history):
-        """
-        Save Yahoo Finance history to SQLite.
-        Duplicate rows are automatically ignored.
-        """
 
         inserted = 0
 
@@ -204,9 +187,6 @@ class DatabaseManager:
         return inserted
 
     def get_total_rows(self):
-        """
-        Total rows stored in price_history.
-        """
 
         self.cursor.execute(
             """
@@ -218,13 +198,78 @@ class DatabaseManager:
         return self.cursor.fetchone()[0]
 
     # ==========================================================
+    # Technical Indicators
+    # ==========================================================
+
+    def save_indicator_row(self, values):
+        """
+        Save one row of technical indicators.
+
+        Expected tuple order:
+
+        (
+            ticker,
+            date,
+            sma20,
+            sma50,
+            sma200,
+            ema21,
+            rsi14,
+            atr14,
+            avg_volume20,
+            relative_volume,
+            high52,
+            low52,
+            macd,
+            macd_signal,
+            macd_histogram,
+        )
+        """
+
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO technical_indicators
+            (
+                ticker,
+                date,
+                sma20,
+                sma50,
+                sma200,
+                ema21,
+                rsi14,
+                atr14,
+                avg_volume20,
+                relative_volume,
+                high52,
+                low52,
+                macd,
+                macd_signal,
+                macd_histogram
+            )
+            VALUES
+            (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            values,
+        )
+
+    def indicator_count(self):
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM technical_indicators
+            """
+        )
+
+        return self.cursor.fetchone()[0]
+
+    # ==========================================================
     # Utilities
     # ==========================================================
 
     def execute(self, sql, params=None):
-        """
-        Execute a SQL statement.
-        """
 
         if params is None:
             self.cursor.execute(sql)
@@ -234,9 +279,6 @@ class DatabaseManager:
         self.connection.commit()
 
     def query(self, sql, params=None):
-        """
-        Execute a SELECT statement.
-        """
 
         if params is None:
             self.cursor.execute(sql)
@@ -245,13 +287,18 @@ class DatabaseManager:
 
         return self.cursor.fetchall()
 
+    def commit(self):
+        """
+        Commit current transaction.
+        """
+        self.connection.commit()
+
     # ==========================================================
     # Shutdown
     # ==========================================================
 
     def close(self):
-        """
-        Close SQLite connection.
-        """
 
         self.connection.close()
+
+        

@@ -2,15 +2,21 @@ import sys
 
 from PySide6.QtWidgets import (
     QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QPushButton,
-    QTextEdit,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
     QLabel,
+    QMainWindow,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from controllers.market_controller import MarketController
+
+from ui.widgets.statistics_card import StatisticsCard
+from ui.widgets.activity_log import ActivityLog
+from ui.widgets.progress_panel import ProgressPanel
 
 
 class MainWindow(QMainWindow):
@@ -21,94 +27,150 @@ class MainWindow(QMainWindow):
         self.controller = MarketController()
 
         self.setWindowTitle("Institutional Bounce Screener")
-        self.resize(1000, 700)
+        self.resize(1200, 800)
 
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        self.build_ui()
 
-        layout = QVBoxLayout()
-        central_widget.setLayout(layout)
+        self.refresh_statistics()
 
-        # -----------------------------------------
-        # Universe Section
-        # -----------------------------------------
+    # ----------------------------------------------------------
 
-        layout.addWidget(QLabel("<h2>Market Universe</h2>"))
+    def build_ui(self):
 
-        self.universe_button = QPushButton("🌎 Update Universe")
-        self.universe_button.clicked.connect(self.update_universe)
+        central = QWidget()
+        self.setCentralWidget(central)
 
-        layout.addWidget(self.universe_button)
+        main_layout = QVBoxLayout(central)
 
-        # -----------------------------------------
-        # Market Data Section
-        # -----------------------------------------
+        ##########################################################
+        # Title
+        ##########################################################
 
-        layout.addWidget(QLabel("<h2>Market Data</h2>"))
+        title = QLabel("<h1>Institutional Bounce Screener</h1>")
+        main_layout.addWidget(title)
+
+        ##########################################################
+        # Statistics
+        ##########################################################
+
+        stats_layout = QGridLayout()
+
+        self.universe_card = StatisticsCard("Universe Stocks")
+        self.database_card = StatisticsCard("Price Records")
+        self.status_card = StatisticsCard("Status", "Ready")
+
+        stats_layout.addWidget(self.universe_card, 0, 0)
+        stats_layout.addWidget(self.database_card, 0, 1)
+        stats_layout.addWidget(self.status_card, 0, 2)
+
+        main_layout.addLayout(stats_layout)
+
+        ##########################################################
+        # Operations
+        ##########################################################
+
+        operations = QGroupBox("Operations")
+
+        operations_layout = QHBoxLayout()
+
+        self.update_button = QPushButton("🌎 Update Universe")
+        self.update_button.clicked.connect(self.update_universe)
 
         self.download_button = QPushButton("📥 Download Prices")
         self.download_button.clicked.connect(self.download_prices)
 
-        layout.addWidget(self.download_button)
+        self.screen_button = QPushButton("▶ Run Screener")
+        self.screen_button.setEnabled(False)
 
-        # -----------------------------------------
+        operations_layout.addWidget(self.update_button)
+        operations_layout.addWidget(self.download_button)
+        operations_layout.addWidget(self.screen_button)
+
+        operations.setLayout(operations_layout)
+
+        main_layout.addWidget(operations)
+
+        ##########################################################
+        # Progress
+        ##########################################################
+
+        self.progress = ProgressPanel()
+
+        main_layout.addWidget(self.progress)
+
+        ##########################################################
         # Activity Log
-        # -----------------------------------------
+        ##########################################################
 
-        layout.addWidget(QLabel("<h2>Activity Log</h2>"))
+        log_group = QGroupBox("Activity Log")
 
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
+        log_layout = QVBoxLayout()
 
-        layout.addWidget(self.output)
+        self.log_widget = ActivityLog()
 
-    # --------------------------------------------------
+        log_layout.addWidget(self.log_widget)
 
-    def log(self, message):
+        log_group.setLayout(log_layout)
 
-        self.output.append(message)
+        main_layout.addWidget(log_group)
+
+    # ----------------------------------------------------------
+
+    def log(self, text):
+
+        self.log_widget.log(text)
 
         QApplication.processEvents()
 
-    # --------------------------------------------------
+    # ----------------------------------------------------------
+
+    def refresh_statistics(self):
+
+        stats = self.controller.get_statistics()
+
+        self.universe_card.set_value(stats["stocks"])
+
+        self.database_card.set_value(f'{stats["rows"]:,}')
+
+    # ----------------------------------------------------------
 
     def update_universe(self):
 
-        self.output.clear()
+        self.progress.set_status("Importing universe...")
+        self.progress.set_progress(20)
 
-        self.log("Updating market universe...")
-        self.log("")
+        self.log_widget.clear_log()
 
         imported, total = self.controller.update_universe()
 
         self.log(f"✅ Imported {imported} stocks")
-        self.log(f"📈 Universe Size: {total}")
 
-        self.log("")
-        self.log("Universe update complete.")
+        self.progress.set_progress(100)
 
-    # --------------------------------------------------
+        self.progress.set_status("Ready")
+
+        self.refresh_statistics()
+
+    # ----------------------------------------------------------
 
     def download_prices(self):
 
-        self.output.clear()
+        self.progress.set_status("Downloading prices...")
+        self.progress.set_progress(10)
 
-        self.log("Downloading market prices...")
-        self.log("")
+        self.log_widget.clear_log()
 
-        results, total_rows = self.controller.download_prices()
-
-        if len(results) == 0:
-
-            self.log("No stocks found.")
-            return
+        results, total = self.controller.download_prices()
 
         for ticker, rows in results.items():
 
-            self.log(f"✅ {ticker}: {rows} rows saved")
+            self.log(f"✓ {ticker}: {rows} rows")
+
+        self.progress.set_progress(100)
+
+        self.progress.set_status("Ready")
+
+        self.refresh_statistics()
 
         self.log("")
-        self.log(f"📊 Total Price Records: {total_rows:,}")
-
-        self.log("")
-        self.log("Download complete.")
+        self.log(f"Database Rows: {total:,}")
