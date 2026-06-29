@@ -27,6 +27,8 @@ The goal is to identify stocks that repeatedly bounce from institutional support
 - Technical indicator engine foundation
 - SMA20, SMA50, and SMA200 calculations
 - Dashboard workflow for calculating indicators
+- Support Detection Engine foundation
+- Dashboard workflow for detecting support zones
 - Git version control
 
 ### Planned
@@ -53,6 +55,6 @@ The goal is to identify stocks that repeatedly bounce from institutional support
 
 ## Project Status
 
-Version 0.9.0
+Version 1.0-RC1
 
-Indicator Engine Foundation released.
+Support Detection Engine release candidate.

@@ -4,6 +4,7 @@ import pandas as pd
 
 from database.schema import (
     PRICE_HISTORY_TABLE,
+    SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
     TECHNICAL_INDICATORS_TABLE,
 )
@@ -46,6 +47,7 @@ class DatabaseManager:
         self.cursor.execute(STOCKS_TABLE)
         self.cursor.execute(PRICE_HISTORY_TABLE)
         self.cursor.execute(TECHNICAL_INDICATORS_TABLE)
+        self.cursor.execute(SUPPORT_LEVELS_TABLE)
 
         self.connection.commit()
 
@@ -359,6 +361,114 @@ class DatabaseManager:
         return self.cursor.fetchone()[0]
 
     # ==========================================================
+    # Support Levels
+    # ==========================================================
+
+    def save_support_levels(self, ticker, zones):
+        """
+        Replace stored support levels for one ticker.
+        """
+
+        self.delete_support_levels(ticker)
+
+        rows = []
+
+        for zone in zones:
+            rows.append(
+                (
+                    ticker,
+                    float(zone["zone_low"]),
+                    float(zone["zone_high"]),
+                    float(zone["zone_mid"]),
+                    int(zone["touches"]),
+                    float(zone["strength_score"]),
+                    float(zone["current_price"]),
+                    float(zone["distance_from_current"]),
+                    float(zone["distance_from_current_pct"]),
+                    self._format_date(zone.get("first_touch_date")),
+                    self._format_date(zone.get("last_touch_date")),
+                )
+            )
+
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT INTO support_levels
+                (
+                    ticker,
+                    zone_low,
+                    zone_high,
+                    zone_mid,
+                    touches,
+                    strength_score,
+                    current_price,
+                    distance_from_current,
+                    distance_from_current_pct,
+                    first_touch_date,
+                    last_touch_date
+                )
+                VALUES
+                (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                rows,
+            )
+
+        self.connection.commit()
+
+        return len(rows)
+
+    def delete_support_levels(self, ticker):
+        """
+        Delete stored support levels for one ticker.
+        """
+
+        self.cursor.execute(
+            """
+            DELETE FROM support_levels
+            WHERE ticker = ?
+            """,
+            (ticker,),
+        )
+
+    def support_level_count(self):
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM support_levels
+            """
+        )
+
+        return self.cursor.fetchone()[0]
+
+    def get_support_levels(self, ticker):
+
+        self.cursor.execute(
+            """
+            SELECT
+                ticker,
+                zone_low,
+                zone_high,
+                zone_mid,
+                touches,
+                strength_score,
+                current_price,
+                distance_from_current,
+                distance_from_current_pct,
+                first_touch_date,
+                last_touch_date
+            FROM support_levels
+            WHERE ticker = ?
+            ORDER BY strength_score DESC, zone_mid
+            """,
+            (ticker,),
+        )
+
+        return self.cursor.fetchall()
+
+    # ==========================================================
     # Utilities
     # ==========================================================
 
@@ -385,6 +495,17 @@ class DatabaseManager:
         Commit current transaction.
         """
         self.connection.commit()
+
+    @staticmethod
+    def _format_date(value):
+
+        if value is None:
+            return None
+
+        if hasattr(value, "date"):
+            return str(value.date())
+
+        return str(value)
 
     # ==========================================================
     # Shutdown

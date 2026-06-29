@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0-RC1 - 2026-06-29
+
+### Added
+
+- Support Detection Engine foundation.
+- Swing-low detection, support-zone clustering, and support-strength scoring.
+- SQLite `support_levels` persistence.
+- Support detection service and controller workflow.
+- Dashboard action for detecting support zones.
+- Tests for support calculations, persistence, and service orchestration.
+
+### Verified
+
+- Unit test suite passes.
+- Application source compiles successfully.
+
 ## v0.9.0 - 2026-06-29
 
 ### Added

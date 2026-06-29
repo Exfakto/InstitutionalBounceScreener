@@ -80,6 +80,9 @@ class MarketService:
     def total_indicator_rows(self):
         return self.db.indicator_count()
 
+    def total_support_levels(self):
+        return self.db.support_level_count()
+
     # --------------------------------------------------
 
     def close(self):

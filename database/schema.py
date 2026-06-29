@@ -75,3 +75,36 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
 
 );
 """
+
+
+SUPPORT_LEVELS_TABLE = """
+CREATE TABLE IF NOT EXISTS support_levels (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    ticker TEXT NOT NULL,
+
+    zone_low REAL NOT NULL,
+
+    zone_high REAL NOT NULL,
+
+    zone_mid REAL NOT NULL,
+
+    touches INTEGER NOT NULL,
+
+    strength_score REAL NOT NULL,
+
+    current_price REAL NOT NULL,
+
+    distance_from_current REAL NOT NULL,
+
+    distance_from_current_pct REAL NOT NULL,
+
+    first_touch_date TEXT,
+
+    last_touch_date TEXT,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""

@@ -54,6 +54,7 @@ class MarketController:
             "stocks": self.market.total_stocks(),
             "rows": self.market.total_price_rows(),
             "indicator_rows": self.market.total_indicator_rows(),
+            "support_levels": self.market.total_support_levels(),
         }
 
     def close(self):
