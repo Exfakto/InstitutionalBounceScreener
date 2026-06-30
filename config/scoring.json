@@ -4,5 +4,19 @@
     "institutional_score": 0.35,
     "support_strength_score": 0.10,
     "bounce_validation_score": 0.10
+  },
+  "gen2_weights": {
+    "quality_score": 15,
+    "institutional_score": 12,
+    "institutional_momentum_score": 10,
+    "technical_score": 10,
+    "relative_strength_score": 10,
+    "support_score": 12,
+    "bounce_score": 12,
+    "entry_quality_score": 8,
+    "volume_score": 5,
+    "trend_score": 4,
+    "earnings_risk_score": 1,
+    "risk_score": 1
   }
 }
