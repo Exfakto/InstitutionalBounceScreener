@@ -8,12 +8,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QAbstractItemView,
-    QHeaderView,
 )
 
 from controllers.market_controller import MarketController
@@ -25,6 +21,7 @@ from controllers.scoring_controller import ScoringController
 from ui.widgets.statistics_card import StatisticsCard
 from ui.widgets.activity_log import ActivityLog
 from ui.widgets.progress_panel import ProgressPanel
+from ui.widgets.candidate_table import CandidateTable
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -86,27 +83,8 @@ class MainWindow(QMainWindow):
         # Ranked Candidates
         ##########################################################
 
-        self.candidates_table = QTableWidget(0, 7)
-        self.candidates_table.setHorizontalHeaderLabels(
-            [
-                "Ticker",
-                "Overall",
-                "Quality",
-                "Institutional",
-                "Technical",
-                "Support",
-                "Bounce",
-            ]
-        )
-        self.candidates_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.candidates_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.candidates_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.candidates_table.setAlternatingRowColors(True)
-        self.candidates_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents
-        )
-        self.candidates_table.horizontalHeader().setStretchLastSection(True)
-        self.candidates_table.cellDoubleClicked.connect(self.open_stock_detail)
+        self.candidates_table = CandidateTable()
+        self.candidates_table.ticker_double_clicked.connect(self.open_stock_detail)
 
         main_layout.addWidget(self.candidates_table)
 
@@ -351,7 +329,7 @@ class MainWindow(QMainWindow):
 
         results = self.scoring_controller.run_screener()
 
-        self.populate_candidates_table(results["candidates"])
+        self.candidates_table.populate(results["candidates"])
 
         self.progress.set_progress(100)
 
@@ -378,41 +356,9 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
-    def populate_candidates_table(self, candidates):
+    def open_stock_detail(self, ticker):
 
-        self.candidates_table.setRowCount(0)
-
-        for row, candidate in enumerate(candidates):
-            scores = candidate.score_map
-
-            values = [
-                candidate.ticker,
-                self.format_score(candidate.composite_score.value),
-                self.format_score(scores.get("quality_score")),
-                self.format_score(scores.get("institutional_score")),
-                self.format_score(scores.get("technical_score")),
-                self.format_score(scores.get("support_score")),
-                self.format_score(scores.get("bounce_score")),
-            ]
-
-            self.candidates_table.insertRow(row)
-
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                self.candidates_table.setItem(row, column, item)
-
-        self.candidates_table.resizeColumnsToContents()
-
-    # ----------------------------------------------------------
-
-    def open_stock_detail(self, row, column):
-
-        ticker_item = self.candidates_table.item(row, 0)
-
-        if ticker_item is None:
-            return
-
-        detail = self.scoring_controller.get_candidate_detail(ticker_item.text())
+        detail = self.scoring_controller.get_candidate_detail(ticker)
         window = StockDetailWindow(detail, self)
         window.show()
 
@@ -420,18 +366,6 @@ class MainWindow(QMainWindow):
             self.detail_windows = []
 
         self.detail_windows.append(window)
-
-    # ----------------------------------------------------------
-
-    def format_score(self, score):
-
-        if score is None:
-            return "0.0"
-
-        if hasattr(score, "value"):
-            return f"{score.value:.1f}"
-
-        return f"{float(score):.1f}"
 
     # ----------------------------------------------------------
 
