@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         self.candidates_by_ticker = {}
 
         self.setWindowTitle("Institutional Bounce Screener")
-        self.resize(1400, 900)
+        self.resize(1600, 900)
 
         self.build_ui()
 
@@ -50,8 +50,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(14, 14, 14, 14)
+        main_layout.setSpacing(12)
 
         ##########################################################
         # Header
@@ -93,7 +93,7 @@ class MainWindow(QMainWindow):
 
         workspace_layout = QHBoxLayout()
         workspace_layout.setContentsMargins(0, 0, 0, 0)
-        workspace_layout.setSpacing(10)
+        workspace_layout.setSpacing(12)
 
         self.candidates_table = CandidateTable()
         self.candidates_table.ticker_double_clicked.connect(self.open_stock_detail)
@@ -103,10 +103,10 @@ class MainWindow(QMainWindow):
 
         self.research_preview = ResearchPreview()
 
-        workspace_layout.addWidget(self.candidates_table, stretch=4)
+        workspace_layout.addWidget(self.candidates_table, stretch=5)
         workspace_layout.addWidget(self.research_preview, stretch=1)
 
-        main_layout.addLayout(workspace_layout, stretch=4)
+        main_layout.addLayout(workspace_layout, stretch=5)
 
         ##########################################################
         # Activity

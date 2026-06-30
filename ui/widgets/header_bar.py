@@ -18,11 +18,12 @@ class HeaderBar(QFrame):
         super().__init__(parent)
 
         self.setObjectName("HeaderBar")
-        self.setMaximumHeight(76)
+        self.setMaximumHeight(72)
+        self.setMinimumHeight(64)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 8, 16, 8)
+        layout.setSpacing(16)
 
         title_layout = QVBoxLayout()
         title_layout.setContentsMargins(0, 0, 0, 0)
@@ -30,6 +31,10 @@ class HeaderBar(QFrame):
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("HeaderTitle")
+        title_font = self.title_label.font()
+        title_font.setPointSize(15)
+        title_font.setBold(True)
+        self.title_label.setFont(title_font)
 
         self.subtitle_label = QLabel(subtitle)
         self.subtitle_label.setObjectName("HeaderSubtitle")
@@ -40,6 +45,9 @@ class HeaderBar(QFrame):
         self.version_label = QLabel(version)
         self.version_label.setObjectName("HeaderVersion")
         self.version_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        version_font = self.version_label.font()
+        version_font.setBold(True)
+        self.version_label.setFont(version_font)
 
         self.status_label = QLabel(status)
         self.status_label.setObjectName("HeaderStatus")

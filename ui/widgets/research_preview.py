@@ -30,13 +30,15 @@ class ResearchPreview(QWidget):
         layout.setSpacing(8)
 
         self.group = QGroupBox("Research Preview")
+        self.group.setObjectName("ResearchPreviewCard")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(12, 14, 12, 12)
-        group_layout.setSpacing(10)
+        group_layout.setContentsMargins(14, 16, 14, 14)
+        group_layout.setSpacing(12)
 
-        self.empty_state_label = QLabel("Select a candidate to view research preview.")
+        self.empty_state_label = QLabel("Select a candidate to begin research.")
         self.empty_state_label.setAlignment(Qt.AlignCenter)
         self.empty_state_label.setWordWrap(True)
+        self.empty_state_label.setMinimumHeight(160)
 
         summary_layout = QVBoxLayout()
         summary_layout.setContentsMargins(0, 0, 0, 0)
@@ -45,26 +47,39 @@ class ResearchPreview(QWidget):
         self.ticker_label = QLabel("")
         self.ticker_label.setObjectName("ResearchPreviewTicker")
         self.ticker_label.setAlignment(Qt.AlignCenter)
+        ticker_font = self.ticker_label.font()
+        ticker_font.setPointSize(18)
+        ticker_font.setBold(True)
+        self.ticker_label.setFont(ticker_font)
 
         self.signal_label = QLabel("")
         self.signal_label.setObjectName("ResearchPreviewSignal")
         self.signal_label.setAlignment(Qt.AlignCenter)
+        self.signal_label.setMinimumHeight(28)
+        signal_font = self.signal_label.font()
+        signal_font.setBold(True)
+        self.signal_label.setFont(signal_font)
 
         self.overall_score_label = QLabel("")
         self.overall_score_label.setObjectName("ResearchPreviewOverall")
         self.overall_score_label.setAlignment(Qt.AlignCenter)
+        overall_font = self.overall_score_label.font()
+        overall_font.setPointSize(28)
+        overall_font.setBold(True)
+        self.overall_score_label.setFont(overall_font)
 
         summary_layout.addWidget(self.ticker_label)
         summary_layout.addWidget(self.signal_label)
         summary_layout.addWidget(self.overall_score_label)
 
-        self.separator = QFrame()
-        self.separator.setFrameShape(QFrame.HLine)
-        self.separator.setFrameShadow(QFrame.Plain)
+        self.summary_separator = self.create_separator()
 
         self.timestamp_label = QLabel("")
         self.timestamp_label.setObjectName("ResearchPreviewTimestamp")
+        self.timestamp_label.setAlignment(Qt.AlignCenter)
         self.timestamp_label.setWordWrap(True)
+
+        self.time_separator = self.create_separator()
 
         self.score_rows = {}
         self.score_labels = {}
@@ -93,14 +108,19 @@ class ResearchPreview(QWidget):
         self.warning_title_label = QLabel("Warnings")
         self.warning_title_label.setObjectName("ResearchPreviewSectionTitle")
 
-        self.warning_label = QLabel("None")
+        self.warning_separator = self.create_separator()
+
+        self.warning_label = QLabel("No warnings")
+        self.warning_label.setObjectName("ResearchPreviewWarnings")
         self.warning_label.setWordWrap(True)
 
         group_layout.addWidget(self.empty_state_label)
         group_layout.addLayout(summary_layout)
-        group_layout.addWidget(self.separator)
+        group_layout.addWidget(self.summary_separator)
         group_layout.addWidget(self.timestamp_label)
+        group_layout.addWidget(self.time_separator)
         group_layout.addLayout(scores_layout)
+        group_layout.addWidget(self.warning_separator)
         group_layout.addWidget(self.warning_title_label)
         group_layout.addWidget(self.warning_label)
         group_layout.addStretch()
@@ -119,8 +139,10 @@ class ResearchPreview(QWidget):
         self.ticker_label.hide()
         self.signal_label.hide()
         self.overall_score_label.hide()
-        self.separator.hide()
+        self.summary_separator.hide()
         self.timestamp_label.hide()
+        self.time_separator.hide()
+        self.warning_separator.hide()
         self.warning_title_label.hide()
         self.warning_label.hide()
 
@@ -131,9 +153,9 @@ class ResearchPreview(QWidget):
 
         for key, label in self.score_labels.items():
             self.score_rows[key].hide()
-            label.setText("Missing")
+            label.setText("—")
 
-        self.warning_label.setText("None")
+        self.warning_label.setText("No warnings")
 
     def set_candidate(self, candidate_score):
         """
@@ -150,8 +172,10 @@ class ResearchPreview(QWidget):
         self.ticker_label.show()
         self.signal_label.show()
         self.overall_score_label.show()
-        self.separator.show()
+        self.summary_separator.show()
         self.timestamp_label.show()
+        self.time_separator.show()
+        self.warning_separator.show()
         self.warning_title_label.show()
         self.warning_label.show()
 
@@ -188,22 +212,22 @@ class ResearchPreview(QWidget):
     @staticmethod
     def format_score(score):
         if score is None:
-            return "Missing"
+            return "—"
 
         return f"{score.value:.1f}"
 
     @staticmethod
     def signal_label_for_score(score):
         if score >= 90.0:
-            return "STRONG BUY"
+            return "🟢 STRONG BUY"
 
         if score >= 80.0:
-            return "BUY"
+            return "🟢 BUY"
 
         if score >= 70.0:
-            return "WATCH"
+            return "🟡 WATCH"
 
-        return "AVOID"
+        return "🔴 AVOID"
 
     @staticmethod
     def format_warnings(candidate_score):
@@ -215,4 +239,34 @@ class ResearchPreview(QWidget):
             if score.error:
                 warnings.append(score.error)
 
-        return "; ".join(warnings) if warnings else "None"
+        if not warnings:
+            return "No warnings"
+
+        missing_count = sum(
+            1
+            for warning in warnings
+            if warning.lower().startswith("missing ")
+        )
+        lines = []
+
+        if missing_count:
+            metric_word = "metric" if missing_count == 1 else "metrics"
+            lines.append(f"{missing_count} missing {metric_word}")
+
+        lines.extend(warnings[:2])
+
+        remaining = len(warnings) - 2
+
+        if remaining > 0:
+            lines.append(f"...and {remaining} more")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def create_separator():
+        separator = QFrame()
+        separator.setObjectName("ResearchPreviewSeparator")
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Plain)
+
+        return separator

@@ -23,12 +23,22 @@ class KpiStrip(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
         for key, title in self.CARD_DEFINITIONS:
             card = StatisticsCard(title)
-            card.setMaximumHeight(76)
-            card.setMinimumWidth(140)
+            card.setObjectName("KpiCard")
+            card.setMaximumHeight(72)
+            card.setMinimumWidth(150)
+
+            title_font = card.title.font()
+            title_font.setPointSize(9)
+            card.title.setFont(title_font)
+
+            value_font = card.value.font()
+            value_font.setPointSize(16)
+            value_font.setBold(True)
+            card.value.setFont(value_font)
 
             self.cards[key] = card
             layout.addWidget(card)

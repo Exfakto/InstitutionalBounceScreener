@@ -32,8 +32,12 @@ class CandidateTable(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
         self.setAlternatingRowColors(True)
+        self.setShowGrid(False)
+        self.verticalHeader().setVisible(False)
+        self.verticalHeader().setDefaultSectionSize(34)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.horizontalHeader().setStretchLastSection(True)
+        self.horizontalHeader().setMinimumSectionSize(92)
         self.cellDoubleClicked.connect(self.emit_double_clicked_ticker)
 
     def populate(self, candidates):
@@ -50,6 +54,7 @@ class CandidateTable(QTableWidget):
                 self.setItem(row, column, QTableWidgetItem(value))
 
         self.resizeColumnsToContents()
+        self.horizontalHeader().setStretchLastSection(True)
 
     def selected_ticker(self):
         """

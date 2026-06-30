@@ -47,12 +47,12 @@ def test_research_preview_clear_shows_empty_state(app):
 
     assert (
         preview.empty_state_label.text()
-        == "Select a candidate to view research preview."
+        == "Select a candidate to begin research."
     )
     assert preview.empty_state_label.isHidden() is False
     assert preview.ticker_label.isHidden() is True
     assert preview.overall_score_label.isHidden() is True
-    assert preview.warning_label.text() == "None"
+    assert preview.warning_label.text() == "No warnings"
 
 
 def test_research_preview_displays_candidate_score(app):
@@ -62,7 +62,7 @@ def test_research_preview_displays_candidate_score(app):
 
     assert preview.empty_state_label.isHidden() is True
     assert preview.ticker_label.text() == "AAPL"
-    assert preview.signal_label.text() == "BUY"
+    assert preview.signal_label.text() == "🟢 BUY"
     assert preview.overall_score_label.text() == "88.5"
     assert preview.score_labels["quality_score"].text() == "90.0"
     assert preview.score_labels["institutional_score"].text() == "72.0"
@@ -74,10 +74,10 @@ def test_research_preview_displays_candidate_score(app):
 @pytest.mark.parametrize(
     ("overall", "signal"),
     [
-        (90.0, "STRONG BUY"),
-        (80.0, "BUY"),
-        (70.0, "WATCH"),
-        (69.9, "AVOID"),
+        (90.0, "🟢 STRONG BUY"),
+        (80.0, "🟢 BUY"),
+        (70.0, "🟡 WATCH"),
+        (69.9, "🔴 AVOID"),
     ],
 )
 def test_research_preview_signal_labels(app, overall, signal):
@@ -96,17 +96,39 @@ def test_research_preview_displays_warnings(app):
     assert preview.warning_label.text() == "Institutional data is stale"
 
 
+def test_research_preview_summarizes_missing_metric_warnings(app):
+    preview = ResearchPreview()
+    warnings = [
+        "Missing revenue_growth_ttm",
+        "Missing eps_growth_ttm",
+        "Missing roe",
+        "Missing gross_margin",
+    ]
+    scores = [
+        ScoreResult("quality_score", 50.0, details={"warnings": warnings}),
+    ]
+
+    preview.set_candidate(make_candidate(scores=scores))
+
+    assert preview.warning_label.text() == (
+        "4 missing metrics\n"
+        "Missing revenue_growth_ttm\n"
+        "Missing eps_growth_ttm\n"
+        "...and 2 more"
+    )
+
+
 def test_research_preview_handles_missing_component_scores(app):
     preview = ResearchPreview()
 
     preview.set_candidate(make_candidate(overall=50.0, scores=[]))
 
     assert preview.ticker_label.text() == "AAPL"
-    assert preview.signal_label.text() == "AVOID"
+    assert preview.signal_label.text() == "🔴 AVOID"
     assert preview.overall_score_label.text() == "50.0"
-    assert preview.score_labels["quality_score"].text() == "Missing"
-    assert preview.score_labels["institutional_score"].text() == "Missing"
-    assert preview.score_labels["technical_score"].text() == "Missing"
-    assert preview.score_labels["support_score"].text() == "Missing"
-    assert preview.score_labels["bounce_score"].text() == "Missing"
-    assert preview.warning_label.text() == "None"
+    assert preview.score_labels["quality_score"].text() == "—"
+    assert preview.score_labels["institutional_score"].text() == "—"
+    assert preview.score_labels["technical_score"].text() == "—"
+    assert preview.score_labels["support_score"].text() == "—"
+    assert preview.score_labels["bounce_score"].text() == "—"
+    assert preview.warning_label.text() == "No warnings"

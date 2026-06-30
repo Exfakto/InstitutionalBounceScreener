@@ -12,6 +12,9 @@ class ActivityPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.setObjectName("ActivityPanel")
+        self.setMaximumHeight(260)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -19,8 +22,11 @@ class ActivityPanel(QWidget):
         self.progress_panel = ProgressPanel()
 
         self.log_group = QGroupBox("Activity Log")
+        self.log_group.setObjectName("ActivityLogGroup")
         log_layout = QVBoxLayout()
+        log_layout.setContentsMargins(8, 10, 8, 8)
         self.activity_log = ActivityLog()
+        self.activity_log.setMinimumHeight(96)
         log_layout.addWidget(self.activity_log)
         self.log_group.setLayout(log_layout)
 

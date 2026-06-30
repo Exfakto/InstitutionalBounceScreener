@@ -1,5 +1,5 @@
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
 
 
 class OperationsToolbar(QWidget):
@@ -15,18 +15,33 @@ class OperationsToolbar(QWidget):
     run_screener_requested = Signal()
     open_detail_requested = Signal()
 
-    BUTTON_DEFINITIONS = [
-        ("update_universe", "Update Universe", "update_universe_requested"),
-        ("download_prices", "Download Prices", "download_prices_requested"),
+    ACTION_GROUPS = [
         (
-            "calculate_indicators",
-            "Calculate Indicators",
-            "calculate_indicators_requested",
+            "Market Data",
+            [
+                ("update_universe", "Update Universe", "update_universe_requested"),
+                ("download_prices", "Download Prices", "download_prices_requested"),
+            ],
         ),
-        ("detect_support", "Detect Support", "detect_support_requested"),
-        ("validate_bounces", "Validate Bounces", "validate_bounces_requested"),
-        ("run_screener", "Run Screener", "run_screener_requested"),
-        ("open_detail", "Open Detail", "open_detail_requested"),
+        (
+            "Analysis",
+            [
+                (
+                    "calculate_indicators",
+                    "Calculate Indicators",
+                    "calculate_indicators_requested",
+                ),
+                ("detect_support", "Detect Support", "detect_support_requested"),
+                ("validate_bounces", "Validate Bounces", "validate_bounces_requested"),
+            ],
+        ),
+        (
+            "Research",
+            [
+                ("run_screener", "Run Screener", "run_screener_requested"),
+                ("open_detail", "Open Detail", "open_detail_requested"),
+            ],
+        ),
     ]
 
     def __init__(self, parent=None):
@@ -36,18 +51,35 @@ class OperationsToolbar(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
-        for key, label, signal_name in self.BUTTON_DEFINITIONS:
-            button = QPushButton(label)
-            button.clicked.connect(getattr(self, signal_name).emit)
+        for group_index, (group_label, actions) in enumerate(self.ACTION_GROUPS):
+            if group_index > 0:
+                layout.addWidget(self.separator())
 
-            self.buttons[key] = button
-            layout.addWidget(button)
+            label = QLabel(group_label)
+            label.setObjectName("ToolbarGroupLabel")
+            layout.addWidget(label)
+
+            for key, text, signal_name in actions:
+                button = QPushButton(text)
+                button.clicked.connect(getattr(self, signal_name).emit)
+
+                self.buttons[key] = button
+                layout.addWidget(button)
 
         layout.addStretch()
 
         self.set_open_detail_enabled(False)
+
+    @staticmethod
+    def separator():
+        line = QFrame()
+        line.setObjectName("ToolbarSeparator")
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Plain)
+
+        return line
 
     def set_open_detail_enabled(self, enabled):
         """
