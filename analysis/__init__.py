@@ -2,6 +2,7 @@ from .base_score import BaseScore
 from .bounce_score import BounceScore
 from .candidate_score import CandidateScore
 from .composite_score import CompositeScore
+from .earnings_score import EarningsScore
 from .institutional_score import InstitutionalScore
 from .quality_score import QualityScore
 from .score_result import ScoreResult
@@ -16,6 +17,7 @@ __all__ = [
     "BounceScore",
     "CandidateScore",
     "CompositeScore",
+    "EarningsScore",
     "InstitutionalScore",
     "QualityScore",
     "ScoreResult",

@@ -197,3 +197,26 @@ CREATE TABLE IF NOT EXISTS institutional_metrics (
 
 );
 """
+
+
+EARNINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS earnings (
+
+    ticker TEXT PRIMARY KEY,
+
+    next_earnings_date TEXT,
+
+    days_until_earnings INTEGER,
+
+    previous_earnings_date TEXT,
+
+    eps_surprise_pct REAL,
+
+    revenue_surprise_pct REAL,
+
+    earnings_risk_score REAL,
+
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""

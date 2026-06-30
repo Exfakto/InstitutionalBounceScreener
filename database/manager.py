@@ -4,6 +4,7 @@ import pandas as pd
 
 from database.schema import (
     BOUNCE_VALIDATIONS_TABLE,
+    EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
     INSTITUTIONAL_METRICS_TABLE,
     PRICE_HISTORY_TABLE,
@@ -54,6 +55,7 @@ class DatabaseManager:
         self.cursor.execute(BOUNCE_VALIDATIONS_TABLE)
         self.cursor.execute(FUNDAMENTALS_TABLE)
         self.cursor.execute(INSTITUTIONAL_METRICS_TABLE)
+        self.cursor.execute(EARNINGS_TABLE)
 
         self.connection.commit()
 
@@ -769,6 +771,87 @@ class DatabaseManager:
         return self.cursor.fetchone()[0]
 
     # ==========================================================
+    # Earnings
+    # ==========================================================
+
+    def save_earnings(self, records):
+        """
+        Save earnings metrics, replacing rows by ticker.
+        """
+
+        rows = []
+
+        for record in records:
+            rows.append(
+                (
+                    record["ticker"],
+                    self._format_date(record.get("next_earnings_date")),
+                    self._sqlite_int_or_none(record.get("days_until_earnings")),
+                    self._format_date(record.get("previous_earnings_date")),
+                    self._sqlite_float(record.get("eps_surprise_pct")),
+                    self._sqlite_float(record.get("revenue_surprise_pct")),
+                    self._sqlite_float(record.get("earnings_risk_score")),
+                )
+            )
+
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT OR REPLACE INTO earnings
+                (
+                    ticker,
+                    next_earnings_date,
+                    days_until_earnings,
+                    previous_earnings_date,
+                    eps_surprise_pct,
+                    revenue_surprise_pct,
+                    earnings_risk_score
+                )
+                VALUES
+                (
+                    ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                rows,
+            )
+
+        self.connection.commit()
+
+        return len(rows)
+
+    def get_earnings(self, ticker):
+
+        self.cursor.execute(
+            """
+            SELECT
+                ticker,
+                next_earnings_date,
+                days_until_earnings,
+                previous_earnings_date,
+                eps_surprise_pct,
+                revenue_surprise_pct,
+                earnings_risk_score,
+                updated_at
+            FROM earnings
+            WHERE ticker = ?
+            """,
+            (ticker,),
+        )
+
+        return self.cursor.fetchone()
+
+    def earnings_count(self):
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM earnings
+            """
+        )
+
+        return self.cursor.fetchone()[0]
+
+    # ==========================================================
     # Utilities
     # ==========================================================
 
@@ -826,6 +909,17 @@ class DatabaseManager:
 
         if pd.isna(value):
             return 0
+
+        return int(value)
+
+    @staticmethod
+    def _sqlite_int_or_none(value):
+
+        if value is None:
+            return None
+
+        if pd.isna(value):
+            return None
 
         return int(value)
 
