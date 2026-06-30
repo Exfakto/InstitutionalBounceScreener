@@ -68,11 +68,16 @@ class ScoringEngineTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             engine.execute({})
 
-    def test_discover_providers_finds_composite_score(self):
+    def test_discover_providers_finds_required_scores(self):
         providers = ScoringEngine.discover_providers()
         names = {provider.name for provider in providers}
 
+        self.assertIn("bounce_score", names)
         self.assertIn("composite_score", names)
+        self.assertIn("institutional_score", names)
+        self.assertIn("quality_score", names)
+        self.assertIn("support_score", names)
+        self.assertIn("technical_score", names)
 
 
 if __name__ == "__main__":

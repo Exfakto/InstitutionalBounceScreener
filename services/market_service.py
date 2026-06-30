@@ -83,6 +83,9 @@ class MarketService:
     def total_support_levels(self):
         return self.db.support_level_count()
 
+    def total_validated_zones(self):
+        return self.db.bounce_validation_count()
+
     # --------------------------------------------------
 
     def close(self):

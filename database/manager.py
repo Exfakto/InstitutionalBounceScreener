@@ -3,6 +3,9 @@ import sqlite3
 import pandas as pd
 
 from database.schema import (
+    BOUNCE_VALIDATIONS_TABLE,
+    FUNDAMENTALS_TABLE,
+    INSTITUTIONAL_METRICS_TABLE,
     PRICE_HISTORY_TABLE,
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
@@ -48,6 +51,9 @@ class DatabaseManager:
         self.cursor.execute(PRICE_HISTORY_TABLE)
         self.cursor.execute(TECHNICAL_INDICATORS_TABLE)
         self.cursor.execute(SUPPORT_LEVELS_TABLE)
+        self.cursor.execute(BOUNCE_VALIDATIONS_TABLE)
+        self.cursor.execute(FUNDAMENTALS_TABLE)
+        self.cursor.execute(INSTITUTIONAL_METRICS_TABLE)
 
         self.connection.commit()
 
@@ -448,6 +454,7 @@ class DatabaseManager:
         self.cursor.execute(
             """
             SELECT
+                id,
                 ticker,
                 zone_low,
                 zone_high,
@@ -467,6 +474,299 @@ class DatabaseManager:
         )
 
         return self.cursor.fetchall()
+
+    def get_all_support_levels(self):
+
+        self.cursor.execute(
+            """
+            SELECT
+                id,
+                ticker,
+                zone_low,
+                zone_high,
+                zone_mid,
+                touches,
+                strength_score,
+                current_price,
+                distance_from_current,
+                distance_from_current_pct,
+                first_touch_date,
+                last_touch_date
+            FROM support_levels
+            ORDER BY ticker, strength_score DESC, zone_mid
+            """
+        )
+
+        return self.cursor.fetchall()
+
+    # ==========================================================
+    # Bounce Validations
+    # ==========================================================
+
+    def save_bounce_validations(self, validations):
+        """
+        Save bounce validation metrics.
+        """
+
+        rows = []
+
+        for validation in validations:
+            rows.append(
+                (
+                    int(validation["support_level_id"]),
+                    validation["ticker"],
+                    int(validation["total_touches"]),
+                    int(validation["successful_bounces"]),
+                    int(validation["failed_breakdowns"]),
+                    int(validation["neutral_touches"]),
+                    float(validation["bounce_success_rate"]),
+                    self._sqlite_float(validation.get("average_bounce_pct")),
+                    self._sqlite_float(validation.get("median_bounce_pct")),
+                    self._sqlite_float(
+                        validation.get("average_days_to_bounce_peak")
+                    ),
+                    float(validation["current_distance_to_support"]),
+                    float(validation["current_distance_to_support_pct"]),
+                )
+            )
+
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT OR REPLACE INTO bounce_validations
+                (
+                    support_level_id,
+                    ticker,
+                    total_touches,
+                    successful_bounces,
+                    failed_breakdowns,
+                    neutral_touches,
+                    bounce_success_rate,
+                    average_bounce_pct,
+                    median_bounce_pct,
+                    average_days_to_bounce_peak,
+                    current_distance_to_support,
+                    current_distance_to_support_pct
+                )
+                VALUES
+                (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                rows,
+            )
+
+        self.connection.commit()
+
+        return len(rows)
+
+    def bounce_validation_count(self):
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM bounce_validations
+            """
+        )
+
+        return self.cursor.fetchone()[0]
+
+    def get_bounce_validations(self, ticker):
+
+        self.cursor.execute(
+            """
+            SELECT
+                support_level_id,
+                ticker,
+                total_touches,
+                successful_bounces,
+                failed_breakdowns,
+                neutral_touches,
+                bounce_success_rate,
+                average_bounce_pct,
+                median_bounce_pct,
+                average_days_to_bounce_peak,
+                current_distance_to_support,
+                current_distance_to_support_pct
+            FROM bounce_validations
+            WHERE ticker = ?
+            ORDER BY bounce_success_rate DESC, average_bounce_pct DESC
+            """,
+            (ticker,),
+        )
+
+        return self.cursor.fetchall()
+
+    # ==========================================================
+    # Fundamentals
+    # ==========================================================
+
+    def save_fundamentals(self, records):
+        """
+        Save fundamental metrics, replacing rows by ticker.
+        """
+
+        rows = []
+
+        for record in records:
+            rows.append(
+                (
+                    record["ticker"],
+                    self._sqlite_float(record.get("market_cap")),
+                    self._sqlite_float(record.get("revenue_growth_ttm")),
+                    self._sqlite_float(record.get("eps_growth_ttm")),
+                    self._sqlite_float(record.get("roe")),
+                    self._sqlite_float(record.get("gross_margin")),
+                    self._sqlite_float(record.get("free_cash_flow")),
+                    self._sqlite_float(record.get("debt_to_equity")),
+                    self._sqlite_float(record.get("current_ratio")),
+                    self._sqlite_float(record.get("quality_score")),
+                )
+            )
+
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT OR REPLACE INTO fundamentals
+                (
+                    ticker,
+                    market_cap,
+                    revenue_growth_ttm,
+                    eps_growth_ttm,
+                    roe,
+                    gross_margin,
+                    free_cash_flow,
+                    debt_to_equity,
+                    current_ratio,
+                    quality_score
+                )
+                VALUES
+                (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                rows,
+            )
+
+        self.connection.commit()
+
+        return len(rows)
+
+    def get_fundamentals(self, ticker):
+
+        self.cursor.execute(
+            """
+            SELECT
+                ticker,
+                market_cap,
+                revenue_growth_ttm,
+                eps_growth_ttm,
+                roe,
+                gross_margin,
+                free_cash_flow,
+                debt_to_equity,
+                current_ratio,
+                quality_score
+            FROM fundamentals
+            WHERE ticker = ?
+            """,
+            (ticker,),
+        )
+
+        return self.cursor.fetchone()
+
+    def fundamentals_count(self):
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM fundamentals
+            """
+        )
+
+        return self.cursor.fetchone()[0]
+
+    # ==========================================================
+    # Institutional Metrics
+    # ==========================================================
+
+    def save_institutional_metrics(self, records):
+        """
+        Save institutional metrics, replacing rows by ticker.
+        """
+
+        rows = []
+
+        for record in records:
+            rows.append(
+                (
+                    record["ticker"],
+                    self._sqlite_float(record.get("institutional_ownership_pct")),
+                    self._sqlite_float(
+                        record.get("institutional_ownership_change_qoq")
+                    ),
+                    self._sqlite_float(record.get("net_institutional_buying")),
+                    self._sqlite_int(record.get("insider_buying_flag")),
+                    self._sqlite_int(record.get("insider_selling_flag")),
+                    self._sqlite_float(record.get("institutional_score")),
+                )
+            )
+
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT OR REPLACE INTO institutional_metrics
+                (
+                    ticker,
+                    institutional_ownership_pct,
+                    institutional_ownership_change_qoq,
+                    net_institutional_buying,
+                    insider_buying_flag,
+                    insider_selling_flag,
+                    institutional_score
+                )
+                VALUES
+                (
+                    ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                rows,
+            )
+
+        self.connection.commit()
+
+        return len(rows)
+
+    def get_institutional_metrics(self, ticker):
+
+        self.cursor.execute(
+            """
+            SELECT
+                ticker,
+                institutional_ownership_pct,
+                institutional_ownership_change_qoq,
+                net_institutional_buying,
+                insider_buying_flag,
+                insider_selling_flag,
+                institutional_score
+            FROM institutional_metrics
+            WHERE ticker = ?
+            """,
+            (ticker,),
+        )
+
+        return self.cursor.fetchone()
+
+    def institutional_metrics_count(self):
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM institutional_metrics
+            """
+        )
+
+        return self.cursor.fetchone()[0]
 
     # ==========================================================
     # Utilities
@@ -506,6 +806,28 @@ class DatabaseManager:
             return str(value.date())
 
         return str(value)
+
+    @staticmethod
+    def _sqlite_float(value):
+
+        if value is None:
+            return None
+
+        if pd.isna(value):
+            return None
+
+        return float(value)
+
+    @staticmethod
+    def _sqlite_int(value):
+
+        if value is None:
+            return 0
+
+        if pd.isna(value):
+            return 0
+
+        return int(value)
 
     # ==========================================================
     # Shutdown

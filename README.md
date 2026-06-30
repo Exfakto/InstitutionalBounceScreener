@@ -29,6 +29,8 @@ The goal is to identify stocks that repeatedly bounce from institutional support
 - Dashboard workflow for calculating indicators
 - Support Detection Engine foundation
 - Dashboard workflow for detecting support zones
+- Bounce Validation Engine foundation
+- Dashboard workflow for validating historical bounces
 - Git version control
 
 ### Planned
@@ -55,6 +57,6 @@ The goal is to identify stocks that repeatedly bounce from institutional support
 
 ## Project Status
 
-Version 1.0-RC1
+Version 1.0-RC2
 
-Support Detection Engine release candidate.
+Bounce Validation Engine release candidate.

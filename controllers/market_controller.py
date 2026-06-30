@@ -55,6 +55,7 @@ class MarketController:
             "rows": self.market.total_price_rows(),
             "indicator_rows": self.market.total_indicator_rows(),
             "support_levels": self.market.total_support_levels(),
+            "validated_zones": self.market.total_validated_zones(),
         }
 
     def close(self):

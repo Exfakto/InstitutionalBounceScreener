@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from controllers.market_controller import MarketController
 from controllers.indicator_controller import IndicatorController
 from controllers.support_controller import SupportController
+from controllers.bounce_controller import BounceController
 
 from ui.widgets.statistics_card import StatisticsCard
 from ui.widgets.activity_log import ActivityLog
@@ -29,6 +30,7 @@ class MainWindow(QMainWindow):
         self.controller = MarketController()
         self.indicator_controller = IndicatorController()
         self.support_controller = SupportController()
+        self.bounce_controller = BounceController()
 
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1200, 800)
@@ -63,11 +65,13 @@ class MainWindow(QMainWindow):
         self.database_card = StatisticsCard("Price Records")
         self.indicator_card = StatisticsCard("Indicator Rows")
         self.support_card = StatisticsCard("Support Zones")
+        self.validation_card = StatisticsCard("Validated Zones")
 
         stats_layout.addWidget(self.universe_card, 0, 0)
         stats_layout.addWidget(self.database_card, 0, 1)
         stats_layout.addWidget(self.indicator_card, 0, 2)
         stats_layout.addWidget(self.support_card, 0, 3)
+        stats_layout.addWidget(self.validation_card, 0, 4)
 
         main_layout.addLayout(stats_layout)
 
@@ -91,6 +95,9 @@ class MainWindow(QMainWindow):
         self.support_button = QPushButton("Detect Support")
         self.support_button.clicked.connect(self.detect_support)
 
+        self.validation_button = QPushButton("Validate Bounces")
+        self.validation_button.clicked.connect(self.validate_bounces)
+
         self.screen_button = QPushButton("▶ Run Screener")
         self.screen_button.setEnabled(False)
 
@@ -98,6 +105,7 @@ class MainWindow(QMainWindow):
         operations_layout.addWidget(self.download_button)
         operations_layout.addWidget(self.indicators_button)
         operations_layout.addWidget(self.support_button)
+        operations_layout.addWidget(self.validation_button)
         operations_layout.addWidget(self.screen_button)
 
         operations.setLayout(operations_layout)
@@ -149,6 +157,8 @@ class MainWindow(QMainWindow):
         self.indicator_card.set_value(f'{stats["indicator_rows"]:,}')
 
         self.support_card.set_value(f'{stats["support_levels"]:,}')
+
+        self.validation_card.set_value(f'{stats["validated_zones"]:,}')
 
     # ----------------------------------------------------------
 
@@ -264,10 +274,41 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def validate_bounces(self):
+
+        self.progress.set_status("Validating bounces...")
+        self.progress.set_progress(20)
+
+        self.log_widget.clear_log()
+
+        results = self.bounce_controller.validate_bounces()
+
+        self.progress.set_progress(100)
+
+        self.progress.set_status("Ready")
+
+        self.refresh_statistics()
+
+        self.log("Validated support-zone bounces")
+        self.log(f'Support zones: {results["support_levels"]:,}')
+        self.log(f'Processed: {results["processed"]:,}')
+        self.log(
+            f'Processed tickers: {self.format_ticker_list(results["processed_tickers"])}'
+        )
+        self.log(f'Skipped: {results["skipped"]:,}')
+        self.log(
+            f'Skipped tickers: {self.format_ticker_list(results["skipped_tickers"])}'
+        )
+        self.log(f'Validated zones: {results["validated"]:,}')
+        self.log(f'Elapsed time: {results["elapsed_seconds"]:.2f}s')
+
+    # ----------------------------------------------------------
+
     def closeEvent(self, event):
 
         self.controller.close()
         self.indicator_controller.close()
         self.support_controller.close()
+        self.bounce_controller.close()
 
         super().closeEvent(event)

@@ -1,0 +1,4 @@
+ticker,market_cap,revenue_growth_ttm,eps_growth_ttm,roe,gross_margin,free_cash_flow,debt_to_equity,current_ratio
+AAPL,3000000000000,8.5,6.2,145.0,46.0,99500000000,1.8,0.9
+MSFT,3100000000000,12.4,18.1,38.0,69.0,68000000000,0.5,1.2
+NVDA,2800000000000,126.0,250.0,93.0,75.0,27000000000,0.3,4.2

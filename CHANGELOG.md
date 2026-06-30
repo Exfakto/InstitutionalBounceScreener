@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0-RC2 - 2026-06-29
+
+### Added
+
+- Bounce Validation Engine foundation.
+- Historical support-zone bounce validation metrics.
+- SQLite `bounce_validations` persistence.
+- Bounce validation service and controller workflow.
+- Dashboard stat and action for validated zones.
+- Tests for bounce calculations, persistence, and service orchestration.
+
+### Verified
+
+- Unit test suite passes.
+- Application source compiles successfully.
+
 ## v1.0-RC1 - 2026-06-29
 
 ### Added
