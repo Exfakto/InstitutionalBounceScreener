@@ -33,6 +33,12 @@ class PriceChart(QWidget):
     EMPTY_MESSAGE = "Select a candidate to view chart."
     NO_PRICE_MESSAGE = "No price history available."
     BACKEND_UNAVAILABLE_MESSAGE = "Chart rendering backend is unavailable."
+    SERIES_DEFINITIONS = [
+        ("close", "Close", "#4A90E2", 2),
+        ("sma20", "SMA20", "#3FB950", 1),
+        ("sma50", "SMA50", "#D29922", 1),
+        ("sma200", "SMA200", "#F85149", 1),
+    ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -40,6 +46,7 @@ class PriceChart(QWidget):
         self.chart = None
         self.chart_view = None
         self.series = None
+        self.overlay_series = {}
         self.chart_data = None
 
         layout = QVBoxLayout(self)
@@ -102,7 +109,7 @@ class PriceChart(QWidget):
             self.summary_label.show()
             return
 
-        points = self.price_points(prices)
+        points = self.series_points(prices, "close")
 
         if not points:
             self.summary_label.setText(self.NO_PRICE_MESSAGE)
@@ -119,15 +126,28 @@ class PriceChart(QWidget):
         for axis in self.chart.axes():
             self.chart.removeAxis(axis)
 
-        self.series = QLineSeries()
-        self.series.setName("Close")
-        self.series.setPen(QPen(QColor("#4A90E2"), 2))
+        self.overlay_series = {}
+        prices = chart_data.get("prices") or []
+        chart_series = []
 
-        for x_value, close in points:
-            self.series.append(x_value, close)
+        for key, name, color, width in self.SERIES_DEFINITIONS:
+            series_points = points if key == "close" else self.series_points(prices, key)
 
-        self.chart.addSeries(self.series)
+            if not series_points:
+                continue
+
+            series = self.create_series(name, color, width, series_points)
+            chart_series.append(series)
+            self.chart.addSeries(series)
+
+            if key == "close":
+                self.series = series
+            else:
+                self.overlay_series[key] = series
+
         self.chart.setTitle(self.chart_title(chart_data))
+        self.chart.legend().setVisible(len(chart_series) > 1)
+        self.chart.legend().setLabelColor(QColor("#F2F2F2"))
 
         x_axis = QDateTimeAxis()
         x_axis.setFormat("MMM d")
@@ -146,31 +166,53 @@ class PriceChart(QWidget):
         y_axis.setLabelsColor(QColor("#F2F2F2"))
         y_axis.setTitleBrush(QColor("#B0B0B0"))
         y_axis.setGridLineColor(QColor("#4A4A4A"))
-        self.apply_y_range(y_axis, [close for _, close in points])
+        self.apply_y_range(
+            y_axis,
+            [
+                value
+                for series_points in [
+                    self.series_points(prices, key)
+                    for key, _, _, _ in self.SERIES_DEFINITIONS
+                ]
+                for _, value in series_points
+            ],
+        )
 
         self.chart.addAxis(x_axis, Qt.AlignBottom)
         self.chart.addAxis(y_axis, Qt.AlignLeft)
-        self.series.attachAxis(x_axis)
-        self.series.attachAxis(y_axis)
+        for series in chart_series:
+            series.attachAxis(x_axis)
+            series.attachAxis(y_axis)
 
     @classmethod
-    def price_points(cls, prices):
+    def series_points(cls, prices, key):
         points = []
 
         for index, price in enumerate(prices):
-            close = price.get("close")
+            value = price.get(key)
 
-            if close is None:
+            if value is None:
                 continue
 
             points.append(
                 (
                     cls.date_to_msecs(price.get("date"), index),
-                    float(close),
+                    float(value),
                 )
             )
 
         return points
+
+    @staticmethod
+    def create_series(name, color, width, points):
+        series = QLineSeries()
+        series.setName(name)
+        series.setPen(QPen(QColor(color), width))
+
+        for x_value, value in points:
+            series.append(x_value, value)
+
+        return series
 
     @staticmethod
     def date_to_msecs(value, index):
@@ -230,6 +272,8 @@ class PriceChart(QWidget):
         return chart
 
     def clear_chart(self):
+        self.series = None
+        self.overlay_series = {}
         self.chart.removeAllSeries()
 
         for axis in self.chart.axes():

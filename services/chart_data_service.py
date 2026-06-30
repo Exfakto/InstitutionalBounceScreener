@@ -24,11 +24,12 @@ class ChartDataService:
 
         warnings = []
         prices = self.price_history_records(self.db.get_price_history(ticker))
+        indicators = self.row_records(self.db.get_technical_indicators(ticker))
+        prices = self.merge_indicators(prices, indicators)
 
         if not prices:
             warnings.append("Missing price history")
 
-        indicators = self.row_records(self.db.get_technical_indicators(ticker))
         support_zones = self.row_records(self.db.get_support_levels(ticker))
         bounce_validations = self.row_records(self.db.get_bounce_validations(ticker))
 
@@ -77,6 +78,27 @@ class ChartDataService:
             cls.row_to_dict(row)
             for row in (rows or [])
         ]
+
+    @classmethod
+    def merge_indicators(cls, prices, indicators):
+        indicators_by_date = {
+            cls.format_date(row.get("date")): row
+            for row in indicators
+            if row.get("date") is not None
+        }
+
+        merged = []
+
+        for price in prices:
+            row = dict(price)
+            indicator = indicators_by_date.get(row.get("date"), {})
+
+            for key in ["sma20", "sma50", "sma200"]:
+                row[key] = cls.value_or_none(indicator.get(key))
+
+            merged.append(row)
+
+        return merged
 
     @staticmethod
     def row_to_dict(row):
