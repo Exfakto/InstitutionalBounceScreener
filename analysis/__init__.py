@@ -8,6 +8,7 @@ from .institutional_score import InstitutionalScore
 from .quality_score import QualityScore
 from .score_result import ScoreResult
 from .scoring_engine import ScoringEngine
+from .support_distance import SupportDistanceCalculator, SupportDistanceResult
 from .support_score import SupportScore
 from .technical_score import TechnicalScore
 from .pipeline import AnalysisPipeline
@@ -30,6 +31,8 @@ __all__ = [
     "QualityScore",
     "ScoreResult",
     "ScoringEngine",
+    "SupportDistanceCalculator",
+    "SupportDistanceResult",
     "SupportScore",
     "TechnicalScore",
     "TrendStrengthCalculator",
