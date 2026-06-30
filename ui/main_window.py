@@ -2,6 +2,7 @@ import sys
 
 from PySide6.QtWidgets import (
     QApplication,
+    QHBoxLayout,
     QMainWindow,
     QVBoxLayout,
     QWidget,
@@ -35,7 +36,7 @@ class MainWindow(QMainWindow):
         self.candidates_by_ticker = {}
 
         self.setWindowTitle("Institutional Bounce Screener")
-        self.resize(1200, 800)
+        self.resize(1400, 900)
 
         self.build_ui()
 
@@ -49,6 +50,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(10)
 
         ##########################################################
         # Header
@@ -64,26 +67,6 @@ class MainWindow(QMainWindow):
         self.kpi_strip = KpiStrip()
 
         main_layout.addWidget(self.kpi_strip)
-
-        ##########################################################
-        # Ranked Candidates
-        ##########################################################
-
-        self.candidates_table = CandidateTable()
-        self.candidates_table.ticker_double_clicked.connect(self.open_stock_detail)
-        self.candidates_table.selectionModel().selectionChanged.connect(
-            self.update_open_detail_state
-        )
-
-        main_layout.addWidget(self.candidates_table)
-
-        ##########################################################
-        # Research Preview
-        ##########################################################
-
-        self.research_preview = ResearchPreview()
-
-        main_layout.addWidget(self.research_preview)
 
         ##########################################################
         # Operations
@@ -105,12 +88,33 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.operations_toolbar)
 
         ##########################################################
+        # Main Workspace
+        ##########################################################
+
+        workspace_layout = QHBoxLayout()
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(10)
+
+        self.candidates_table = CandidateTable()
+        self.candidates_table.ticker_double_clicked.connect(self.open_stock_detail)
+        self.candidates_table.selectionModel().selectionChanged.connect(
+            self.update_open_detail_state
+        )
+
+        self.research_preview = ResearchPreview()
+
+        workspace_layout.addWidget(self.candidates_table, stretch=4)
+        workspace_layout.addWidget(self.research_preview, stretch=1)
+
+        main_layout.addLayout(workspace_layout, stretch=4)
+
+        ##########################################################
         # Activity
         ##########################################################
 
         self.activity_panel = ActivityPanel()
 
-        main_layout.addWidget(self.activity_panel)
+        main_layout.addWidget(self.activity_panel, stretch=1)
 
     # ----------------------------------------------------------
 
