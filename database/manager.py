@@ -368,6 +368,38 @@ class DatabaseManager:
 
         return self.cursor.fetchone()[0]
 
+    def get_technical_indicators(self, ticker):
+        """
+        Return stored technical indicator rows for a ticker ordered by date.
+        """
+
+        self.cursor.execute(
+            """
+            SELECT
+                ticker,
+                date,
+                sma20,
+                sma50,
+                sma200,
+                ema21,
+                rsi14,
+                atr14,
+                avg_volume20,
+                relative_volume,
+                high52,
+                low52,
+                macd,
+                macd_signal,
+                macd_histogram
+            FROM technical_indicators
+            WHERE ticker = ?
+            ORDER BY date
+            """,
+            (ticker,),
+        )
+
+        return self.cursor.fetchall()
+
     # ==========================================================
     # Support Levels
     # ==========================================================
