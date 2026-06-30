@@ -2,9 +2,17 @@ from .base_score import BaseScore
 from .atr_risk import ATRRiskCalculator, ATRRiskResult
 from .bounce_score import BounceScore
 from .candidate_score import CandidateScore
+from .composite_intelligence import (
+    CompositeIntelligenceCalculator,
+    CompositeIntelligenceResult,
+)
 from .composite_score import CompositeScore
 from .earnings_score import EarningsScore
 from .institutional_score import InstitutionalScore
+from .institutional_momentum import (
+    InstitutionalMomentumCalculator,
+    InstitutionalMomentumResult,
+)
 from .quality_score import QualityScore
 from .score_result import ScoreResult
 from .scoring_engine import ScoringEngine
@@ -25,8 +33,12 @@ __all__ = [
     "ATRRiskResult",
     "BounceScore",
     "CandidateScore",
+    "CompositeIntelligenceCalculator",
+    "CompositeIntelligenceResult",
     "CompositeScore",
     "EarningsScore",
+    "InstitutionalMomentumCalculator",
+    "InstitutionalMomentumResult",
     "InstitutionalScore",
     "QualityScore",
     "ScoreResult",

@@ -10,16 +10,25 @@ class InstitutionalImporter:
 
     COLUMNS = [
         "ticker",
+        "report_date",
         "institutional_ownership_pct",
         "institutional_ownership_change_qoq",
         "net_institutional_buying",
+        "new_large_buyers",
+        "new_large_sellers",
         "insider_buying_flag",
         "insider_selling_flag",
+        "insider_buying_score",
+        "insider_selling_score",
     ]
 
     FLAG_COLUMNS = [
         "insider_buying_flag",
         "insider_selling_flag",
+    ]
+
+    DATE_COLUMNS = [
+        "report_date",
     ]
 
     def __init__(self, csv_path=None):
@@ -51,7 +60,12 @@ class InstitutionalImporter:
             if column == "ticker":
                 continue
 
-            if column in self.FLAG_COLUMNS:
+            if column in self.DATE_COLUMNS:
+                dataframe[column] = pd.to_datetime(
+                    dataframe[column],
+                    errors="coerce",
+                ).dt.date
+            elif column in self.FLAG_COLUMNS:
                 dataframe[column] = dataframe[column].apply(self._flag_value)
             else:
                 dataframe[column] = pd.to_numeric(dataframe[column], errors="coerce")
