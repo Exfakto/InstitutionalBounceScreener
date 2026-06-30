@@ -71,6 +71,25 @@ def test_research_preview_displays_candidate_score(app):
     assert preview.score_labels["bounce_score"].text() == "76.0"
 
 
+def test_research_preview_displays_gen2_overall_when_available(app):
+    preview = ResearchPreview()
+    candidate = make_candidate(overall=40.0)
+    candidate = CandidateScore(
+        ticker=candidate.ticker,
+        composite_score=candidate.composite_score,
+        scores=candidate.scores,
+        institutional_bounce_score=91.0,
+        warnings=["Missing components reduced confidence"],
+        timestamp=candidate.timestamp,
+    )
+
+    preview.set_candidate(candidate)
+
+    assert preview.signal_label.text() == "🟢 STRONG BUY"
+    assert preview.overall_score_label.text() == "91.0"
+    assert "Missing components reduced confidence" in preview.warning_label.text()
+
+
 @pytest.mark.parametrize(
     ("overall", "signal"),
     [

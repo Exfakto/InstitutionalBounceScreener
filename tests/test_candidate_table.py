@@ -30,6 +30,17 @@ def make_candidate(ticker, overall):
     )
 
 
+def make_gen2_candidate(ticker, overall, gen2):
+    candidate = make_candidate(ticker, overall)
+
+    return CandidateScore(
+        ticker=candidate.ticker,
+        composite_score=candidate.composite_score,
+        scores=candidate.scores,
+        institutional_bounce_score=gen2,
+    )
+
+
 def test_candidate_table_populates_sorted_by_overall_score(app):
     table = CandidateTable()
 
@@ -46,6 +57,21 @@ def test_candidate_table_populates_sorted_by_overall_score(app):
     assert table.item(1, 0).text() == "MID"
     assert table.item(2, 0).text() == "LOW"
     assert table.item(0, 1).text() == "90.0"
+
+
+def test_candidate_table_uses_gen2_score_for_overall_when_available(app):
+    table = CandidateTable()
+
+    table.populate(
+        [
+            make_gen2_candidate("LEGACY_HIGH", 95.0, 30.0),
+            make_gen2_candidate("GEN2_HIGH", 50.0, 99.0),
+        ]
+    )
+
+    assert table.rowCount() == 2
+    assert table.item(0, 0).text() == "GEN2_HIGH"
+    assert table.item(0, 1).text() == "99.0"
 
 
 def test_candidate_table_is_read_only_and_uses_single_row_selection(app):

@@ -43,7 +43,7 @@ class AnalysisPipeline:
             candidates.append(candidate)
 
         candidates.sort(
-            key=lambda candidate: candidate.composite_score.value,
+            key=lambda candidate: candidate.primary_score_value,
             reverse=True,
         )
 

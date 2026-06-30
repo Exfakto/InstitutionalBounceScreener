@@ -312,7 +312,7 @@ class MainWindow(QMainWindow):
         else:
             self.log(
                 f"Highest score: {highest.ticker} "
-                f"{highest.composite_score.value:.1f}"
+                f"{highest.primary_score_value:.1f}"
             )
 
         self.log(f"Average score: {average_score:.1f}")
@@ -370,7 +370,7 @@ class MainWindow(QMainWindow):
 
         return max(
             candidates,
-            key=lambda candidate: candidate.composite_score.value,
+            key=lambda candidate: candidate.primary_score_value,
         )
 
     # ----------------------------------------------------------
@@ -381,7 +381,7 @@ class MainWindow(QMainWindow):
             return 0.0
 
         total = sum(
-            candidate.composite_score.value
+            candidate.primary_score_value
             for candidate in candidates
         )
 

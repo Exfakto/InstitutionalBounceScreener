@@ -11,6 +11,7 @@ from analysis import (
     SupportScore,
     TechnicalScore,
 )
+from analysis.composite_intelligence import CompositeIntelligenceResult
 from services.scoring_service import ScoringService
 
 
@@ -106,6 +107,27 @@ class TestCompositeScore:
         )
 
 
+class FakeCompositeIntelligenceService:
+
+    def calculate_from_components(self, component_scores):
+        return CompositeIntelligenceResult(
+            institutional_bounce_score=91.5,
+            component_scores={
+                "quality_score": component_scores["quality_score"].value,
+                "institutional_score": component_scores["institutional_score"].value,
+            },
+            weighted_breakdown={},
+            warnings=["Missing components reduced confidence"],
+            missing_components=["risk_score"],
+        )
+
+
+class FailingCompositeIntelligenceService:
+
+    def calculate_from_components(self, component_scores):
+        raise RuntimeError("planned failure")
+
+
 class ScoringServiceTest(unittest.TestCase):
 
     def build_service(self, database):
@@ -119,6 +141,8 @@ class ScoringServiceTest(unittest.TestCase):
             BounceScore(),
         ]
         service.composite = TestCompositeScore()
+        service.composite_intelligence_service = None
+        service._owns_composite_intelligence_service = False
         return service
 
     def test_score_candidate_returns_candidate_score(self):
@@ -135,6 +159,33 @@ class ScoringServiceTest(unittest.TestCase):
         self.assertIn("support_score", candidate.score_map)
         self.assertIn("bounce_score", candidate.score_map)
         self.assertEqual(candidate.composite_score.name, "composite_score")
+
+    def test_score_candidate_includes_gen2_output_when_available(self):
+        service = self.build_service(FakeScoringDatabase())
+        service.composite_intelligence_service = FakeCompositeIntelligenceService()
+
+        candidate = service.score_candidate("AAPL")
+
+        self.assertEqual(candidate.institutional_bounce_score, 91.5)
+        self.assertEqual(candidate.primary_score_value, 91.5)
+        self.assertIn(
+            "quality_score",
+            candidate.composite_intelligence_component_scores,
+        )
+        self.assertEqual(candidate.missing_components, ["risk_score"])
+        self.assertEqual(
+            candidate.warnings,
+            ["Missing components reduced confidence"],
+        )
+
+    def test_score_candidate_falls_back_when_gen2_unavailable(self):
+        service = self.build_service(FakeScoringDatabase())
+        service.composite_intelligence_service = FailingCompositeIntelligenceService()
+
+        candidate = service.score_candidate("AAPL")
+
+        self.assertIsNone(candidate.institutional_bounce_score)
+        self.assertEqual(candidate.primary_score_value, candidate.composite_score.value)
 
     def test_missing_data_does_not_crash(self):
         service = self.build_service(EmptyScoringDatabase())

@@ -15,9 +15,10 @@ class FakePipelineDatabase:
 
 class FakeScoringService:
 
-    def __init__(self, scores, failing_tickers=None):
+    def __init__(self, scores, failing_tickers=None, gen2_scores=None):
         self.db = FakePipelineDatabase(list(scores.keys()))
         self.scores = scores
+        self.gen2_scores = gen2_scores or {}
         self.failing_tickers = set(failing_tickers or [])
         self.closed = False
 
@@ -32,6 +33,7 @@ class FakeScoringService:
                 name="composite_score",
                 value=self.scores[ticker],
             ),
+            institutional_bounce_score=self.gen2_scores.get(ticker),
         )
 
     def close(self):
@@ -59,6 +61,44 @@ class AnalysisPipelineTest(unittest.TestCase):
             ["BBB", "CCC", "AAA"],
         )
         self.assertGreaterEqual(summary["elapsed_seconds"], 0.0)
+
+    def test_run_sorts_by_gen2_score_when_available(self):
+        service = FakeScoringService(
+            {
+                "AAA": 95.0,
+                "BBB": 50.0,
+                "CCC": 70.0,
+            },
+            gen2_scores={
+                "AAA": 40.0,
+                "BBB": 99.0,
+            },
+        )
+
+        summary = AnalysisPipeline(service).run()
+
+        self.assertEqual(
+            [candidate.ticker for candidate in summary["candidates"]],
+            ["BBB", "CCC", "AAA"],
+        )
+
+    def test_run_falls_back_to_composite_when_gen2_unavailable(self):
+        service = FakeScoringService(
+            {
+                "AAA": 95.0,
+                "BBB": 50.0,
+            },
+            gen2_scores={
+                "BBB": 80.0,
+            },
+        )
+
+        summary = AnalysisPipeline(service).run()
+
+        self.assertEqual(
+            [candidate.ticker for candidate in summary["candidates"]],
+            ["AAA", "BBB"],
+        )
 
     def test_run_skips_failed_tickers(self):
         service = FakeScoringService(

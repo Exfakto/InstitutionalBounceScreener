@@ -181,10 +181,10 @@ class ResearchPreview(QWidget):
 
         self.ticker_label.setText(candidate_score.ticker)
         self.signal_label.setText(
-            self.signal_label_for_score(candidate_score.composite_score.value)
+            self.signal_label_for_score(candidate_score.primary_score_value)
         )
         self.overall_score_label.setText(
-            self.format_score(candidate_score.composite_score)
+            self.format_score(candidate_score.primary_score_value)
         )
         self.timestamp_label.setText(f"Analysis Time: {candidate_score.timestamp}")
 
@@ -214,6 +214,9 @@ class ResearchPreview(QWidget):
         if score is None:
             return "—"
 
+        if not hasattr(score, "value"):
+            return f"{float(score):.1f}"
+
         return f"{score.value:.1f}"
 
     @staticmethod
@@ -238,6 +241,8 @@ class ResearchPreview(QWidget):
 
             if score.error:
                 warnings.append(score.error)
+
+        warnings.extend(candidate_score.warnings)
 
         if not warnings:
             return "No warnings"

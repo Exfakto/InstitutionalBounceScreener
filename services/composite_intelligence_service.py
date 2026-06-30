@@ -26,8 +26,11 @@ class CompositeIntelligenceService:
     Gather available analytics and calculate Gen 2 composite intelligence.
     """
 
-    def __init__(self):
-        self.scoring_service = ScoringService()
+    def __init__(self, scoring_service=None):
+        self._owns_scoring_service = scoring_service is None
+        self.scoring_service = scoring_service or ScoringService(
+            composite_intelligence_service=self
+        )
         self.relative_strength_service = RelativeStrengthService()
         self.volume_service = VolumeIntelligenceService()
         self.trend_service = TrendStrengthService()
@@ -61,7 +64,7 @@ class CompositeIntelligenceService:
         self.add_earnings_score(ticker, component_scores, warnings)
         self.add_institutional_momentum_score(ticker, component_scores, warnings)
 
-        composite = self.calculator.calculate(component_scores)
+        composite = self.calculate_from_components(component_scores)
 
         warnings.extend(composite.warnings)
         result["component_scores"] = component_scores
@@ -80,6 +83,9 @@ class CompositeIntelligenceService:
         result["result"] = composite
 
         return result
+
+    def calculate_from_components(self, component_scores):
+        return self.calculator.calculate(component_scores)
 
     def calculate_all(self, tickers=None):
         target_tickers = (
@@ -272,13 +278,17 @@ class CompositeIntelligenceService:
         return result.institutional_bounce_score == 0.0 and not result.component_scores
 
     def close(self):
-        for service in [
-            self.scoring_service,
+        services = [
             self.relative_strength_service,
             self.volume_service,
             self.trend_service,
             self.atr_service,
             self.support_distance_service,
-        ]:
+        ]
+
+        if self._owns_scoring_service:
+            services.insert(0, self.scoring_service)
+
+        for service in services:
             if hasattr(service, "close"):
                 service.close()

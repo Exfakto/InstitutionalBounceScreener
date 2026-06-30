@@ -100,7 +100,7 @@ class CandidateTable(QTableWidget):
 
         return [
             candidate.ticker,
-            self.format_score(candidate.composite_score.value),
+            self.format_score(candidate.primary_score_value),
             self.format_score(scores.get("quality_score")),
             self.format_score(scores.get("institutional_score")),
             self.format_score(scores.get("technical_score")),
@@ -112,7 +112,7 @@ class CandidateTable(QTableWidget):
     def sorted_candidates(cls, candidates):
         return sorted(
             candidates,
-            key=lambda candidate: candidate.composite_score.value,
+            key=lambda candidate: candidate.primary_score_value,
             reverse=True,
         )
 

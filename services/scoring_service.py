@@ -8,6 +8,7 @@ from analysis import (
     TechnicalScore,
 )
 from database.manager import DatabaseManager
+from config.logging_config import logger
 
 
 class ScoringService:
@@ -15,7 +16,7 @@ class ScoringService:
     Read-only candidate scoring workflow.
     """
 
-    def __init__(self):
+    def __init__(self, composite_intelligence_service=None):
         self.db = DatabaseManager()
         self.providers = [
             QualityScore(),
@@ -25,6 +26,8 @@ class ScoringService:
             BounceScore(),
         ]
         self.composite = CompositeScore()
+        self.composite_intelligence_service = composite_intelligence_service
+        self._owns_composite_intelligence_service = False
 
     def score_candidate(self, ticker):
         """
@@ -50,10 +53,63 @@ class ScoringService:
 
         composite_score = self.composite.calculate(score_context)
 
-        return CandidateScore(
+        candidate = CandidateScore(
             ticker=ticker,
             scores=scores,
             composite_score=composite_score,
+        )
+
+        return self.add_composite_intelligence(candidate, score_context)
+
+    def add_composite_intelligence(self, candidate, score_context):
+        """
+        Attach Gen 2 composite intelligence when it can be calculated safely.
+        """
+
+        try:
+            service = self.get_composite_intelligence_service()
+            result = service.calculate_from_components(score_context)
+        except Exception as error:
+            logger.warning(
+                "Gen 2 composite intelligence unavailable for %s: %s",
+                candidate.ticker,
+                error,
+            )
+            return candidate
+
+        if result is None or self.is_empty_intelligence_result(result):
+            return candidate
+
+        return CandidateScore(
+            ticker=candidate.ticker,
+            scores=candidate.scores,
+            composite_score=candidate.composite_score,
+            institutional_bounce_score=result.institutional_bounce_score,
+            composite_intelligence=result,
+            composite_intelligence_component_scores=result.component_scores,
+            missing_components=result.missing_components,
+            warnings=result.warnings,
+            timestamp=candidate.timestamp,
+        )
+
+    def get_composite_intelligence_service(self):
+        if getattr(self, "composite_intelligence_service", None) is None:
+            from services.composite_intelligence_service import (
+                CompositeIntelligenceService,
+            )
+
+            self.composite_intelligence_service = CompositeIntelligenceService(
+                scoring_service=self
+            )
+            self._owns_composite_intelligence_service = True
+
+        return self.composite_intelligence_service
+
+    @staticmethod
+    def is_empty_intelligence_result(result):
+        return (
+            result.institutional_bounce_score == 0.0
+            and not result.component_scores
         )
 
     def get_candidate_detail(self, ticker):
@@ -187,4 +243,7 @@ class ScoringService:
         }
 
     def close(self):
+        if getattr(self, "_owns_composite_intelligence_service", False):
+            self.composite_intelligence_service.close()
+
         self.db.close()
