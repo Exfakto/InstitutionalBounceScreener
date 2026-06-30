@@ -59,10 +59,35 @@ def chart_data_with_smas(sma20=True, sma50=False, sma200=False):
     return data
 
 
+def close_only_chart_data():
+    data = chart_data()
+
+    for price in data["prices"]:
+        price["open"] = None
+        price["high"] = None
+        price["low"] = None
+
+    return data
+
+
+def incomplete_ohlc_chart_data():
+    data = chart_data()
+    data["prices"][1]["high"] = None
+
+    return data
+
+
 def chart_data_with_support_zones(zones):
     data = chart_data()
     data["support_zones"] = zones
     return data
+
+
+def price_series_name():
+    if price_chart_module.CANDLESTICKS_AVAILABLE:
+        return "Price"
+
+    return "Close"
 
 
 def validated_support_zone():
@@ -119,10 +144,35 @@ def test_price_chart_clear_shows_empty_state(app):
     widget.clear()
 
     assert widget.summary_label.text() == "Select a candidate to view chart."
+    assert widget.readout_label.text() == "No price selected."
     assert widget.chart_data is None
 
     if widget.chart is not None:
         assert widget.chart.series() == []
+
+
+def test_price_chart_controls_exist(app):
+    widget = PriceChart()
+
+    assert widget.reset_button.text() == "Reset"
+    assert widget.zoom_in_button.text() == "Zoom +"
+    assert widget.zoom_out_button.text() == "Zoom -"
+    assert widget.pan_left_button.text() == "Pan <"
+    assert widget.pan_right_button.text() == "Pan >"
+    assert widget.controls_layout.count() == 6
+
+
+def test_price_chart_interaction_methods_are_callable(app):
+    widget = PriceChart()
+    widget.set_chart_data(chart_data())
+
+    widget.reset_view()
+    widget.zoom_in()
+    widget.zoom_out()
+    widget.pan_left()
+    widget.pan_right()
+
+    assert widget.chart_data["ticker"] == "AAPL"
 
 
 def test_price_chart_missing_price_history_shows_message(app):
@@ -131,6 +181,7 @@ def test_price_chart_missing_price_history_shows_message(app):
     widget.set_chart_data({"ticker": "EMPTY", "prices": []})
 
     assert widget.summary_label.text() == "No price history available."
+    assert widget.readout_label.text() == "No price selected."
     assert widget.support_band_series == []
     assert widget.support_labels == []
 
@@ -148,8 +199,58 @@ def test_price_chart_plots_close_prices_when_qtcharts_available(app):
 
     assert widget.summary_label.isHidden() is True
     assert len(widget.chart.series()) == 1
-    assert widget.chart.series()[0].count() == 2
+    assert widget.chart.series()[0].name() == price_series_name()
     assert widget.chart.title() == "AAPL Close 103.50"
+
+    if price_chart_module.CANDLESTICKS_AVAILABLE:
+        assert widget.render_mode == "candlestick"
+        assert widget.candlestick_series is widget.chart.series()[0]
+    else:
+        assert widget.render_mode == "line"
+        assert widget.chart.series()[0].count() == 2
+
+
+def test_price_chart_set_chart_data_updates_latest_readout(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(chart_data())
+
+    assert "Latest: 2026-01-02" in widget.readout_label.text()
+    assert "O 101.00" in widget.readout_label.text()
+    assert "H 104.00" in widget.readout_label.text()
+    assert "L 100.00" in widget.readout_label.text()
+    assert "C 103.50" in widget.readout_label.text()
+    assert "Vol 1200" in widget.readout_label.text()
+
+
+def test_price_chart_close_only_data_falls_back_to_line_mode(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(close_only_chart_data())
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert widget.render_mode == "line"
+    assert widget.candlestick_series is None
+    assert [series.name() for series in widget.chart.series()] == ["Close"]
+    assert widget.chart.series()[0].count() == 2
+    assert "O N/A" in widget.readout_label.text()
+    assert "C 103.50" in widget.readout_label.text()
+
+
+def test_price_chart_missing_ohlc_data_falls_back_to_line_mode(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(incomplete_ohlc_chart_data())
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert widget.render_mode == "line"
+    assert widget.candlestick_series is None
+    assert [series.name() for series in widget.chart.series()] == ["Close"]
+    assert "H N/A" in widget.readout_label.text()
 
 
 def test_price_chart_replaces_existing_series_on_update(app):
@@ -164,7 +265,8 @@ def test_price_chart_replaces_existing_series_on_update(app):
         pytest.skip("QtCharts backend unavailable")
 
     assert len(widget.chart.series()) == 1
-    assert widget.chart.series()[0].count() == 1
+    assert widget.chart.series()[0].name() == price_series_name()
+    assert "Latest: 2026-01-01" in widget.readout_label.text()
 
 
 def test_price_chart_plots_price_with_sma20_overlay(app):
@@ -175,7 +277,10 @@ def test_price_chart_plots_price_with_sma20_overlay(app):
     if not price_chart_module.CHARTS_AVAILABLE:
         pytest.skip("QtCharts backend unavailable")
 
-    assert [series.name() for series in widget.chart.series()] == ["Close", "SMA20"]
+    assert [series.name() for series in widget.chart.series()] == [
+        price_series_name(),
+        "SMA20",
+    ]
     assert widget.overlay_series["sma20"].count() == 2
 
 
@@ -188,7 +293,7 @@ def test_price_chart_plots_price_with_sma20_and_sma50_overlays(app):
         pytest.skip("QtCharts backend unavailable")
 
     assert [series.name() for series in widget.chart.series()] == [
-        "Close",
+        price_series_name(),
         "SMA20",
         "SMA50",
     ]
@@ -205,7 +310,7 @@ def test_price_chart_plots_all_three_sma_overlays(app):
         pytest.skip("QtCharts backend unavailable")
 
     assert [series.name() for series in widget.chart.series()] == [
-        "Close",
+        price_series_name(),
         "SMA20",
         "SMA50",
         "SMA200",
@@ -241,6 +346,8 @@ def test_price_chart_clear_resets_overlay_series(app):
     assert widget.support_band_series == []
     assert widget.support_labels == []
     assert widget.series is None
+    assert widget.candlestick_series is None
+    assert widget.render_mode is None
 
     if widget.chart is not None:
         assert widget.chart.series() == []
@@ -261,7 +368,7 @@ def test_price_chart_renders_single_validated_support_zone(app):
     assert "83%" in widget.support_labels[0].text()
     assert [series.name() for series in widget.chart.series()] == [
         "Support 1",
-        "Close",
+        price_series_name(),
     ]
 
 
@@ -353,7 +460,7 @@ def test_price_chart_no_support_zones_renders_only_price_series(app):
 
     assert widget.support_band_series == []
     assert widget.support_labels == []
-    assert [series.name() for series in widget.chart.series()] == ["Close"]
+    assert [series.name() for series in widget.chart.series()] == [price_series_name()]
 
 
 def test_price_chart_replaces_support_zones_on_repeated_update(app):
@@ -374,6 +481,17 @@ def test_price_chart_replaces_support_zones_on_repeated_update(app):
 
     assert len(widget.support_band_series) == 1
     assert len(widget.support_labels) == 1
+
+
+def test_price_chart_repeated_updates_do_not_duplicate_controls(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(chart_data())
+    widget.set_chart_data(chart_data_with_smas(sma20=True, sma50=True))
+    widget.set_chart_data(chart_data_with_support_zones([validated_support_zone()]))
+
+    assert widget.controls_layout.count() == 6
+    assert widget.reset_button.text() == "Reset"
 
 
 def test_price_chart_placeholder_summary_when_backend_unavailable(app, monkeypatch):

@@ -123,6 +123,24 @@ class ChartDataServiceTest(unittest.TestCase):
         self.assertIsNone(chart_data["prices"][1]["sma20"])
         self.assertNotIn("Missing technical indicators", chart_data["warnings"])
 
+    def test_missing_ohlc_fields_do_not_crash_price_history(self):
+        prices = pd.DataFrame(
+            {
+                "Close": [101.0, 102.0],
+            },
+            index=pd.to_datetime(["2026-01-01", "2026-01-02"]),
+        )
+        service = self.build_service(prices=prices)
+
+        chart_data = service.get_chart_data("AAA")
+
+        self.assertEqual(len(chart_data["prices"]), 2)
+        self.assertEqual(chart_data["prices"][0]["close"], 101.0)
+        self.assertIsNone(chart_data["prices"][0]["open"])
+        self.assertIsNone(chart_data["prices"][0]["high"])
+        self.assertIsNone(chart_data["prices"][0]["low"])
+        self.assertIsNone(chart_data["prices"][0]["volume"])
+
     def test_merges_indicator_rows_with_price_history_by_date(self):
         service = self.build_service(
             prices=self.price_history(),

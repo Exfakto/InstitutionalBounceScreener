@@ -4,7 +4,14 @@ from datetime import datetime
 
 from PySide6.QtCore import QDateTime, QPointF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QGraphicsSimpleTextItem, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QGraphicsSimpleTextItem,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 try:
     from PySide6.QtCharts import (
@@ -26,6 +33,15 @@ except ImportError:
     QValueAxis = None
     CHARTS_AVAILABLE = False
 
+try:
+    from PySide6.QtCharts import QCandlestickSeries, QCandlestickSet
+
+    CANDLESTICKS_AVAILABLE = True
+except ImportError:
+    QCandlestickSeries = None
+    QCandlestickSet = None
+    CANDLESTICKS_AVAILABLE = False
+
 
 class PriceChart(QWidget):
     """
@@ -35,11 +51,25 @@ class PriceChart(QWidget):
     EMPTY_MESSAGE = "Select a candidate to view chart."
     NO_PRICE_MESSAGE = "No price history available."
     BACKEND_UNAVAILABLE_MESSAGE = "Chart rendering backend is unavailable."
+    READOUT_EMPTY_MESSAGE = "No price selected."
+    COLOR_BACKGROUND = "#1E1E1E"
+    COLOR_PLOT_BACKGROUND = "#2A2A2A"
+    COLOR_TEXT = "#F2F2F2"
+    COLOR_MUTED_TEXT = "#B0B0B0"
+    COLOR_GRID = "#4A4A4A"
+    COLOR_CLOSE = "#4A90E2"
+    COLOR_SMA20 = "#3FB950"
+    COLOR_SMA50 = "#D29922"
+    COLOR_SMA200 = "#F85149"
+    COLOR_SUPPORT_VALIDATED = "#3FB950"
+    COLOR_SUPPORT_NORMAL = "#8B949E"
+    COLOR_CANDLE_UP = "#3FB950"
+    COLOR_CANDLE_DOWN = "#F85149"
     SERIES_DEFINITIONS = [
-        ("close", "Close", "#4A90E2", 2),
-        ("sma20", "SMA20", "#3FB950", 1),
-        ("sma50", "SMA50", "#D29922", 1),
-        ("sma200", "SMA200", "#F85149", 1),
+        ("close", "Close", COLOR_CLOSE, 2),
+        ("sma20", "SMA20", COLOR_SMA20, 1),
+        ("sma50", "SMA50", COLOR_SMA50, 1),
+        ("sma200", "SMA200", COLOR_SMA200, 1),
     ]
 
     def __init__(self, parent=None):
@@ -48,10 +78,13 @@ class PriceChart(QWidget):
         self.chart = None
         self.chart_view = None
         self.series = None
+        self.candlestick_series = None
+        self.render_mode = None
         self.overlay_series = {}
         self.support_band_series = []
         self.support_labels = []
         self.chart_data = None
+        self.last_pan_direction = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -63,6 +96,33 @@ class PriceChart(QWidget):
         self.summary_label.setWordWrap(True)
 
         layout.addWidget(self.summary_label)
+        self.controls_layout = QHBoxLayout()
+        self.controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.controls_layout.setSpacing(6)
+
+        self.reset_button = self.create_control_button("Reset", self.reset_view)
+        self.zoom_in_button = self.create_control_button("Zoom +", self.zoom_in)
+        self.zoom_out_button = self.create_control_button("Zoom -", self.zoom_out)
+        self.pan_left_button = self.create_control_button("Pan <", self.pan_left)
+        self.pan_right_button = self.create_control_button("Pan >", self.pan_right)
+
+        for button in [
+            self.reset_button,
+            self.zoom_in_button,
+            self.zoom_out_button,
+            self.pan_left_button,
+            self.pan_right_button,
+        ]:
+            self.controls_layout.addWidget(button)
+
+        self.controls_layout.addStretch(1)
+        layout.addLayout(self.controls_layout)
+
+        self.readout_label = QLabel("")
+        self.readout_label.setObjectName("PriceChartReadout")
+        self.readout_label.setAlignment(Qt.AlignLeft)
+        self.readout_label.setWordWrap(True)
+        layout.addWidget(self.readout_label)
 
         if CHARTS_AVAILABLE:
             self.chart = self.create_chart()
@@ -81,6 +141,7 @@ class PriceChart(QWidget):
         self.chart_data = None
         self.summary_label.setText(self.EMPTY_MESSAGE)
         self.summary_label.show()
+        self.readout_label.setText(self.READOUT_EMPTY_MESSAGE)
 
         if self.chart is not None:
             self.clear_chart()
@@ -99,6 +160,7 @@ class PriceChart(QWidget):
         if not prices:
             self.summary_label.setText(self.NO_PRICE_MESSAGE)
             self.summary_label.show()
+            self.readout_label.setText(self.READOUT_EMPTY_MESSAGE)
 
             if self.chart is not None:
                 self.clear_chart()
@@ -109,6 +171,7 @@ class PriceChart(QWidget):
             return
 
         if not CHARTS_AVAILABLE:
+            self.update_readout(prices)
             self.summary_label.setText(self.placeholder_summary(self.chart_data))
             self.summary_label.show()
             return
@@ -118,22 +181,28 @@ class PriceChart(QWidget):
         if not points:
             self.summary_label.setText(self.NO_PRICE_MESSAGE)
             self.summary_label.show()
+            self.readout_label.setText(self.READOUT_EMPTY_MESSAGE)
             self.chart_view.hide()
             return
 
-        self.render_line_chart(self.chart_data, points)
+        self.update_readout(prices)
+        self.render_chart(self.chart_data, points)
         self.summary_label.hide()
         self.chart_view.show()
+        self.reset_view()
 
-    def render_line_chart(self, chart_data, points):
+    def render_chart(self, chart_data, points):
         self.chart.removeAllSeries()
         for axis in self.chart.axes():
             self.chart.removeAxis(axis)
 
+        self.series = None
+        self.candlestick_series = None
         self.overlay_series = {}
         prices = chart_data.get("prices") or []
         support_zones = chart_data.get("support_zones") or []
         chart_series = []
+        has_candlesticks = self.should_render_candlesticks(prices)
 
         support_band_series = self.create_support_band_series(
             support_zones,
@@ -147,7 +216,19 @@ class PriceChart(QWidget):
 
         self.support_band_series = support_band_series
 
-        for key, name, color, width in self.SERIES_DEFINITIONS:
+        if has_candlesticks:
+            self.render_mode = "candlestick"
+            candlesticks = self.create_candlestick_series(prices)
+            chart_series.append(candlesticks)
+            self.chart.addSeries(candlesticks)
+            self.candlestick_series = candlesticks
+            self.series = candlesticks
+            series_definitions = self.SERIES_DEFINITIONS[1:]
+        else:
+            self.render_mode = "line"
+            series_definitions = self.SERIES_DEFINITIONS
+
+        for key, name, color, width in series_definitions:
             series_points = points if key == "close" else self.series_points(prices, key)
 
             if not series_points:
@@ -164,14 +245,14 @@ class PriceChart(QWidget):
 
         self.chart.setTitle(self.chart_title(chart_data))
         self.chart.legend().setVisible(len(chart_series) > 1)
-        self.chart.legend().setLabelColor(QColor("#F2F2F2"))
+        self.chart.legend().setLabelColor(QColor(self.COLOR_TEXT))
 
         x_axis = QDateTimeAxis()
         x_axis.setFormat("MMM d")
         x_axis.setTitleText("Date")
-        x_axis.setLabelsColor(QColor("#F2F2F2"))
-        x_axis.setTitleBrush(QColor("#B0B0B0"))
-        x_axis.setGridLineColor(QColor("#4A4A4A"))
+        x_axis.setLabelsColor(QColor(self.COLOR_TEXT))
+        x_axis.setTitleBrush(QColor(self.COLOR_MUTED_TEXT))
+        x_axis.setGridLineColor(QColor(self.COLOR_GRID))
         x_axis.setRange(
             QDateTime.fromMSecsSinceEpoch(points[0][0]),
             QDateTime.fromMSecsSinceEpoch(points[-1][0]),
@@ -180,9 +261,9 @@ class PriceChart(QWidget):
         y_axis = QValueAxis()
         y_axis.setTitleText("Close")
         y_axis.setLabelFormat("%.2f")
-        y_axis.setLabelsColor(QColor("#F2F2F2"))
-        y_axis.setTitleBrush(QColor("#B0B0B0"))
-        y_axis.setGridLineColor(QColor("#4A4A4A"))
+        y_axis.setLabelsColor(QColor(self.COLOR_TEXT))
+        y_axis.setTitleBrush(QColor(self.COLOR_MUTED_TEXT))
+        y_axis.setGridLineColor(QColor(self.COLOR_GRID))
         line_values = [
             value
             for series_points in [
@@ -193,7 +274,9 @@ class PriceChart(QWidget):
         ]
         self.apply_y_range(
             y_axis,
-            line_values + self.support_zone_values(support_zones),
+            line_values
+            + self.ohlc_values(prices)
+            + self.support_zone_values(support_zones),
         )
 
         self.chart.addAxis(x_axis, Qt.AlignBottom)
@@ -235,6 +318,42 @@ class PriceChart(QWidget):
         return series
 
     @classmethod
+    def create_candlestick_series(cls, prices):
+        series = QCandlestickSeries()
+        series.setName("Price")
+        series.setIncreasingColor(QColor(cls.COLOR_CANDLE_UP))
+        series.setDecreasingColor(QColor(cls.COLOR_CANDLE_DOWN))
+
+        for index, price in enumerate(prices):
+            if not cls.has_ohlc(price):
+                continue
+
+            candle = QCandlestickSet(
+                float(price.get("open")),
+                float(price.get("high")),
+                float(price.get("low")),
+                float(price.get("close")),
+                cls.date_to_msecs(price.get("date"), index),
+            )
+            series.append(candle)
+
+        return series
+
+    @classmethod
+    def should_render_candlesticks(cls, prices):
+        if not CHARTS_AVAILABLE or not CANDLESTICKS_AVAILABLE:
+            return False
+
+        return bool(prices) and all(cls.has_ohlc(price) for price in prices)
+
+    @staticmethod
+    def has_ohlc(price):
+        return all(
+            price.get(key) is not None
+            for key in ["open", "high", "low", "close"]
+        )
+
+    @classmethod
     def create_support_band_series(cls, support_zones, start_x, end_x):
         bands = []
 
@@ -264,7 +383,11 @@ class PriceChart(QWidget):
 
     @staticmethod
     def support_zone_brush(zone):
-        color = QColor("#3FB950" if zone.get("validated") else "#8B949E")
+        color = QColor(
+            PriceChart.COLOR_SUPPORT_VALIDATED
+            if zone.get("validated")
+            else PriceChart.COLOR_SUPPORT_NORMAL
+        )
         color.setAlpha(70 if zone.get("validated") else 55)
 
         return QBrush(color)
@@ -276,6 +399,19 @@ class PriceChart(QWidget):
         for zone in support_zones:
             for key in ["support_low", "support_high"]:
                 value = zone.get(key)
+
+                if value is not None:
+                    values.append(float(value))
+
+        return values
+
+    @staticmethod
+    def ohlc_values(prices):
+        values = []
+
+        for price in prices:
+            for key in ["open", "high", "low", "close"]:
+                value = price.get(key)
 
                 if value is not None:
                     values.append(float(value))
@@ -297,7 +433,7 @@ class PriceChart(QWidget):
                 continue
 
             label = QGraphicsSimpleTextItem(self.support_label_text(zone))
-            label.setBrush(QBrush(QColor("#B0B0B0")))
+            label.setBrush(QBrush(QColor(self.COLOR_MUTED_TEXT)))
             label.setFont(QFont("Segoe UI", 8))
             label.setZValue(5)
             position = self.chart.mapToPosition(QPointF(label_x, float(high)))
@@ -333,6 +469,74 @@ class PriceChart(QWidget):
             return "Validated support"
 
         return "Support"
+
+    @staticmethod
+    def create_control_button(text, callback):
+        button = QPushButton(text)
+        button.setObjectName(f"PriceChart{text.replace(' ', '').replace('+', 'In').replace('-', 'Out')}")
+        button.setFixedHeight(26)
+        button.clicked.connect(callback)
+
+        return button
+
+    def reset_view(self):
+        if self.chart is not None and hasattr(self.chart, "zoomReset"):
+            self.chart.zoomReset()
+
+    def zoom_in(self):
+        if self.chart is not None and hasattr(self.chart, "zoom"):
+            self.chart.zoom(1.2)
+
+    def zoom_out(self):
+        if self.chart is not None and hasattr(self.chart, "zoom"):
+            self.chart.zoom(0.8)
+
+    def pan_left(self):
+        self.last_pan_direction = "left"
+        self.scroll_chart(-40, 0)
+
+    def pan_right(self):
+        self.last_pan_direction = "right"
+        self.scroll_chart(40, 0)
+
+    def scroll_chart(self, dx, dy):
+        return None
+
+    def update_readout(self, prices):
+        latest = prices[-1] if prices else None
+
+        if not latest:
+            self.readout_label.setText(self.READOUT_EMPTY_MESSAGE)
+            return
+
+        self.readout_label.setText(self.latest_readout_text(latest))
+
+    @classmethod
+    def latest_readout_text(cls, price):
+        parts = [f"Latest: {price.get('date') or 'N/A'}"]
+
+        for label, key in [
+            ("O", "open"),
+            ("H", "high"),
+            ("L", "low"),
+            ("C", "close"),
+        ]:
+            parts.append(f"{label} {cls.format_readout_value(price.get(key))}")
+
+        if price.get("volume") is not None:
+            parts.append(f"Vol {cls.format_readout_value(price.get('volume'))}")
+
+        return " | ".join(parts)
+
+    @staticmethod
+    def format_readout_value(value):
+        if value is None:
+            return "N/A"
+
+        if isinstance(value, float):
+            return f"{value:.2f}"
+
+        return str(value)
 
     @staticmethod
     def date_to_msecs(value, index):
@@ -384,15 +588,17 @@ class PriceChart(QWidget):
     def create_chart():
         chart = QChart()
         chart.legend().hide()
-        chart.setBackgroundBrush(QColor("#1E1E1E"))
-        chart.setPlotAreaBackgroundBrush(QColor("#2A2A2A"))
+        chart.setBackgroundBrush(QColor(PriceChart.COLOR_BACKGROUND))
+        chart.setPlotAreaBackgroundBrush(QColor(PriceChart.COLOR_PLOT_BACKGROUND))
         chart.setPlotAreaBackgroundVisible(True)
-        chart.setTitleBrush(QColor("#F2F2F2"))
+        chart.setTitleBrush(QColor(PriceChart.COLOR_TEXT))
 
         return chart
 
     def clear_chart(self):
         self.series = None
+        self.candlestick_series = None
+        self.render_mode = None
         self.overlay_series = {}
         self.support_band_series = []
         self.clear_support_labels()
