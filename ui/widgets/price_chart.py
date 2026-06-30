@@ -307,15 +307,32 @@ class PriceChart(QWidget):
 
     @staticmethod
     def support_label_text(zone):
-        lines = ["Support"]
+        if zone.get("validated"):
+            successful_bounces = zone.get("successful_bounces")
+            if successful_bounces is None:
+                successful_bounces = zone.get("bounce_count")
 
-        if zone.get("success_rate") is not None:
-            lines.append(f"{float(zone['success_rate']):.0f}%")
+            total_touches = zone.get("total_touches")
+            success_rate = zone.get("bounce_success_rate")
+            if success_rate is None:
+                success_rate = zone.get("success_rate")
 
-        if zone.get("bounce_count") is not None:
-            lines.append(f"{int(zone['bounce_count'])} bounces")
+            parts = []
 
-        return " | ".join(lines)
+            if successful_bounces is not None and total_touches is not None:
+                parts.append(
+                    f"{int(successful_bounces)}/{int(total_touches)} bounces"
+                )
+
+            if success_rate is not None:
+                parts.append(f"{float(success_rate):.0f}%")
+
+            if parts:
+                return f"Validated: {' - '.join(parts)}"
+
+            return "Validated support"
+
+        return "Support"
 
     @staticmethod
     def date_to_msecs(value, index):

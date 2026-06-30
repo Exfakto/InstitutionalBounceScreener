@@ -185,6 +185,17 @@ class ChartDataServiceTest(unittest.TestCase):
         self.assertFalse(chart_data["support_zones"][0]["validated"])
         self.assertIsNone(chart_data["support_zones"][0]["bounce_count"])
         self.assertIsNone(chart_data["support_zones"][0]["success_rate"])
+        self.assertEqual(chart_data["support_zones"][0]["support_level_id"], 1)
+        self.assertIsNone(chart_data["support_zones"][0]["total_touches"])
+        self.assertIsNone(chart_data["support_zones"][0]["successful_bounces"])
+        self.assertIsNone(chart_data["support_zones"][0]["failed_breakdowns"])
+        self.assertIsNone(chart_data["support_zones"][0]["neutral_touches"])
+        self.assertIsNone(chart_data["support_zones"][0]["bounce_success_rate"])
+        self.assertIsNone(chart_data["support_zones"][0]["average_bounce_pct"])
+        self.assertIsNone(chart_data["support_zones"][0]["median_bounce_pct"])
+        self.assertIsNone(
+            chart_data["support_zones"][0]["average_days_to_bounce_peak"]
+        )
         self.assertNotIn("Missing support zones", chart_data["warnings"])
 
     def test_returns_validated_support_zone_metadata(self):
@@ -203,8 +214,14 @@ class ChartDataServiceTest(unittest.TestCase):
                 {
                     "support_level_id": 7,
                     "ticker": "AAA",
+                    "total_touches": 4,
                     "successful_bounces": 3,
+                    "failed_breakdowns": 1,
+                    "neutral_touches": 0,
                     "bounce_success_rate": 75.0,
+                    "average_bounce_pct": 6.5,
+                    "median_bounce_pct": 6.0,
+                    "average_days_to_bounce_peak": 8.0,
                 }
             ],
         )
@@ -215,6 +232,49 @@ class ChartDataServiceTest(unittest.TestCase):
         self.assertTrue(support_zone["validated"])
         self.assertEqual(support_zone["bounce_count"], 3)
         self.assertEqual(support_zone["success_rate"], 75.0)
+        self.assertEqual(support_zone["support_level_id"], 7)
+        self.assertEqual(support_zone["total_touches"], 4)
+        self.assertEqual(support_zone["successful_bounces"], 3)
+        self.assertEqual(support_zone["failed_breakdowns"], 1)
+        self.assertEqual(support_zone["neutral_touches"], 0)
+        self.assertEqual(support_zone["bounce_success_rate"], 75.0)
+        self.assertEqual(support_zone["average_bounce_pct"], 6.5)
+        self.assertEqual(support_zone["median_bounce_pct"], 6.0)
+        self.assertEqual(support_zone["average_days_to_bounce_peak"], 8.0)
+
+    def test_missing_bounce_validation_fields_do_not_crash_support_zone(self):
+        service = self.build_service(
+            prices=self.price_history(),
+            support_zones=[
+                {
+                    "id": 7,
+                    "ticker": "AAA",
+                    "zone_low": 98.0,
+                    "zone_high": 100.0,
+                    "strength_score": 85.0,
+                }
+            ],
+            bounce_validations=[
+                {
+                    "support_level_id": 7,
+                    "ticker": "AAA",
+                }
+            ],
+        )
+
+        chart_data = service.get_chart_data("AAA")
+        support_zone = chart_data["support_zones"][0]
+
+        self.assertTrue(support_zone["validated"])
+        self.assertEqual(support_zone["support_level_id"], 7)
+        self.assertIsNone(support_zone["total_touches"])
+        self.assertIsNone(support_zone["successful_bounces"])
+        self.assertIsNone(support_zone["failed_breakdowns"])
+        self.assertIsNone(support_zone["neutral_touches"])
+        self.assertIsNone(support_zone["bounce_success_rate"])
+        self.assertIsNone(support_zone["average_bounce_pct"])
+        self.assertIsNone(support_zone["median_bounce_pct"])
+        self.assertIsNone(support_zone["average_days_to_bounce_peak"])
 
     def test_missing_support_zones_do_not_crash(self):
         service = self.build_service(prices=self.price_history())

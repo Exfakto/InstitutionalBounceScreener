@@ -117,6 +117,7 @@ class ChartDataService:
             validation = validations_by_support_id.get(zone.get("id"), {})
             success_rate = cls.value_or_none(validation.get("bounce_success_rate"))
             bounce_count = cls.value_or_none(validation.get("successful_bounces"))
+            validation_fields = cls.bounce_validation_fields(validation, zone)
 
             records.append(
                 {
@@ -129,10 +130,32 @@ class ChartDataService:
                     "validated": bool(validation),
                     "bounce_count": bounce_count,
                     "success_rate": success_rate,
+                    **validation_fields,
                 }
             )
 
         return records
+
+    @classmethod
+    def bounce_validation_fields(cls, validation, zone):
+        fields = {
+            "support_level_id": validation.get("support_level_id", zone.get("id")),
+            "total_touches": validation.get("total_touches"),
+            "successful_bounces": validation.get("successful_bounces"),
+            "failed_breakdowns": validation.get("failed_breakdowns"),
+            "neutral_touches": validation.get("neutral_touches"),
+            "bounce_success_rate": validation.get("bounce_success_rate"),
+            "average_bounce_pct": validation.get("average_bounce_pct"),
+            "median_bounce_pct": validation.get("median_bounce_pct"),
+            "average_days_to_bounce_peak": validation.get(
+                "average_days_to_bounce_peak"
+            ),
+        }
+
+        return {
+            key: cls.value_or_none(value)
+            for key, value in fields.items()
+        }
 
     @staticmethod
     def row_to_dict(row):

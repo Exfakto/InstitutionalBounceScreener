@@ -67,17 +67,42 @@ def chart_data_with_support_zones(zones):
 
 def validated_support_zone():
     return {
+        "support_level_id": 1,
         "support_low": 99.0,
         "support_high": 100.0,
         "support_strength": 85.0,
         "validated": True,
-        "bounce_count": 3,
-        "success_rate": 75.0,
+        "total_touches": 6,
+        "successful_bounces": 5,
+        "failed_breakdowns": 1,
+        "neutral_touches": 0,
+        "bounce_success_rate": 83.333,
+        "average_bounce_pct": 6.5,
+        "median_bounce_pct": 6.0,
+        "average_days_to_bounce_peak": 8.0,
+        "bounce_count": 5,
+        "success_rate": 83.333,
     }
+
+
+def missing_field_validated_support_zone():
+    zone = validated_support_zone()
+
+    for key in [
+        "total_touches",
+        "successful_bounces",
+        "bounce_success_rate",
+        "bounce_count",
+        "success_rate",
+    ]:
+        zone[key] = None
+
+    return zone
 
 
 def non_validated_support_zone():
     return {
+        "support_level_id": 2,
         "support_low": 97.5,
         "support_high": 98.5,
         "support_strength": 60.0,
@@ -232,8 +257,8 @@ def test_price_chart_renders_single_validated_support_zone(app):
     assert len(widget.support_band_series) == 1
     assert widget.support_band_series[0].name() == "Support 1"
     assert len(widget.support_labels) == 1
-    assert "75%" in widget.support_labels[0].text()
-    assert "3 bounces" in widget.support_labels[0].text()
+    assert "Validated: 5/6 bounces" in widget.support_labels[0].text()
+    assert "83%" in widget.support_labels[0].text()
     assert [series.name() for series in widget.chart.series()] == [
         "Support 1",
         "Close",
@@ -263,6 +288,35 @@ def test_price_chart_renders_multiple_support_zones(app):
     assert len(widget.support_labels) == 2
 
 
+def test_price_chart_renders_multiple_validated_support_zone_labels(app):
+    widget = PriceChart()
+    second_zone = validated_support_zone()
+    second_zone["support_level_id"] = 3
+    second_zone["support_low"] = 96.0
+    second_zone["support_high"] = 97.0
+    second_zone["total_touches"] = 4
+    second_zone["successful_bounces"] = 4
+    second_zone["bounce_success_rate"] = 100.0
+
+    widget.set_chart_data(
+        chart_data_with_support_zones(
+            [
+                validated_support_zone(),
+                second_zone,
+            ]
+        )
+    )
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    label_texts = [label.text() for label in widget.support_labels]
+
+    assert len(label_texts) == 2
+    assert "Validated: 5/6 bounces - 83%" in label_texts
+    assert "Validated: 4/4 bounces - 100%" in label_texts
+
+
 def test_price_chart_renders_non_validated_support_zone(app):
     widget = PriceChart()
 
@@ -273,6 +327,20 @@ def test_price_chart_renders_non_validated_support_zone(app):
 
     assert len(widget.support_band_series) == 1
     assert widget.support_labels[0].text() == "Support"
+
+
+def test_price_chart_renders_validated_support_label_with_missing_fields(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(
+        chart_data_with_support_zones([missing_field_validated_support_zone()])
+    )
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert len(widget.support_band_series) == 1
+    assert widget.support_labels[0].text() == "Validated support"
 
 
 def test_price_chart_no_support_zones_renders_only_price_series(app):
