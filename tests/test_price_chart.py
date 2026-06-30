@@ -59,6 +59,34 @@ def chart_data_with_smas(sma20=True, sma50=False, sma200=False):
     return data
 
 
+def chart_data_with_support_zones(zones):
+    data = chart_data()
+    data["support_zones"] = zones
+    return data
+
+
+def validated_support_zone():
+    return {
+        "support_low": 99.0,
+        "support_high": 100.0,
+        "support_strength": 85.0,
+        "validated": True,
+        "bounce_count": 3,
+        "success_rate": 75.0,
+    }
+
+
+def non_validated_support_zone():
+    return {
+        "support_low": 97.5,
+        "support_high": 98.5,
+        "support_strength": 60.0,
+        "validated": False,
+        "bounce_count": None,
+        "success_rate": None,
+    }
+
+
 def test_price_chart_clear_shows_empty_state(app):
     widget = PriceChart()
     widget.set_chart_data(chart_data())
@@ -78,6 +106,8 @@ def test_price_chart_missing_price_history_shows_message(app):
     widget.set_chart_data({"ticker": "EMPTY", "prices": []})
 
     assert widget.summary_label.text() == "No price history available."
+    assert widget.support_band_series == []
+    assert widget.support_labels == []
 
     if widget.chart is not None:
         assert widget.chart.series() == []
@@ -176,15 +206,106 @@ def test_price_chart_ignores_missing_sma_values(app):
 
 def test_price_chart_clear_resets_overlay_series(app):
     widget = PriceChart()
-    widget.set_chart_data(chart_data_with_smas(sma20=True, sma50=True, sma200=True))
+    data = chart_data_with_smas(sma20=True, sma50=True, sma200=True)
+    data["support_zones"] = [validated_support_zone()]
+    widget.set_chart_data(data)
 
     widget.clear()
 
     assert widget.overlay_series == {}
+    assert widget.support_band_series == []
+    assert widget.support_labels == []
     assert widget.series is None
 
     if widget.chart is not None:
         assert widget.chart.series() == []
+
+
+def test_price_chart_renders_single_validated_support_zone(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(chart_data_with_support_zones([validated_support_zone()]))
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert len(widget.support_band_series) == 1
+    assert widget.support_band_series[0].name() == "Support 1"
+    assert len(widget.support_labels) == 1
+    assert "75%" in widget.support_labels[0].text()
+    assert "3 bounces" in widget.support_labels[0].text()
+    assert [series.name() for series in widget.chart.series()] == [
+        "Support 1",
+        "Close",
+    ]
+
+
+def test_price_chart_renders_multiple_support_zones(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(
+        chart_data_with_support_zones(
+            [
+                validated_support_zone(),
+                non_validated_support_zone(),
+            ]
+        )
+    )
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert len(widget.support_band_series) == 2
+    assert [series.name() for series in widget.support_band_series] == [
+        "Support 1",
+        "Support 2",
+    ]
+    assert len(widget.support_labels) == 2
+
+
+def test_price_chart_renders_non_validated_support_zone(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(chart_data_with_support_zones([non_validated_support_zone()]))
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert len(widget.support_band_series) == 1
+    assert widget.support_labels[0].text() == "Support"
+
+
+def test_price_chart_no_support_zones_renders_only_price_series(app):
+    widget = PriceChart()
+
+    widget.set_chart_data(chart_data())
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert widget.support_band_series == []
+    assert widget.support_labels == []
+    assert [series.name() for series in widget.chart.series()] == ["Close"]
+
+
+def test_price_chart_replaces_support_zones_on_repeated_update(app):
+    widget = PriceChart()
+    widget.set_chart_data(
+        chart_data_with_support_zones(
+            [
+                validated_support_zone(),
+                non_validated_support_zone(),
+            ]
+        )
+    )
+
+    widget.set_chart_data(chart_data_with_support_zones([validated_support_zone()]))
+
+    if not price_chart_module.CHARTS_AVAILABLE:
+        pytest.skip("QtCharts backend unavailable")
+
+    assert len(widget.support_band_series) == 1
+    assert len(widget.support_labels) == 1
 
 
 def test_price_chart_placeholder_summary_when_backend_unavailable(app, monkeypatch):

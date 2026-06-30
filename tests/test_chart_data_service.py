@@ -179,7 +179,50 @@ class ChartDataServiceTest(unittest.TestCase):
         chart_data = service.get_chart_data("AAA")
 
         self.assertEqual(chart_data["support_zones"][0]["zone_low"], 98.0)
+        self.assertEqual(chart_data["support_zones"][0]["support_low"], 98.0)
+        self.assertEqual(chart_data["support_zones"][0]["support_high"], 100.0)
+        self.assertEqual(chart_data["support_zones"][0]["support_strength"], 85.0)
+        self.assertFalse(chart_data["support_zones"][0]["validated"])
+        self.assertIsNone(chart_data["support_zones"][0]["bounce_count"])
+        self.assertIsNone(chart_data["support_zones"][0]["success_rate"])
         self.assertNotIn("Missing support zones", chart_data["warnings"])
+
+    def test_returns_validated_support_zone_metadata(self):
+        service = self.build_service(
+            prices=self.price_history(),
+            support_zones=[
+                {
+                    "id": 7,
+                    "ticker": "AAA",
+                    "zone_low": 98.0,
+                    "zone_high": 100.0,
+                    "strength_score": 85.0,
+                }
+            ],
+            bounce_validations=[
+                {
+                    "support_level_id": 7,
+                    "ticker": "AAA",
+                    "successful_bounces": 3,
+                    "bounce_success_rate": 75.0,
+                }
+            ],
+        )
+
+        chart_data = service.get_chart_data("AAA")
+        support_zone = chart_data["support_zones"][0]
+
+        self.assertTrue(support_zone["validated"])
+        self.assertEqual(support_zone["bounce_count"], 3)
+        self.assertEqual(support_zone["success_rate"], 75.0)
+
+    def test_missing_support_zones_do_not_crash(self):
+        service = self.build_service(prices=self.price_history())
+
+        chart_data = service.get_chart_data("AAA")
+
+        self.assertEqual(chart_data["support_zones"], [])
+        self.assertIn("Missing support zones", chart_data["warnings"])
 
     def test_returns_price_history_with_bounce_validations(self):
         service = self.build_service(

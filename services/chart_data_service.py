@@ -30,8 +30,11 @@ class ChartDataService:
         if not prices:
             warnings.append("Missing price history")
 
-        support_zones = self.row_records(self.db.get_support_levels(ticker))
         bounce_validations = self.row_records(self.db.get_bounce_validations(ticker))
+        support_zones = self.support_zone_records(
+            self.row_records(self.db.get_support_levels(ticker)),
+            bounce_validations,
+        )
 
         if not indicators:
             warnings.append("Missing technical indicators")
@@ -99,6 +102,37 @@ class ChartDataService:
             merged.append(row)
 
         return merged
+
+    @classmethod
+    def support_zone_records(cls, support_zones, bounce_validations):
+        validations_by_support_id = {
+            validation.get("support_level_id"): validation
+            for validation in bounce_validations
+            if validation.get("support_level_id") is not None
+        }
+
+        records = []
+
+        for zone in support_zones:
+            validation = validations_by_support_id.get(zone.get("id"), {})
+            success_rate = cls.value_or_none(validation.get("bounce_success_rate"))
+            bounce_count = cls.value_or_none(validation.get("successful_bounces"))
+
+            records.append(
+                {
+                    **zone,
+                    "support_low": cls.value_or_none(zone.get("zone_low")),
+                    "support_high": cls.value_or_none(zone.get("zone_high")),
+                    "support_strength": cls.value_or_none(
+                        zone.get("strength_score")
+                    ),
+                    "validated": bool(validation),
+                    "bounce_count": bounce_count,
+                    "success_rate": success_rate,
+                }
+            )
+
+        return records
 
     @staticmethod
     def row_to_dict(row):

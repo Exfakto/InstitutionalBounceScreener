@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtCore import QDateTime, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import QDateTime, QPointF, Qt
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
+from PySide6.QtWidgets import QGraphicsSimpleTextItem, QLabel, QVBoxLayout, QWidget
 
 try:
     from PySide6.QtCharts import (
+        QAreaSeries,
         QChart,
         QChartView,
         QDateTimeAxis,
@@ -17,6 +18,7 @@ try:
 
     CHARTS_AVAILABLE = True
 except ImportError:
+    QAreaSeries = None
     QChart = None
     QChartView = None
     QDateTimeAxis = None
@@ -47,6 +49,8 @@ class PriceChart(QWidget):
         self.chart_view = None
         self.series = None
         self.overlay_series = {}
+        self.support_band_series = []
+        self.support_labels = []
         self.chart_data = None
 
         layout = QVBoxLayout(self)
@@ -128,7 +132,20 @@ class PriceChart(QWidget):
 
         self.overlay_series = {}
         prices = chart_data.get("prices") or []
+        support_zones = chart_data.get("support_zones") or []
         chart_series = []
+
+        support_band_series = self.create_support_band_series(
+            support_zones,
+            points[0][0],
+            points[-1][0],
+        )
+
+        for support_band in support_band_series:
+            chart_series.append(support_band)
+            self.chart.addSeries(support_band)
+
+        self.support_band_series = support_band_series
 
         for key, name, color, width in self.SERIES_DEFINITIONS:
             series_points = points if key == "close" else self.series_points(prices, key)
@@ -166,16 +183,17 @@ class PriceChart(QWidget):
         y_axis.setLabelsColor(QColor("#F2F2F2"))
         y_axis.setTitleBrush(QColor("#B0B0B0"))
         y_axis.setGridLineColor(QColor("#4A4A4A"))
+        line_values = [
+            value
+            for series_points in [
+                self.series_points(prices, key)
+                for key, _, _, _ in self.SERIES_DEFINITIONS
+            ]
+            for _, value in series_points
+        ]
         self.apply_y_range(
             y_axis,
-            [
-                value
-                for series_points in [
-                    self.series_points(prices, key)
-                    for key, _, _, _ in self.SERIES_DEFINITIONS
-                ]
-                for _, value in series_points
-            ],
+            line_values + self.support_zone_values(support_zones),
         )
 
         self.chart.addAxis(x_axis, Qt.AlignBottom)
@@ -183,6 +201,8 @@ class PriceChart(QWidget):
         for series in chart_series:
             series.attachAxis(x_axis)
             series.attachAxis(y_axis)
+
+        self.add_support_labels(support_zones, points[0][0], points[-1][0])
 
     @classmethod
     def series_points(cls, prices, key):
@@ -213,6 +233,89 @@ class PriceChart(QWidget):
             series.append(x_value, value)
 
         return series
+
+    @classmethod
+    def create_support_band_series(cls, support_zones, start_x, end_x):
+        bands = []
+
+        for index, zone in enumerate(support_zones):
+            low = zone.get("support_low")
+            high = zone.get("support_high")
+
+            if low is None or high is None:
+                continue
+
+            lower = QLineSeries()
+            upper = QLineSeries()
+
+            lower.append(start_x, float(low))
+            lower.append(end_x, float(low))
+            upper.append(start_x, float(high))
+            upper.append(end_x, float(high))
+
+            band = QAreaSeries(upper, lower)
+            band.boundary_series = (upper, lower)
+            band.setName(f"Support {index + 1}")
+            band.setPen(QPen(Qt.NoPen))
+            band.setBrush(cls.support_zone_brush(zone))
+            bands.append(band)
+
+        return bands
+
+    @staticmethod
+    def support_zone_brush(zone):
+        color = QColor("#3FB950" if zone.get("validated") else "#8B949E")
+        color.setAlpha(70 if zone.get("validated") else 55)
+
+        return QBrush(color)
+
+    @staticmethod
+    def support_zone_values(support_zones):
+        values = []
+
+        for zone in support_zones:
+            for key in ["support_low", "support_high"]:
+                value = zone.get(key)
+
+                if value is not None:
+                    values.append(float(value))
+
+        return values
+
+    def add_support_labels(self, support_zones, start_x, end_x):
+        self.clear_support_labels()
+
+        if not self.series:
+            return
+
+        label_x = start_x + ((end_x - start_x) * 0.02)
+
+        for zone in support_zones:
+            high = zone.get("support_high")
+
+            if high is None:
+                continue
+
+            label = QGraphicsSimpleTextItem(self.support_label_text(zone))
+            label.setBrush(QBrush(QColor("#B0B0B0")))
+            label.setFont(QFont("Segoe UI", 8))
+            label.setZValue(5)
+            position = self.chart.mapToPosition(QPointF(label_x, float(high)))
+            label.setPos(position)
+            self.chart.scene().addItem(label)
+            self.support_labels.append(label)
+
+    @staticmethod
+    def support_label_text(zone):
+        lines = ["Support"]
+
+        if zone.get("success_rate") is not None:
+            lines.append(f"{float(zone['success_rate']):.0f}%")
+
+        if zone.get("bounce_count") is not None:
+            lines.append(f"{int(zone['bounce_count'])} bounces")
+
+        return " | ".join(lines)
 
     @staticmethod
     def date_to_msecs(value, index):
@@ -274,7 +377,18 @@ class PriceChart(QWidget):
     def clear_chart(self):
         self.series = None
         self.overlay_series = {}
+        self.support_band_series = []
+        self.clear_support_labels()
         self.chart.removeAllSeries()
 
         for axis in self.chart.axes():
             self.chart.removeAxis(axis)
+
+    def clear_support_labels(self):
+        for label in self.support_labels:
+            scene = label.scene()
+
+            if scene is not None:
+                scene.removeItem(label)
+
+        self.support_labels = []
