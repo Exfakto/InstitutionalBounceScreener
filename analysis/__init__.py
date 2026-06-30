@@ -1,4 +1,5 @@
 from .base_score import BaseScore
+from .atr_risk import ATRRiskCalculator, ATRRiskResult
 from .bounce_score import BounceScore
 from .candidate_score import CandidateScore
 from .composite_score import CompositeScore
@@ -10,6 +11,7 @@ from .scoring_engine import ScoringEngine
 from .support_score import SupportScore
 from .technical_score import TechnicalScore
 from .pipeline import AnalysisPipeline
+from .trend_strength import TrendStrengthCalculator, TrendStrengthResult
 from .volume_intelligence import (
     VolumeIntelligenceCalculator,
     VolumeIntelligenceResult,
@@ -18,6 +20,8 @@ from .volume_intelligence import (
 __all__ = [
     "BaseScore",
     "AnalysisPipeline",
+    "ATRRiskCalculator",
+    "ATRRiskResult",
     "BounceScore",
     "CandidateScore",
     "CompositeScore",
@@ -28,6 +32,8 @@ __all__ = [
     "ScoringEngine",
     "SupportScore",
     "TechnicalScore",
+    "TrendStrengthCalculator",
+    "TrendStrengthResult",
     "VolumeIntelligenceCalculator",
     "VolumeIntelligenceResult",
 ]
