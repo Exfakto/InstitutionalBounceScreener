@@ -1,66 +1,81 @@
 # Codex Instructions
 
-You are working on the Institutional Bounce Platform.
+These instructions apply to all work in Institutional Bounce Screener.
 
-Before making any changes:
+## Required Reading
 
-1. Read:
-   - docs/PROJECT_MANIFEST.md
-   - README.md
+Before editing, read the relevant project documents:
 
-2. Never violate the architecture.
+1. `docs/PROJECT_MANIFEST.md`
+2. `docs/ARCHITECTURE.md`
+3. `docs/ROADMAP.md`
+4. The files directly affected by the task
 
-Architecture:
+Read `docs/DECISIONS.md` when a task touches architecture, persistence, scoring, or UI structure.
 
+## Architecture Rules
+
+Preserve the layered architecture:
+
+```text
 GUI
-↓
 Controllers
-↓
 Services
-↓
 DatabaseManager
-↓
 SQLite
+```
 
-Business logic belongs only inside Services.
+Rules:
 
-Indicators perform calculations only.
+- No business logic in GUI files.
+- No SQL outside `DatabaseManager`.
+- No database access inside indicators, support calculators, bounce calculators, or score providers.
+- No market downloads inside analytics calculators.
+- Controllers coordinate; they do not calculate.
+- Services own business workflows.
+- `DatabaseManager` owns persistence.
+- GUI displays data and forwards user actions.
+- Keep `MainWindow` thin.
+- Prefer reusable widgets in `ui/widgets/`.
+- Preserve existing behavior unless the task explicitly changes it.
 
-DatabaseManager performs persistence only.
+## Change Discipline
 
-Controllers connect UI to Services.
+- Implement one feature or issue at a time.
+- Modify only files required for the approved scope.
+- Do not change scoring formulas unless explicitly requested.
+- Do not change database schema unless explicitly requested.
+- Do not redesign UI outside the approved UI scope.
+- Do not modify unrelated files.
+- Do not use `print()` in application code; use logging.
+- Use parameterized SQL for all database writes and reads.
+- Keep missing optional data safe; missing CSVs or metrics must not crash the app.
 
-GUI never performs calculations.
+## Testing and Verification
 
-Never use print().
+Before completion of code changes, run:
 
-Use logging.
+```powershell
+.venv\Scripts\python.exe -m compileall app.py main.py controllers services support bounce database ui analysis tests
+.venv\Scripts\python.exe -m pytest
+```
 
-Always preserve existing functionality.
+If a task only changes documentation, tests are not required unless documentation tooling exists.
 
-If changing multiple files, explain exactly why each file changed.
+## Reporting
 
-Application must always compile before completion.
+Final responses must include:
 
-Never modify more than one architectural layer unless explicitly instructed.
+- Files changed.
+- Why each file changed.
+- Verification commands run and results.
+- Any known limitations or skipped checks.
 
-Example:
+If files were not changed, say so clearly.
 
-Database issue?
+## Git Hygiene
 
-Only modify:
-
-database/
-
-Do not modify:
-
-controllers/
-
-services/
-
-ui/
-
-unless required.
-
-If another layer must change,
-explain why before making changes.
+- One feature per commit.
+- Never revert user changes unless explicitly asked.
+- Do not use destructive git commands without explicit approval.
+- Keep generated cache files out of commits.
