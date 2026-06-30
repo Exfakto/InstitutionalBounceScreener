@@ -13,12 +13,14 @@ from controllers.indicator_controller import IndicatorController
 from controllers.support_controller import SupportController
 from controllers.bounce_controller import BounceController
 from controllers.scoring_controller import ScoringController
+from controllers.chart_controller import ChartController
 
 from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
 from ui.widgets.kpi_strip import KpiStrip
 from ui.widgets.operations_toolbar import OperationsToolbar
 from ui.widgets.header_bar import HeaderBar
+from ui.widgets.price_chart import PriceChart
 from ui.widgets.research_preview import ResearchPreview
 from ui.stock_detail_window import StockDetailWindow
 
@@ -33,6 +35,7 @@ class MainWindow(QMainWindow):
         self.support_controller = SupportController()
         self.bounce_controller = BounceController()
         self.scoring_controller = ScoringController()
+        self.chart_controller = ChartController()
         self.candidates_by_ticker = {}
 
         self.setWindowTitle("Institutional Bounce Screener")
@@ -101,9 +104,17 @@ class MainWindow(QMainWindow):
             self.update_open_detail_state
         )
 
+        left_workspace = QVBoxLayout()
+        left_workspace.setContentsMargins(0, 0, 0, 0)
+        left_workspace.setSpacing(12)
+
+        self.price_chart = PriceChart()
         self.research_preview = ResearchPreview()
 
-        workspace_layout.addWidget(self.candidates_table, stretch=5)
+        left_workspace.addWidget(self.candidates_table, stretch=3)
+        left_workspace.addWidget(self.price_chart, stretch=2)
+
+        workspace_layout.addLayout(left_workspace, stretch=5)
         workspace_layout.addWidget(self.research_preview, stretch=1)
 
         main_layout.addLayout(workspace_layout, stretch=5)
@@ -350,6 +361,7 @@ class MainWindow(QMainWindow):
 
         self.operations_toolbar.set_open_detail_enabled(ticker is not None)
         self.update_research_preview(ticker)
+        self.update_price_chart(ticker)
 
     # ----------------------------------------------------------
 
@@ -360,6 +372,31 @@ class MainWindow(QMainWindow):
             return
 
         self.research_preview.set_candidate(self.candidates_by_ticker.get(ticker))
+
+    # ----------------------------------------------------------
+
+    def update_price_chart(self, ticker):
+
+        if ticker is None:
+            self.price_chart.clear()
+            return
+
+        try:
+            chart_data = self.chart_controller.get_chart_data(ticker)
+        except Exception:
+            self.price_chart.set_chart_data(
+                {
+                    "ticker": ticker,
+                    "prices": [],
+                    "indicators": [],
+                    "support_zones": [],
+                    "bounce_validations": [],
+                    "warnings": ["Chart data unavailable"],
+                }
+            )
+            return
+
+        self.price_chart.set_chart_data(chart_data)
 
     # ----------------------------------------------------------
 
@@ -396,5 +433,6 @@ class MainWindow(QMainWindow):
         self.support_controller.close()
         self.bounce_controller.close()
         self.scoring_controller.close()
+        self.chart_controller.close()
 
         super().closeEvent(event)
