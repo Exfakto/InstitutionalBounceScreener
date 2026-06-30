@@ -2,7 +2,6 @@ import sys
 
 from PySide6.QtWidgets import (
     QApplication,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -18,10 +17,10 @@ from controllers.support_controller import SupportController
 from controllers.bounce_controller import BounceController
 from controllers.scoring_controller import ScoringController
 
-from ui.widgets.statistics_card import StatisticsCard
 from ui.widgets.activity_log import ActivityLog
 from ui.widgets.progress_panel import ProgressPanel
 from ui.widgets.candidate_table import CandidateTable
+from ui.widgets.kpi_strip import KpiStrip
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -63,21 +62,9 @@ class MainWindow(QMainWindow):
         # Statistics
         ##########################################################
 
-        stats_layout = QGridLayout()
+        self.kpi_strip = KpiStrip()
 
-        self.universe_card = StatisticsCard("Universe Stocks")
-        self.database_card = StatisticsCard("Price Records")
-        self.indicator_card = StatisticsCard("Indicator Rows")
-        self.support_card = StatisticsCard("Support Zones")
-        self.validation_card = StatisticsCard("Validated Zones")
-
-        stats_layout.addWidget(self.universe_card, 0, 0)
-        stats_layout.addWidget(self.database_card, 0, 1)
-        stats_layout.addWidget(self.indicator_card, 0, 2)
-        stats_layout.addWidget(self.support_card, 0, 3)
-        stats_layout.addWidget(self.validation_card, 0, 4)
-
-        main_layout.addLayout(stats_layout)
+        main_layout.addWidget(self.kpi_strip)
 
         ##########################################################
         # Ranked Candidates
@@ -163,15 +150,7 @@ class MainWindow(QMainWindow):
 
         stats = self.controller.get_statistics()
 
-        self.universe_card.set_value(stats["stocks"])
-
-        self.database_card.set_value(f'{stats["rows"]:,}')
-
-        self.indicator_card.set_value(f'{stats["indicator_rows"]:,}')
-
-        self.support_card.set_value(f'{stats["support_levels"]:,}')
-
-        self.validation_card.set_value(f'{stats["validated_zones"]:,}')
+        self.kpi_strip.update_statistics(stats)
 
     # ----------------------------------------------------------
 
