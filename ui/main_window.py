@@ -3,10 +3,8 @@ import sys
 from PySide6.QtWidgets import (
     QApplication,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QMainWindow,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -21,6 +19,7 @@ from ui.widgets.activity_log import ActivityLog
 from ui.widgets.progress_panel import ProgressPanel
 from ui.widgets.candidate_table import CandidateTable
 from ui.widgets.kpi_strip import KpiStrip
+from ui.widgets.operations_toolbar import OperationsToolbar
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -72,6 +71,9 @@ class MainWindow(QMainWindow):
 
         self.candidates_table = CandidateTable()
         self.candidates_table.ticker_double_clicked.connect(self.open_stock_detail)
+        self.candidates_table.selectionModel().selectionChanged.connect(
+            self.update_open_detail_state
+        )
 
         main_layout.addWidget(self.candidates_table)
 
@@ -79,38 +81,20 @@ class MainWindow(QMainWindow):
         # Operations
         ##########################################################
 
-        operations = QGroupBox("Operations")
+        self.operations_toolbar = OperationsToolbar()
+        self.operations_toolbar.update_universe_requested.connect(self.update_universe)
+        self.operations_toolbar.download_prices_requested.connect(self.download_prices)
+        self.operations_toolbar.calculate_indicators_requested.connect(
+            self.calculate_indicators
+        )
+        self.operations_toolbar.detect_support_requested.connect(self.detect_support)
+        self.operations_toolbar.validate_bounces_requested.connect(self.validate_bounces)
+        self.operations_toolbar.run_screener_requested.connect(self.run_screener)
+        self.operations_toolbar.open_detail_requested.connect(
+            self.open_selected_stock_detail
+        )
 
-        operations_layout = QHBoxLayout()
-
-        self.update_button = QPushButton("🌎 Update Universe")
-        self.update_button.clicked.connect(self.update_universe)
-
-        self.download_button = QPushButton("📥 Download Prices")
-        self.download_button.clicked.connect(self.download_prices)
-
-        self.indicators_button = QPushButton("Calculate Indicators")
-        self.indicators_button.clicked.connect(self.calculate_indicators)
-
-        self.support_button = QPushButton("Detect Support")
-        self.support_button.clicked.connect(self.detect_support)
-
-        self.validation_button = QPushButton("Validate Bounces")
-        self.validation_button.clicked.connect(self.validate_bounces)
-
-        self.screen_button = QPushButton("▶ Run Screener")
-        self.screen_button.clicked.connect(self.run_screener)
-
-        operations_layout.addWidget(self.update_button)
-        operations_layout.addWidget(self.download_button)
-        operations_layout.addWidget(self.indicators_button)
-        operations_layout.addWidget(self.support_button)
-        operations_layout.addWidget(self.validation_button)
-        operations_layout.addWidget(self.screen_button)
-
-        operations.setLayout(operations_layout)
-
-        main_layout.addWidget(operations)
+        main_layout.addWidget(self.operations_toolbar)
 
         ##########################################################
         # Progress
@@ -309,6 +293,7 @@ class MainWindow(QMainWindow):
         results = self.scoring_controller.run_screener()
 
         self.candidates_table.populate(results["candidates"])
+        self.update_open_detail_state()
 
         self.progress.set_progress(100)
 
@@ -345,6 +330,25 @@ class MainWindow(QMainWindow):
             self.detail_windows = []
 
         self.detail_windows.append(window)
+
+    # ----------------------------------------------------------
+
+    def open_selected_stock_detail(self):
+
+        ticker = self.candidates_table.selected_ticker()
+
+        if ticker is None:
+            return
+
+        self.open_stock_detail(ticker)
+
+    # ----------------------------------------------------------
+
+    def update_open_detail_state(self, *args):
+
+        self.operations_toolbar.set_open_detail_enabled(
+            self.candidates_table.selected_ticker() is not None
+        )
 
     # ----------------------------------------------------------
 
