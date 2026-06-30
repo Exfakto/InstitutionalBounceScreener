@@ -10,6 +10,10 @@ from .scoring_engine import ScoringEngine
 from .support_score import SupportScore
 from .technical_score import TechnicalScore
 from .pipeline import AnalysisPipeline
+from .volume_intelligence import (
+    VolumeIntelligenceCalculator,
+    VolumeIntelligenceResult,
+)
 
 __all__ = [
     "BaseScore",
@@ -24,4 +28,6 @@ __all__ = [
     "ScoringEngine",
     "SupportScore",
     "TechnicalScore",
+    "VolumeIntelligenceCalculator",
+    "VolumeIntelligenceResult",
 ]
