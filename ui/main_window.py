@@ -2,7 +2,6 @@ import sys
 
 from PySide6.QtWidgets import (
     QApplication,
-    QGroupBox,
     QLabel,
     QMainWindow,
     QVBoxLayout,
@@ -15,8 +14,7 @@ from controllers.support_controller import SupportController
 from controllers.bounce_controller import BounceController
 from controllers.scoring_controller import ScoringController
 
-from ui.widgets.activity_log import ActivityLog
-from ui.widgets.progress_panel import ProgressPanel
+from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
 from ui.widgets.kpi_strip import KpiStrip
 from ui.widgets.operations_toolbar import OperationsToolbar
@@ -97,34 +95,18 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.operations_toolbar)
 
         ##########################################################
-        # Progress
+        # Activity
         ##########################################################
 
-        self.progress = ProgressPanel()
+        self.activity_panel = ActivityPanel()
 
-        main_layout.addWidget(self.progress)
-
-        ##########################################################
-        # Activity Log
-        ##########################################################
-
-        log_group = QGroupBox("Activity Log")
-
-        log_layout = QVBoxLayout()
-
-        self.log_widget = ActivityLog()
-
-        log_layout.addWidget(self.log_widget)
-
-        log_group.setLayout(log_layout)
-
-        main_layout.addWidget(log_group)
+        main_layout.addWidget(self.activity_panel)
 
     # ----------------------------------------------------------
 
     def log(self, text):
 
-        self.log_widget.log(text)
+        self.activity_panel.append_log(text)
 
         QApplication.processEvents()
 
@@ -140,18 +122,18 @@ class MainWindow(QMainWindow):
 
     def update_universe(self):
 
-        self.progress.set_status("Importing universe...")
-        self.progress.set_progress(20)
+        self.activity_panel.set_status("Importing universe...")
+        self.activity_panel.set_progress(20)
 
-        self.log_widget.clear_log()
+        self.activity_panel.clear_log()
 
         imported, total = self.controller.update_universe()
 
         self.log(f"✅ Imported {imported} stocks")
 
-        self.progress.set_progress(100)
+        self.activity_panel.set_progress(100)
 
-        self.progress.set_status("Ready")
+        self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
 
@@ -159,10 +141,10 @@ class MainWindow(QMainWindow):
 
     def download_prices(self):
 
-        self.progress.set_status("Downloading prices...")
-        self.progress.set_progress(10)
+        self.activity_panel.set_status("Downloading prices...")
+        self.activity_panel.set_progress(10)
 
-        self.log_widget.clear_log()
+        self.activity_panel.clear_log()
 
         results, total = self.controller.download_prices()
 
@@ -170,9 +152,9 @@ class MainWindow(QMainWindow):
 
             self.log(f"✓ {ticker}: {rows} rows")
 
-        self.progress.set_progress(100)
+        self.activity_panel.set_progress(100)
 
-        self.progress.set_status("Ready")
+        self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
 
@@ -183,16 +165,16 @@ class MainWindow(QMainWindow):
 
     def calculate_indicators(self):
 
-        self.progress.set_status("Calculating indicators...")
-        self.progress.set_progress(20)
+        self.activity_panel.set_status("Calculating indicators...")
+        self.activity_panel.set_progress(20)
 
-        self.log_widget.clear_log()
+        self.activity_panel.clear_log()
 
         results = self.indicator_controller.calculate_indicators()
 
-        self.progress.set_progress(100)
+        self.activity_panel.set_progress(100)
 
-        self.progress.set_status("Ready")
+        self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
 
@@ -222,16 +204,16 @@ class MainWindow(QMainWindow):
 
     def detect_support(self):
 
-        self.progress.set_status("Detecting support...")
-        self.progress.set_progress(20)
+        self.activity_panel.set_status("Detecting support...")
+        self.activity_panel.set_progress(20)
 
-        self.log_widget.clear_log()
+        self.activity_panel.clear_log()
 
         results = self.support_controller.detect_support()
 
-        self.progress.set_progress(100)
+        self.activity_panel.set_progress(100)
 
-        self.progress.set_status("Ready")
+        self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
 
@@ -252,16 +234,16 @@ class MainWindow(QMainWindow):
 
     def validate_bounces(self):
 
-        self.progress.set_status("Validating bounces...")
-        self.progress.set_progress(20)
+        self.activity_panel.set_status("Validating bounces...")
+        self.activity_panel.set_progress(20)
 
-        self.log_widget.clear_log()
+        self.activity_panel.clear_log()
 
         results = self.bounce_controller.validate_bounces()
 
-        self.progress.set_progress(100)
+        self.activity_panel.set_progress(100)
 
-        self.progress.set_status("Ready")
+        self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
 
@@ -282,22 +264,22 @@ class MainWindow(QMainWindow):
 
     def run_screener(self):
 
-        self.progress.set_status("Running screener...")
-        self.progress.set_progress(10)
+        self.activity_panel.set_status("Running screener...")
+        self.activity_panel.set_progress(10)
 
-        self.log_widget.clear_log()
+        self.activity_panel.clear_log()
 
-        self.progress.set_status("Processing candidates...")
-        self.progress.set_progress(50)
+        self.activity_panel.set_status("Processing candidates...")
+        self.activity_panel.set_progress(50)
 
         results = self.scoring_controller.run_screener()
 
         self.candidates_table.populate(results["candidates"])
         self.update_open_detail_state()
 
-        self.progress.set_progress(100)
+        self.activity_panel.set_progress(100)
 
-        self.progress.set_status("Screener Complete")
+        self.activity_panel.set_status("Screener Complete")
 
         highest = self.highest_candidate(results["candidates"])
         average_score = self.average_candidate_score(results["candidates"])
