@@ -32,6 +32,13 @@ class ScoringService:
         """
 
         context = self.build_context(ticker)
+        return self.score_candidate_from_context(ticker, context)
+
+    def score_candidate_from_context(self, ticker, context):
+        """
+        Return a CandidateScore using an existing metric context.
+        """
+
         scores = [
             provider.calculate(context)
             for provider in self.providers
@@ -48,6 +55,79 @@ class ScoringService:
             scores=scores,
             composite_score=composite_score,
         )
+
+    def get_candidate_detail(self, ticker):
+        """
+        Return read-only detail data for one scored ticker.
+        """
+
+        context = self.build_context(ticker)
+        candidate = self.score_candidate_from_context(ticker, context)
+
+        return {
+            "ticker": ticker,
+            "candidate": candidate,
+            "timestamp": candidate.timestamp,
+            "fundamentals": self.pick(
+                context,
+                [
+                    "market_cap",
+                    "revenue_growth_ttm",
+                    "eps_growth_ttm",
+                    "roe",
+                    "gross_margin",
+                    "free_cash_flow",
+                    "debt_to_equity",
+                    "current_ratio",
+                    "quality_score",
+                ],
+            ),
+            "institutional": self.pick(
+                context,
+                [
+                    "institutional_ownership_pct",
+                    "institutional_ownership_change_qoq",
+                    "net_institutional_buying",
+                    "insider_buying_flag",
+                    "insider_selling_flag",
+                    "institutional_score",
+                ],
+            ),
+            "technical": self.pick(
+                context,
+                [
+                    "close",
+                    "sma20",
+                    "sma50",
+                    "sma200",
+                    "rsi14",
+                ],
+            ),
+            "support": self.pick(
+                context,
+                [
+                    "zone_low",
+                    "zone_high",
+                    "zone_mid",
+                    "touches",
+                    "strength_score",
+                    "distance_from_current_pct",
+                ],
+            ),
+            "bounce": self.pick(
+                context,
+                [
+                    "total_touches",
+                    "successful_bounces",
+                    "failed_breakdowns",
+                    "neutral_touches",
+                    "bounce_success_rate",
+                    "average_bounce_pct",
+                    "median_bounce_pct",
+                    "average_days_to_bounce_peak",
+                ],
+            ),
+        }
 
     def build_context(self, ticker):
         """
@@ -96,6 +176,15 @@ class ScoringService:
 
         latest = dataframe.iloc[-1]
         context["close"] = latest.get("Close")
+
+    @staticmethod
+    def pick(context, keys):
+
+        return {
+            key: context[key]
+            for key in keys
+            if key in context and context[key] is not None
+        }
 
     def close(self):
         self.db.close()
