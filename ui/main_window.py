@@ -2,7 +2,6 @@ import sys
 
 from PySide6.QtWidgets import (
     QApplication,
-    QLabel,
     QMainWindow,
     QVBoxLayout,
     QWidget,
@@ -18,6 +17,8 @@ from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
 from ui.widgets.kpi_strip import KpiStrip
 from ui.widgets.operations_toolbar import OperationsToolbar
+from ui.widgets.header_bar import HeaderBar
+from ui.widgets.research_preview import ResearchPreview
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -31,6 +32,7 @@ class MainWindow(QMainWindow):
         self.support_controller = SupportController()
         self.bounce_controller = BounceController()
         self.scoring_controller = ScoringController()
+        self.candidates_by_ticker = {}
 
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1200, 800)
@@ -49,11 +51,11 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central)
 
         ##########################################################
-        # Title
+        # Header
         ##########################################################
 
-        title = QLabel("<h1>Institutional Bounce Screener</h1>")
-        main_layout.addWidget(title)
+        self.header_bar = HeaderBar()
+        main_layout.addWidget(self.header_bar)
 
         ##########################################################
         # Statistics
@@ -74,6 +76,14 @@ class MainWindow(QMainWindow):
         )
 
         main_layout.addWidget(self.candidates_table)
+
+        ##########################################################
+        # Research Preview
+        ##########################################################
+
+        self.research_preview = ResearchPreview()
+
+        main_layout.addWidget(self.research_preview)
 
         ##########################################################
         # Operations
@@ -274,6 +284,10 @@ class MainWindow(QMainWindow):
 
         results = self.scoring_controller.run_screener()
 
+        self.candidates_by_ticker = {
+            candidate.ticker: candidate
+            for candidate in results["candidates"]
+        }
         self.candidates_table.populate(results["candidates"])
         self.update_open_detail_state()
 
@@ -328,9 +342,20 @@ class MainWindow(QMainWindow):
 
     def update_open_detail_state(self, *args):
 
-        self.operations_toolbar.set_open_detail_enabled(
-            self.candidates_table.selected_ticker() is not None
-        )
+        ticker = self.candidates_table.selected_ticker()
+
+        self.operations_toolbar.set_open_detail_enabled(ticker is not None)
+        self.update_research_preview(ticker)
+
+    # ----------------------------------------------------------
+
+    def update_research_preview(self, ticker):
+
+        if ticker is None:
+            self.research_preview.clear()
+            return
+
+        self.research_preview.set_candidate(self.candidates_by_ticker.get(ticker))
 
     # ----------------------------------------------------------
 
