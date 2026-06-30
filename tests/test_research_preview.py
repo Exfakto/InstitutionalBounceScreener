@@ -60,6 +60,7 @@ def test_research_preview_displays_candidate_score(app):
 
     preview.set_candidate(make_candidate())
 
+    assert preview.group.title() == "Research Preview - Gen 2 Overall"
     assert preview.empty_state_label.isHidden() is True
     assert preview.ticker_label.text() == "AAPL"
     assert preview.signal_label.text() == "🟢 BUY"

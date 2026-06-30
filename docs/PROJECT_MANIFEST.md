@@ -8,11 +8,12 @@ The app combines market data, technical indicators, support-zone detection, boun
 
 ## Current Status
 
-- Current active track: v2.0 Professional Dashboard, in progress.
+- Current active track: v2.1 Intelligence Layer Stabilization, in progress.
 - Latest completed UI work: reusable `CandidateTable` and compact `KpiStrip`.
 - Core analytics foundation: v1.0 support and bounce engines completed.
 - Candidate scoring foundation: v1.1 analysis pipeline and score providers completed.
-- Last known full test status: passing with 88 tests.
+- Gen 2 Institutional Bounce Intelligence Score is wired into screener ranking with legacy composite fallback.
+- Last known full test status: passing with 228 tests.
 
 ## Repository Structure
 
@@ -66,6 +67,7 @@ Services own workflows:
 - Support detection and persistence.
 - Bounce validation and persistence.
 - Candidate scoring context assembly and read-only detail data.
+- Gen 2 composite intelligence orchestration from existing analytics components.
 
 ### Database
 
@@ -92,6 +94,7 @@ The scoring layer includes:
 - `SupportScore`
 - `BounceScore`
 - `CompositeScore`
+- `CompositeIntelligenceCalculator`
 - `CandidateScore`
 - `AnalysisPipeline`
 
@@ -106,6 +109,7 @@ The scoring layer includes:
 - Bounce Validation Engine.
 - Fundamentals and institutional CSV importer foundations.
 - Candidate scoring providers and composite score.
+- Gen 2 Institutional Bounce Intelligence Score and screener ranking integration.
 - Analysis pipeline for ranked candidates.
 - Run Screener dashboard workflow.
 - Read-only stock detail window.
@@ -114,12 +118,9 @@ The scoring layer includes:
 
 ## In Progress
 
-- v2.0 Professional Dashboard.
-- Dark visual system.
-- Operations toolbar.
-- Secondary activity/progress panel.
-- Main window layout recomposition.
-- Stock detail access polish.
+- v2.1 Intelligence Layer Stabilization.
+- Documentation and label clarity for Gen 2 scoring.
+- Test coverage around Gen 2 fallback and display compatibility.
 
 ## Planned
 
@@ -149,6 +150,7 @@ The test suite is based on `pytest`. Current coverage includes:
 - Service workflows.
 - Scoring providers and scoring engine.
 - Analysis pipeline.
+- Gen 2 intelligence scoring and fallback behavior.
 - Controller behavior where practical.
 - Stable UI widgets such as `CandidateTable` and `KpiStrip`.
 

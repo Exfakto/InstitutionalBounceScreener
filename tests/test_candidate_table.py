@@ -59,6 +59,12 @@ def test_candidate_table_populates_sorted_by_overall_score(app):
     assert table.item(0, 1).text() == "90.0"
 
 
+def test_candidate_table_labels_overall_as_gen2_score(app):
+    table = CandidateTable()
+
+    assert table.horizontalHeaderItem(1).text() == "Overall (Gen 2)"
+
+
 def test_candidate_table_uses_gen2_score_for_overall_when_available(app):
     table = CandidateTable()
 

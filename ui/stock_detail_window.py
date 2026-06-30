@@ -37,7 +37,10 @@ class StockDetailWindow(QDialog):
 
         content_layout.addWidget(QLabel(f"<h2>{candidate.ticker}</h2>"))
         content_layout.addWidget(
-            QLabel(f"Overall score: {candidate.primary_score_value:.1f}")
+            QLabel(
+                "Overall intelligence score: "
+                f"{candidate.primary_score_value:.1f}"
+            )
         )
         content_layout.addWidget(
             QLabel(f'Last analysis: {self.format_value(self.detail.get("timestamp"))}')

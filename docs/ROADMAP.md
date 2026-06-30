@@ -42,6 +42,17 @@ Completed:
 - Run Screener dashboard workflow.
 - Read-only stock detail data and detail window.
 
+### v2.1 Institutional Intelligence Foundation
+
+Completed:
+
+- Gen 2 Institutional Bounce Intelligence Score.
+- Separate `legacy_weights` and `gen2_weights` configuration sections.
+- Screener ranking prefers Gen 2 score when available.
+- Legacy composite score remains available as a fallback.
+- Candidate table, research preview, and stock detail views display Gen 2 Overall scoring when available.
+- No Gen 2 database persistence or schema changes.
+
 ### v2.0 Professional Dashboard
 
 In progress:
@@ -59,6 +70,18 @@ Planned:
 - README and changelog update.
 
 ## Next Planned Work
+
+### v2.1 Intelligence Layer Stabilization
+
+Goal: stabilize the Gen 2 intelligence layer now that it is the primary screener ranking score.
+
+Planned issues:
+
+1. Document Gen 2 ranking and fallback behavior.
+2. Clarify scoring labels in existing UI widgets.
+3. Keep missing Gen 2 components safe and non-fatal.
+4. Preserve legacy composite score compatibility.
+5. Avoid persistence and schema changes until explicitly planned.
 
 ### v2.0 Professional Dashboard
 

@@ -14,7 +14,7 @@ class CandidateTable(QTableWidget):
 
     COLUMNS = [
         "Ticker",
-        "Overall",
+        "Overall (Gen 2)",
         "Quality",
         "Institutional",
         "Technical",

@@ -29,7 +29,7 @@ class ResearchPreview(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self.group = QGroupBox("Research Preview")
+        self.group = QGroupBox("Research Preview - Gen 2 Overall")
         self.group.setObjectName("ResearchPreviewCard")
         group_layout = QVBoxLayout()
         group_layout.setContentsMargins(14, 16, 14, 14)

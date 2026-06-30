@@ -123,9 +123,11 @@ These modules should not read or write SQLite and should not call GUI code.
 3. Pipeline reads active tickers through `ScoringService`.
 4. `ScoringService` builds a read-only context from existing database metrics.
 5. Score providers calculate individual `ScoreResult` objects.
-6. `CompositeScore` calculates the overall score using `config/scoring.json`.
-7. Pipeline returns ranked `CandidateScore` objects.
-8. GUI displays rows in `CandidateTable`.
+6. `CompositeScore` calculates the legacy composite score using `legacy_weights` in `config/scoring.json`.
+7. `CompositeIntelligenceService` calculates the Gen 2 Institutional Bounce Intelligence Score from available component scores using `gen2_weights`.
+8. `CandidateScore` keeps both scores; candidate ranking and Overall displays prefer `institutional_bounce_score` when available and fall back to the legacy composite score.
+9. Pipeline returns ranked `CandidateScore` objects.
+10. GUI displays rows in `CandidateTable` without persisting Gen 2 scores.
 
 ## UI Architecture
 
@@ -153,11 +155,13 @@ The analysis layer provides:
 - Score provider base class and result model.
 - Plugin-style score provider discovery in `ScoringEngine`.
 - Individual score providers for quality, institutional, technical, support, and bounce metrics.
-- `CompositeScore` weighted by `config/scoring.json`.
+- `CompositeScore` weighted by `legacy_weights` in `config/scoring.json`.
+- `CompositeIntelligenceCalculator` weighted by `gen2_weights` in `config/scoring.json`.
 - `CandidateScore` value object.
 - `AnalysisPipeline` to run scoring across active tickers and return ranked candidates.
 
 Score providers must remain pure and must tolerate missing data by returning safe low or neutral results with warnings.
+Gen 2 intelligence calculation must tolerate missing optional components and leave the legacy composite score available for fallback and backward compatibility.
 
 ## Testing Philosophy
 

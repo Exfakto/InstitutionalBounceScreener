@@ -73,3 +73,14 @@ Reason:
 - Keeps KPI layout and formatting out of `MainWindow`.
 - Supports a compact professional dashboard layout.
 - Preserves existing statistic refresh behavior.
+
+## 2026-06-30 - Gen 2 Intelligence Score Is Primary Screener Ranking
+
+The screener ranks candidates by `institutional_bounce_score` from the Gen 2 Institutional Bounce Intelligence layer when that score is available. The legacy `composite_score` remains on `CandidateScore` and is used as the fallback ranking and display score when Gen 2 cannot be calculated.
+
+Reason:
+
+- Gen 2 combines the broader v2.1 intelligence components into the primary research signal.
+- Legacy composite scoring remains useful for backward compatibility and safe fallback.
+- Missing optional Gen 2 components should reduce confidence or produce warnings, not crash the screener.
+- Gen 2 scores are read-only runtime outputs for now; no database persistence or schema changes are introduced.

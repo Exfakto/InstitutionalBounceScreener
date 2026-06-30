@@ -1,5 +1,5 @@
 {
-  "weights": {
+  "legacy_weights": {
     "quality_score": 0.45,
     "institutional_score": 0.35,
     "support_strength_score": 0.10,

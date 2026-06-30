@@ -68,7 +68,7 @@ class CompositeScore(BaseScore):
         with self.config_path.open("r", encoding="utf-8") as file:
             config = json.load(file)
 
-        return config.get("weights", {})
+        return config.get("legacy_weights", config.get("weights", {}))
 
     @staticmethod
     def score_value(context, score_name):
