@@ -58,13 +58,16 @@ class InvalidProvider(FakeProvider):
 
 class FailingProvider(FakeProvider):
 
-    def get_fundamentals(self, ticker):
-        self.calls.append(("get_fundamentals", ticker))
+    def result(self, method, ticker):
+        self.calls.append((method, ticker))
         return ProviderResult.fail(
             "planned failure",
             source=self.name,
             metadata={"ticker": ticker},
         )
+
+    def get_fundamentals(self, ticker):
+        return self.result("get_fundamentals", ticker)
 
 
 def test_default_provider_is_local_provider():
@@ -127,9 +130,8 @@ def test_missing_provider_never_crashes():
 
     result = manager.get_fundamentals("AAPL")
 
-    assert result.success is False
-    assert result.message == "No active provider is available."
-    assert "Missing provider." in result.warnings
+    assert result.success is True
+    assert result.source == "local"
 
 
 def test_all_methods_delegate_and_propagate_provider_result():
@@ -167,8 +169,9 @@ def test_provider_exception_returns_safe_failure():
     result = manager.get_fundamentals("AAPL")
 
     assert result.success is False
-    assert result.message == "Provider request failed for get_fundamentals."
+    assert result.message == "No provider could satisfy get_fundamentals."
     assert "planned provider failure" in result.warnings
+    assert result.metadata["attempted_providers"] == ["local"]
 
 
 def test_invalid_provider_result_returns_safe_failure():
@@ -177,8 +180,9 @@ def test_invalid_provider_result_returns_safe_failure():
     result = manager.get_fundamentals("AAPL")
 
     assert result.success is False
-    assert result.message == "Provider returned an invalid result for get_fundamentals."
+    assert result.message == "No provider could satisfy get_fundamentals."
     assert "Invalid provider result." in result.warnings
+    assert result.metadata["attempted_providers"] == ["local"]
 
 
 def test_registration_requires_name_and_provider():
@@ -391,3 +395,148 @@ def test_provider_manager_cache_uses_default_ttl():
     )
 
     assert cache._entries[key].ttl_seconds == 7 * 24 * 60 * 60
+
+
+def test_failover_first_provider_succeeds():
+    first_provider = FakeProvider("first")
+    second_provider = FakeProvider("second")
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_priorities={"get_company_profile": ["first", "second"]},
+    )
+    manager.register_provider("first", first_provider)
+    manager.register_provider("second", second_provider)
+
+    result = manager.get_company_profile("AAPL")
+
+    assert result.success is True
+    assert result.source == "first"
+    assert first_provider.calls == [("get_company_profile", "AAPL")]
+    assert second_provider.calls == []
+
+
+def test_failover_second_provider_succeeds():
+    first_provider = FailingProvider("first")
+    second_provider = FakeProvider("second")
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_priorities={"get_company_profile": ["first", "second"]},
+    )
+    manager.register_provider("first", first_provider)
+    manager.register_provider("second", second_provider)
+
+    result = manager.get_company_profile("AAPL")
+
+    assert result.success is True
+    assert result.source == "second"
+    assert first_provider.calls == [("get_company_profile", "AAPL")]
+    assert second_provider.calls == [("get_company_profile", "AAPL")]
+
+
+def test_failover_third_provider_succeeds():
+    first_provider = FailingProvider("first")
+    second_provider = FailingProvider("second")
+    third_provider = FakeProvider("third")
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_priorities={
+            "get_company_profile": ["first", "second", "third"]
+        },
+    )
+    manager.register_provider("first", first_provider)
+    manager.register_provider("second", second_provider)
+    manager.register_provider("third", third_provider)
+
+    result = manager.get_company_profile("AAPL")
+
+    assert result.success is True
+    assert result.source == "third"
+    assert first_provider.calls == [("get_company_profile", "AAPL")]
+    assert second_provider.calls == [("get_company_profile", "AAPL")]
+    assert third_provider.calls == [("get_company_profile", "AAPL")]
+
+
+def test_failover_disabled_provider_skipped():
+    disabled_provider = FakeProvider("disabled")
+    fallback_provider = FakeProvider("fallback")
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_config=ProviderConfig(
+            active_provider="local",
+            providers={
+                "local": {"enabled": True},
+                "disabled": {"enabled": False},
+            },
+        ),
+        provider_priorities={
+            "get_company_profile": ["disabled", "fallback"]
+        },
+    )
+    manager.register_provider("disabled", disabled_provider)
+    manager.register_provider("fallback", fallback_provider)
+
+    result = manager.get_company_profile("AAPL")
+
+    assert result.success is True
+    assert result.source == "fallback"
+    assert disabled_provider.calls == []
+    assert fallback_provider.calls == [("get_company_profile", "AAPL")]
+
+
+def test_failover_unregistered_provider_skipped():
+    fallback_provider = FakeProvider("fallback")
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_priorities={
+            "get_company_profile": ["missing", "fallback"]
+        },
+    )
+    manager.register_provider("fallback", fallback_provider)
+
+    result = manager.get_company_profile("AAPL")
+
+    assert result.success is True
+    assert result.source == "fallback"
+    assert fallback_provider.calls == [("get_company_profile", "AAPL")]
+
+
+def test_failover_all_providers_fail_standardized_failure():
+    first_provider = FailingProvider("first")
+    second_provider = FailingProvider("second")
+    manager = ProviderManager(
+        default_provider=FailingProvider("local"),
+        provider_priorities={"get_company_profile": ["first", "second"]},
+    )
+    manager.register_provider("first", first_provider)
+    manager.register_provider("second", second_provider)
+
+    result = manager.get_company_profile("AAPL")
+
+    assert result.success is False
+    assert result.source == "provider_manager"
+    assert result.message == "No provider could satisfy get_company_profile."
+    assert result.metadata["attempted_providers"] == [
+        "first",
+        "second",
+        "local",
+    ]
+    assert result.metadata["skipped_providers"] == []
+    assert "first: planned failure" in result.warnings
+    assert "second: planned failure" in result.warnings
+    assert "local: planned failure" in result.warnings
+
+
+def test_failover_deterministic_provider_ordering():
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_priorities={
+            "get_earnings": ["third", "second", "first", "second"]
+        },
+    )
+
+    assert manager.priority_for("get_earnings") == [
+        "third",
+        "second",
+        "first",
+        "local",
+    ]
