@@ -1,4 +1,6 @@
 from providers.local_provider import LocalProvider
+from providers.cache_manager import CacheManager
+from providers.provider_config import ProviderConfig
 from providers.provider_manager import ProviderManager
 from providers.provider_result import ProviderResult
 
@@ -52,6 +54,17 @@ class InvalidProvider(FakeProvider):
 
     def get_fundamentals(self, ticker):
         return {"success": True}
+
+
+class FailingProvider(FakeProvider):
+
+    def get_fundamentals(self, ticker):
+        self.calls.append(("get_fundamentals", ticker))
+        return ProviderResult.fail(
+            "planned failure",
+            source=self.name,
+            metadata={"ticker": ticker},
+        )
 
 
 def test_default_provider_is_local_provider():
@@ -188,3 +201,193 @@ def test_deterministic_behavior():
     second = manager.get_company_profile("AAPL")
 
     assert first == second
+
+
+def test_provider_manager_uses_config_active_provider():
+    local_provider = FakeProvider("local")
+    mock_provider = FakeProvider("mock")
+    config = ProviderConfig(
+        active_provider="mock",
+        providers={
+            "local": {"enabled": True},
+            "mock": {"enabled": True},
+        },
+    )
+    manager = ProviderManager(
+        default_provider=local_provider,
+        provider_config=config,
+    )
+    manager.register_provider("mock", mock_provider)
+    manager.apply_configured_active_provider()
+
+    result = manager.get_company_profile("AAPL")
+
+    assert manager.active_provider_name == "mock"
+    assert result.source == "mock"
+    assert mock_provider.calls == [("get_company_profile", "AAPL")]
+
+
+def test_provider_manager_active_polygon_configured_but_disabled_falls_back_to_local():
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_config=ProviderConfig(
+            active_provider="polygon",
+            providers={
+                "local": {"enabled": True},
+                "polygon": {"enabled": False, "api_key_env": "POLYGON_API_KEY"},
+            },
+        ),
+    )
+
+    assert manager.active_provider_name == "local"
+    assert "polygon" not in manager._providers
+
+
+def test_provider_manager_unknown_configured_provider_falls_back_to_local():
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_config=ProviderConfig(
+            active_provider="missing",
+            providers={
+                "local": {"enabled": True},
+                "missing": {"enabled": True},
+            },
+        ),
+    )
+
+    assert manager.active_provider_name == "local"
+
+
+def test_provider_manager_registers_enabled_polygon_without_requiring_api_key(monkeypatch):
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    manager = ProviderManager(
+        default_provider=FakeProvider("local"),
+        provider_config=ProviderConfig(
+            active_provider="local",
+            providers={
+                "local": {"enabled": True},
+                "polygon": {"enabled": True, "api_key_env": "POLYGON_API_KEY"},
+            },
+        ),
+    )
+
+    assert manager.active_provider_name == "local"
+    assert "polygon" in manager._providers
+
+
+def test_provider_manager_local_provider_requires_no_api_key(monkeypatch):
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    provider = FakeProvider("local")
+    manager = ProviderManager(
+        default_provider=provider,
+        provider_config=ProviderConfig(
+            active_provider="local",
+            providers={"local": {"enabled": True}},
+        ),
+    )
+
+    result = manager.get_fundamentals("AAPL")
+
+    assert result.success is True
+    assert result.source == "local"
+
+
+def test_provider_manager_cache_hit_avoids_provider_call():
+    provider = FakeProvider("local")
+    manager = ProviderManager(
+        default_provider=provider,
+        cache_manager=CacheManager(),
+    )
+
+    first = manager.get_fundamentals("AAPL")
+    second = manager.get_fundamentals("AAPL")
+
+    assert first == second
+    assert provider.calls == [("get_fundamentals", "AAPL")]
+
+
+def test_provider_manager_cache_miss_by_ticker():
+    provider = FakeProvider("local")
+    manager = ProviderManager(
+        default_provider=provider,
+        cache_manager=CacheManager(),
+    )
+
+    manager.get_fundamentals("AAPL")
+    manager.get_fundamentals("MSFT")
+
+    assert provider.calls == [
+        ("get_fundamentals", "AAPL"),
+        ("get_fundamentals", "MSFT"),
+    ]
+
+
+def test_provider_manager_cache_miss_by_parameters():
+    provider = FakeProvider("local")
+    manager = ProviderManager(
+        default_provider=provider,
+        cache_manager=CacheManager(),
+    )
+
+    manager.get_price_history("AAPL", start="2026-01-01", end="2026-01-31")
+    manager.get_price_history("AAPL", start="2026-02-01", end="2026-02-28")
+
+    assert provider.calls == [
+        ("get_price_history", "AAPL", "2026-01-01", "2026-01-31"),
+        ("get_price_history", "AAPL", "2026-02-01", "2026-02-28"),
+    ]
+
+
+def test_provider_manager_failed_results_are_not_cached():
+    provider = FailingProvider("local")
+    manager = ProviderManager(
+        default_provider=provider,
+        cache_manager=CacheManager(),
+    )
+
+    first = manager.get_fundamentals("AAPL")
+    second = manager.get_fundamentals("AAPL")
+
+    assert first.success is False
+    assert second.success is False
+    assert provider.calls == [
+        ("get_fundamentals", "AAPL"),
+        ("get_fundamentals", "AAPL"),
+    ]
+
+
+def test_provider_manager_cache_separates_multiple_providers():
+    local_provider = FakeProvider("local")
+    mock_provider = FakeProvider("mock")
+    manager = ProviderManager(
+        default_provider=local_provider,
+        cache_manager=CacheManager(),
+    )
+    manager.register_provider("mock", mock_provider)
+
+    local_result = manager.get_fundamentals("AAPL")
+    manager.set_active_provider("mock")
+    mock_result = manager.get_fundamentals("AAPL")
+    second_mock_result = manager.get_fundamentals("AAPL")
+
+    assert local_result.source == "local"
+    assert mock_result.source == "mock"
+    assert second_mock_result == mock_result
+    assert local_provider.calls == [("get_fundamentals", "AAPL")]
+    assert mock_provider.calls == [("get_fundamentals", "AAPL")]
+
+
+def test_provider_manager_cache_uses_default_ttl():
+    provider = FakeProvider("local")
+    cache = CacheManager()
+    manager = ProviderManager(default_provider=provider, cache_manager=cache)
+
+    manager.get_company_profile("AAPL")
+    key = cache.make_key(
+        "local",
+        "get_company_profile",
+        "AAPL",
+        {},
+    )
+
+    assert cache._entries[key].ttl_seconds == 7 * 24 * 60 * 60

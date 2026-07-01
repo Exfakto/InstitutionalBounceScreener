@@ -1,0 +1,12 @@
+{
+  "active_provider": "local",
+  "providers": {
+    "local": {
+      "enabled": true
+    },
+    "polygon": {
+      "enabled": false,
+      "api_key_env": "POLYGON_API_KEY"
+    }
+  }
+}
