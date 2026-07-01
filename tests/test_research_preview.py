@@ -4,7 +4,10 @@ import pytest
 from PySide6.QtWidgets import QApplication, QLabel
 
 from analysis.candidate_score import CandidateScore
+from analysis.institutional_checklist import InstitutionalChecklistEvaluator
+from analysis.opportunity_rating import OpportunityRatingCalculator
 from analysis.score_result import ScoreResult
+from analysis.trade_thesis import TradeThesisGenerator
 from ui.widgets.research_preview import ResearchPreview
 
 
@@ -18,7 +21,70 @@ def app():
     return application
 
 
-def make_candidate(overall=88.5, scores=None, components=None, warnings=None):
+def checklist_for(metrics):
+    return InstitutionalChecklistEvaluator().evaluate(metrics)
+
+
+def opportunity_for(metrics):
+    return OpportunityRatingCalculator().calculate(metrics)
+
+
+def thesis_for(metrics):
+    return TradeThesisGenerator().generate(metrics)
+
+
+def checklist_metrics():
+    return {
+        "institutional_bounce_score": 88.5,
+        "opportunity_rating_score": 84.0,
+        "institutional_score": 72.0,
+        "institutional_momentum_score": 80.0,
+        "relative_strength_score": 82.0,
+        "trend_score": 76.0,
+        "support_score": 91.0,
+        "bounce_score": 76.0,
+        "volume_score": 78.0,
+        "earnings_risk_score": 20.0,
+        "risk_score": 74.0,
+        "distance_to_support_pct": 2.0,
+        "bounce_success_rate": 75.0,
+    }
+
+
+def make_candidate(
+    overall=88.5,
+    scores=None,
+    components=None,
+    warnings=None,
+    opportunity=None,
+    checklist=None,
+    thesis=None,
+):
+    metrics = checklist_metrics()
+    metrics["ticker"] = "AAPL"
+
+    if opportunity is False:
+        opportunity = None
+    elif opportunity is None:
+        opportunity = opportunity_for(metrics)
+
+    if opportunity is not None:
+        metrics["opportunity_rating"] = opportunity
+        metrics["opportunity_rating_score"] = opportunity.rating_score
+
+    if checklist is False:
+        checklist = None
+    elif checklist is None:
+        checklist = checklist_for(metrics)
+
+    if checklist is not None:
+        metrics["institutional_checklist"] = checklist
+
+    if thesis is False:
+        thesis = None
+    elif thesis is None:
+        thesis = thesis_for(metrics)
+
     return CandidateScore(
         ticker="AAPL",
         composite_score=ScoreResult("composite_score", overall),
@@ -36,6 +102,9 @@ def make_candidate(overall=88.5, scores=None, components=None, warnings=None):
             ScoreResult("bounce_score", 76.0),
         ],
         composite_intelligence_component_scores=components or {},
+        opportunity_rating=opportunity,
+        institutional_checklist=checklist,
+        trade_thesis=thesis,
         warnings=warnings or [],
         timestamp=datetime(2026, 6, 30, tzinfo=timezone.utc),
     )
@@ -48,6 +117,7 @@ def test_research_preview_empty_state(app):
     assert preview.empty_state_label.isHidden() is False
     assert preview.dashboard_frame.isHidden() is True
     assert preview.warning_label.text() == "No warnings"
+    assert preview.thesis_title_label.text() == "Trade thesis unavailable."
     assert preview.thesis_label.text() == "No trade thesis available."
 
 
@@ -66,9 +136,10 @@ def test_research_preview_clear_resets_every_section(app):
     assert preview.summary_labels["opportunity"].text() == "-"
     assert preview.summary_labels["checklist"].text() == "-"
     assert preview.warning_label.text() == "No warnings"
+    assert preview.thesis_title_label.text() == "Trade thesis unavailable."
     assert preview.thesis_label.text() == "No trade thesis available."
     assert all(
-        label.text() == "WARN"
+        label.text() == "⚠ Warning"
         for label in preview.checklist_status_labels.values()
     )
 
@@ -85,8 +156,8 @@ def test_research_preview_displays_score_summary(app):
     assert preview.signal_label.text().endswith("High Probability")
     assert preview.overall_score_label.text() == "88.5"
     assert preview.summary_labels["overall"].text() == "88.5"
-    assert preview.summary_labels["opportunity"].text() != "-"
-    assert preview.summary_labels["checklist"].text().endswith("%")
+    assert preview.summary_labels["opportunity"].text().endswith("High Probability")
+    assert preview.summary_labels["checklist"].text() == "100% Exceptional"
     assert preview.score_labels["quality_score"].text() == "90.0"
     assert preview.score_labels["institutional_score"].text() == "72.0"
     assert preview.score_labels["technical_score"].text() == "84.0"
@@ -101,6 +172,9 @@ def test_research_preview_displays_gen2_overall_when_available(app):
         composite_score=ScoreResult("composite_score", 40.0),
         scores=make_candidate().scores,
         institutional_bounce_score=91.0,
+        opportunity_rating=opportunity_for(checklist_metrics()),
+        institutional_checklist=checklist_for(checklist_metrics()),
+        trade_thesis=thesis_for(checklist_metrics()),
         warnings=["Missing components reduced confidence"],
         timestamp=datetime(2026, 6, 30, tzinfo=timezone.utc),
     )
@@ -150,36 +224,76 @@ def test_research_preview_summarizes_missing_metric_warnings(app):
     assert "Missing revenue_growth_ttm" in preview.warning_label.text()
 
 
-def test_research_preview_placeholder_checklist(app):
+def test_research_preview_displays_opportunity_rating(app):
     preview = ResearchPreview()
-    candidate = make_candidate(
-        components={
-            "relative_strength_score": 80.0,
+
+    preview.set_candidate(make_candidate())
+
+    assert "★★★★" in preview.signal_label.text()
+    assert "High Probability" in preview.signal_label.text()
+    assert preview.summary_labels["opportunity"].text().endswith("High Probability")
+
+
+def test_research_preview_displays_live_checklist(app):
+    preview = ResearchPreview()
+
+    preview.set_candidate(make_candidate())
+
+    assert preview.checklist_unavailable_label.isHidden() is True
+    assert preview.checklist_status_labels["near_support"].text() == "✓ Pass"
+    assert preview.checklist_status_labels["relative_strength"].text() == "✓ Pass"
+    assert preview.checklist_status_labels["trend"].text() == "✓ Pass"
+    assert preview.checklist_status_labels["atr_risk"].text() == "✓ Pass"
+    assert preview.checklist_name_labels["near_support"].text() == "Near Support"
+
+
+def test_research_preview_displays_mixed_checklist(app):
+    preview = ResearchPreview()
+    metrics = checklist_metrics()
+    metrics.update(
+        {
             "trend_score": 45.0,
             "volume_score": 65.0,
-            "earnings_risk_score": 20.0,
-            "risk_score": 78.0,
-        },
+            "earnings_risk_score": 50.0,
+            "risk_score": 35.0,
+        }
     )
 
-    preview.set_candidate(candidate)
+    preview.set_candidate(make_candidate(checklist=checklist_for(metrics)))
 
-    assert preview.checklist_status_labels["near_support"].text() == "PASS"
-    assert preview.checklist_status_labels["relative_strength"].text() == "PASS"
-    assert preview.checklist_status_labels["trend"].text() == "FAIL"
-    assert preview.checklist_status_labels["volume"].text() == "WARN"
-    assert preview.checklist_status_labels["earnings_window"].text() == "PASS"
+    assert preview.checklist_status_labels["trend"].text() == "✗ Fail"
+    assert preview.checklist_status_labels["volume"].text() == "⚠ Warning"
+    assert preview.checklist_status_labels["earnings_window"].text() == "⚠ Warning"
+    assert preview.checklist_status_labels["atr_risk"].text() == "✗ Fail"
 
 
-def test_research_preview_placeholder_thesis(app):
+def test_research_preview_displays_unavailable_checklist(app):
     preview = ResearchPreview()
 
-    preview.set_trade_thesis("Wait for a confirmed bounce above support.")
+    preview.set_candidate(make_candidate(checklist=False))
 
-    assert preview.thesis_label.text() == "Wait for a confirmed bounce above support."
+    assert preview.summary_labels["checklist"].text() == "Checklist unavailable."
+    assert preview.checklist_unavailable_label.text() == "Checklist unavailable."
+    assert preview.checklist_unavailable_label.isHidden() is False
 
-    preview.set_trade_thesis("")
 
+def test_research_preview_displays_thesis(app):
+    preview = ResearchPreview()
+
+    preview.set_candidate(make_candidate())
+
+    assert preview.thesis_title_label.text().startswith("AAPL")
+    assert "validated institutional support zone" in preview.thesis_label.text()
+    assert preview.strengths_label.text().startswith("Strengths:")
+    assert preview.risks_label.text().startswith("Risks:")
+
+
+def test_research_preview_displays_unavailable_thesis(app):
+    preview = ResearchPreview()
+
+    preview.set_candidate(make_candidate(thesis=False))
+
+    assert preview.thesis_title_label.text() == "Trade thesis unavailable."
     assert preview.thesis_label.text() == "No trade thesis available."
 
 
@@ -202,14 +316,22 @@ def test_research_preview_repeated_updates_do_not_duplicate_widgets(app):
 def test_research_preview_handles_missing_component_scores(app):
     preview = ResearchPreview()
 
-    preview.set_candidate(make_candidate(overall=50.0, scores=[]))
+    preview.set_candidate(
+        make_candidate(
+            overall=50.0,
+            scores=[],
+            opportunity=False,
+            checklist=False,
+            thesis=False,
+        )
+    )
 
     assert preview.ticker_label.text() == "AAPL"
-    assert preview.signal_label.text().endswith("Avoid")
+    assert preview.signal_label.text() == "Opportunity rating unavailable."
     assert preview.overall_score_label.text() == "50.0"
     assert preview.score_labels["quality_score"].text() == "-"
     assert preview.score_labels["institutional_score"].text() == "-"
     assert preview.score_labels["technical_score"].text() == "-"
     assert preview.score_labels["support_score"].text() == "-"
     assert preview.score_labels["bounce_score"].text() == "-"
-    assert "missing metrics" in preview.warning_label.text()
+    assert preview.warning_label.text() == "No warnings"

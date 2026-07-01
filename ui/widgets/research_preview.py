@@ -1,5 +1,3 @@
-from analysis.opportunity_rating import OpportunityRatingCalculator
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
@@ -291,19 +289,36 @@ class ResearchPreview(QWidget):
     ]
     SCORE_FIELDS = LegacyResearchPreview.SCORE_FIELDS
     CHECKLIST_ITEMS = [
-        ("near_support", "Near Support", "support_score"),
-        ("relative_strength", "Relative Strength", "relative_strength_score"),
-        ("trend", "Trend", "trend_score"),
-        ("institutional_buying", "Institutional Buying", "institutional_score"),
-        ("volume", "Volume", "volume_score"),
-        ("earnings_window", "Earnings Window", "earnings_risk_score"),
-        ("atr_risk", "ATR Risk", "risk_score"),
-        ("bounce_validation", "Bounce Validation", "bounce_score"),
+        ("near_support", "Near Support", "Near validated support"),
+        (
+            "bounce_validation",
+            "Bounce Validation",
+            "Bounce success rate acceptable",
+        ),
+        ("relative_strength", "Relative Strength", "Relative Strength strong"),
+        ("trend", "Trend", "Trend aligned"),
+        (
+            "institutional_buying",
+            "Institutional Buying",
+            "Institutional ownership acceptable",
+        ),
+        (
+            "institutional_momentum",
+            "Institutional Momentum",
+            "Institutional momentum positive",
+        ),
+        ("volume", "Volume", "Volume accumulation present"),
+        ("earnings_window", "Earnings Window", "Earnings window safe"),
+        ("atr_risk", "ATR Risk", "ATR risk acceptable"),
+        (
+            "opportunity_rating",
+            "Opportunity Rating",
+            "Opportunity rating acceptable",
+        ),
     ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.opportunity_calculator = OpportunityRatingCalculator()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -371,24 +386,45 @@ class ResearchPreview(QWidget):
         checklist_layout.setSpacing(4)
 
         self.checklist_rows = {}
+        self.checklist_name_labels = {}
         self.checklist_status_labels = {}
-        for key, label, _metric in self.CHECKLIST_ITEMS:
+        for key, label, _check_name in self.CHECKLIST_ITEMS:
             self.checklist_status_labels[key] = self.create_checklist_row(
                 checklist_layout,
                 key,
                 label,
             )
 
+        self.checklist_unavailable_label = QLabel("Checklist unavailable.")
+        self.checklist_unavailable_label.setObjectName("ResearchPreviewWarnings")
+        self.checklist_unavailable_label.setWordWrap(True)
+        checklist_layout.addWidget(self.checklist_unavailable_label)
+
         thesis_section = self.create_section("Trade Thesis")
         thesis_layout = thesis_section.layout()
         thesis_layout.setContentsMargins(8, 8, 8, 8)
         thesis_layout.setSpacing(4)
+
+        self.thesis_title_label = QLabel("Trade thesis unavailable.")
+        self.thesis_title_label.setObjectName("ResearchPreviewFieldValue")
+        self.thesis_title_label.setWordWrap(True)
+        thesis_layout.addWidget(self.thesis_title_label)
 
         self.thesis_label = QLabel("No trade thesis available.")
         self.thesis_label.setObjectName("ResearchPreviewThesis")
         self.thesis_label.setWordWrap(True)
         self.thesis_label.setMinimumHeight(42)
         thesis_layout.addWidget(self.thesis_label)
+
+        self.strengths_label = QLabel("Strengths unavailable.")
+        self.strengths_label.setObjectName("ResearchPreviewWarnings")
+        self.strengths_label.setWordWrap(True)
+        thesis_layout.addWidget(self.strengths_label)
+
+        self.risks_label = QLabel("Risks unavailable.")
+        self.risks_label.setObjectName("ResearchPreviewWarnings")
+        self.risks_label.setWordWrap(True)
+        thesis_layout.addWidget(self.risks_label)
 
         self.warning_title_label = QLabel("Warnings")
         self.warning_title_label.setObjectName("ResearchPreviewSectionTitle")
@@ -448,8 +484,8 @@ class ResearchPreview(QWidget):
         for label in self.score_labels.values():
             label.setText("-")
 
-        self.set_placeholder_checklist()
-        self.set_trade_thesis("")
+        self.set_checklist_unavailable()
+        self.set_trade_thesis(None)
         self.warning_label.setText("No warnings")
 
     def set_candidate(self, candidate_score):
@@ -461,9 +497,9 @@ class ResearchPreview(QWidget):
             self.clear()
             return
 
-        metrics = self.metrics_for_candidate(candidate_score)
-        opportunity = self.opportunity_calculator.calculate(metrics)
-        checklist = self.placeholder_checklist(metrics)
+        opportunity = candidate_score.opportunity_rating
+        checklist = candidate_score.institutional_checklist
+        thesis = candidate_score.trade_thesis
 
         self.empty_state_label.hide()
         self.dashboard_frame.show()
@@ -479,17 +515,15 @@ class ResearchPreview(QWidget):
 
         self.ticker_label.setText(candidate_score.ticker)
         self.company_label.setText(self.company_name_for_candidate(candidate_score))
-        self.rating_label.setText(
-            self.opportunity_label(opportunity.stars, opportunity.rating_label)
-        )
+        self.rating_label.setText(self.format_opportunity_header(opportunity))
         self.summary_labels["overall"].setText(
             self.format_score(candidate_score.primary_score_value)
         )
         self.summary_labels["opportunity"].setText(
-            self.format_score(opportunity.rating_score)
+            self.format_opportunity_summary(opportunity)
         )
         self.summary_labels["checklist"].setText(
-            self.format_percent(self.checklist_completion(checklist))
+            self.format_checklist_summary(checklist)
         )
         self.timestamp_label.setText(f"Analysis Time: {candidate_score.timestamp}")
 
@@ -498,44 +532,91 @@ class ResearchPreview(QWidget):
             self.score_labels[key].setText(self.format_score(score_map.get(key)))
 
         self.set_checklist(checklist)
+        self.set_trade_thesis(thesis)
         self.warning_label.setText(
-            self.format_warnings(candidate_score, opportunity.warnings)
+            self.format_warnings(
+                candidate_score,
+                self.opportunity_warning_messages(opportunity)
+                + self.checklist_warning_messages(checklist)
+                + self.thesis_warning_messages(thesis),
+            )
         )
 
-    def set_trade_thesis(self, text):
+    def set_trade_thesis(self, thesis):
         """
-        Set the reserved thesis area for future controller wiring.
+        Display a generated trade thesis.
         """
 
-        cleaned = (text or "").strip()
-        self.thesis_label.setText(cleaned or "No trade thesis available.")
+        if thesis is None:
+            self.thesis_title_label.setText("Trade thesis unavailable.")
+            self.thesis_label.setText("No trade thesis available.")
+            self.strengths_label.setText("Strengths unavailable.")
+            self.risks_label.setText("Risks unavailable.")
+            return
+
+        if isinstance(thesis, str):
+            cleaned = thesis.strip()
+            self.thesis_title_label.setText("Trade thesis unavailable.")
+            self.thesis_label.setText(cleaned or "No trade thesis available.")
+            self.strengths_label.setText("Strengths unavailable.")
+            self.risks_label.setText("Risks unavailable.")
+            return
+
+        self.thesis_title_label.setText(thesis.title or "Trade thesis unavailable.")
+        self.thesis_label.setText(thesis.summary or "No trade thesis available.")
+        self.strengths_label.setText(
+            self.format_list("Strengths", thesis.strengths)
+        )
+        self.risks_label.setText(self.format_list("Risks", thesis.risks))
 
     def set_placeholder_checklist(self):
         """
-        Reset checklist rows until the checklist engine is wired.
+        Backward-compatible alias for unavailable checklist state.
         """
 
-        self.set_checklist({
-            key: "warning"
-            for key, _label, _metric in self.CHECKLIST_ITEMS
-        })
+        self.set_checklist_unavailable()
+
+    def set_checklist_unavailable(self):
+        for key, label, _check_name in self.CHECKLIST_ITEMS:
+            self.checklist_name_labels[key].setText(label)
+            self.update_checklist_status(key, "warning")
+            self.checklist_rows[key].hide()
+
+        self.checklist_unavailable_label.setText("Checklist unavailable.")
+        self.checklist_unavailable_label.show()
 
     def set_checklist(self, checklist):
         """
         Display checklist statuses without rebuilding row widgets.
         """
 
-        for key, _label, _metric in self.CHECKLIST_ITEMS:
-            status = (checklist or {}).get(key, "warning")
+        if checklist is None:
+            self.set_checklist_unavailable()
+            return
+
+        checks_by_name = {
+            check.name: check
+            for check in checklist.checks
+        }
+
+        self.checklist_unavailable_label.hide()
+
+        for key, label, check_name in self.CHECKLIST_ITEMS:
+            check = checks_by_name.get(check_name)
+            display_label = self.checklist_display_label(check.name) if check else label
+            status = check.status if check else "warning"
+
+            self.checklist_name_labels[key].setText(display_label)
             self.update_checklist_status(key, status)
+            self.checklist_rows[key].show()
 
     def update_checklist_status(self, key, status):
         label = self.checklist_status_labels[key]
         normalized = status if status in {"pass", "warning", "fail"} else "warning"
         label.setText({
-            "pass": "PASS",
-            "warning": "WARN",
-            "fail": "FAIL",
+            "pass": "✓ Pass",
+            "warning": "⚠ Warning",
+            "fail": "✗ Fail",
         }[normalized])
         label.setProperty("status", normalized)
         label.style().unpolish(label)
@@ -543,12 +624,12 @@ class ResearchPreview(QWidget):
 
     def placeholder_checklist(self, metrics):
         """
-        Placeholder rules for compact status display, ready for later wiring.
+        Deprecated placeholder helper retained for old direct tests.
         """
 
         return {
-            key: self.status_for_metric(metric, metrics.get(metric))
-            for key, _label, metric in self.CHECKLIST_ITEMS
+            key: "warning"
+            for key, _label, _check_name in self.CHECKLIST_ITEMS
         }
 
     @staticmethod
@@ -576,11 +657,35 @@ class ResearchPreview(QWidget):
 
     @staticmethod
     def checklist_completion(checklist):
-        if not checklist:
+        if checklist is None:
             return 0.0
 
-        passed = sum(1 for status in checklist.values() if status == "pass")
-        return passed / len(checklist) * 100.0
+        return checklist.overall_percentage
+
+    @staticmethod
+    def checklist_warning_messages(checklist):
+        if checklist is None:
+            return []
+
+        return [
+            check.message
+            for check in checklist.checks
+            if check.status in {"warning", "fail"}
+        ]
+
+    @staticmethod
+    def opportunity_warning_messages(opportunity):
+        if opportunity is None:
+            return []
+
+        return list(opportunity.warnings)
+
+    @staticmethod
+    def thesis_warning_messages(thesis):
+        if thesis is None:
+            return []
+
+        return list(thesis.risks)
 
     @staticmethod
     def metrics_for_candidate(candidate_score):
@@ -620,6 +725,50 @@ class ResearchPreview(QWidget):
     @staticmethod
     def format_percent(value):
         return f"{float(value):.0f}%"
+
+    @classmethod
+    def format_checklist_summary(cls, checklist):
+        if checklist is None:
+            return "Checklist unavailable."
+
+        return f"{cls.format_percent(checklist.overall_percentage)} {checklist.overall_label}"
+
+    @classmethod
+    def format_opportunity_header(cls, opportunity):
+        if opportunity is None:
+            return "Opportunity rating unavailable."
+
+        return cls.opportunity_label(opportunity.stars, opportunity.rating_label)
+
+    @classmethod
+    def format_opportunity_summary(cls, opportunity):
+        if opportunity is None:
+            return "Opportunity rating unavailable."
+
+        return f"{cls.format_score(opportunity.rating_score)} {opportunity.rating_label}"
+
+    @staticmethod
+    def format_list(title, values):
+        if not values:
+            return f"{title}: None"
+
+        return f"{title}: " + "; ".join(values)
+
+    @staticmethod
+    def checklist_display_label(name):
+        labels = {
+            "Near validated support": "Near Support",
+            "Bounce success rate acceptable": "Bounce Validation",
+            "Relative Strength strong": "Relative Strength",
+            "Trend aligned": "Trend",
+            "Institutional ownership acceptable": "Institutional Buying",
+            "Institutional momentum positive": "Institutional Momentum",
+            "Volume accumulation present": "Volume",
+            "Earnings window safe": "Earnings Window",
+            "ATR risk acceptable": "ATR Risk",
+            "Opportunity rating acceptable": "Opportunity Rating",
+        }
+        return labels.get(name, name)
 
     @staticmethod
     def opportunity_label(stars, label):
@@ -722,15 +871,17 @@ class ResearchPreview(QWidget):
         row_layout.setSpacing(8)
 
         name_label = QLabel(label)
+        name_label.setObjectName("ResearchPreviewFieldLabel")
         status_label = QLabel("WARN")
         status_label.setObjectName("ResearchPreviewChecklistStatus")
         status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        status_label.setMinimumWidth(48)
+        status_label.setMinimumWidth(86)
 
         row_layout.addWidget(name_label, stretch=1)
         row_layout.addWidget(status_label)
         parent_layout.addWidget(row)
         self.checklist_rows[key] = row
+        self.checklist_name_labels[key] = name_label
 
         return status_label
 

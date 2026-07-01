@@ -100,6 +100,36 @@ class AnalysisPipelineTest(unittest.TestCase):
             ["AAA", "BBB"],
         )
 
+    def test_run_attaches_decision_fields_to_candidates(self):
+        service = FakeScoringService(
+            {
+                "AAA": 85.0,
+            },
+            gen2_scores={
+                "AAA": 90.0,
+            },
+        )
+
+        summary = AnalysisPipeline(service).run()
+        candidate = summary["candidates"][0]
+
+        self.assertIsNotNone(candidate.opportunity_rating)
+        self.assertIn(
+            candidate.opportunity_rating.rating_label,
+            {"Avoid", "Weak Setup", "Watch List", "High Probability", "Elite Bounce"},
+        )
+        self.assertIsNotNone(candidate.institutional_checklist)
+        self.assertEqual(candidate.institutional_checklist.total_checks, 10)
+        self.assertIsNotNone(candidate.trade_thesis)
+        self.assertIn("AAA", candidate.trade_thesis.title)
+        self.assertEqual(
+            [
+                check.name
+                for check in candidate.institutional_checklist.checks
+            ][0],
+            "Near validated support",
+        )
+
     def test_run_skips_failed_tickers(self):
         service = FakeScoringService(
             {

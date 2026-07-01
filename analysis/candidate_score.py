@@ -6,9 +6,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from analysis.composite_intelligence import CompositeIntelligenceResult
+from analysis.institutional_checklist import InstitutionalChecklistResult
+from analysis.opportunity_rating import OpportunityRatingResult
 from analysis.score_result import ScoreResult
+
+if TYPE_CHECKING:
+    from analysis.trade_thesis import TradeThesisResult
 
 
 @dataclass(frozen=True)
@@ -23,6 +29,9 @@ class CandidateScore:
     institutional_bounce_score: float | None = None
     composite_intelligence: CompositeIntelligenceResult | None = None
     composite_intelligence_component_scores: dict = field(default_factory=dict)
+    opportunity_rating: OpportunityRatingResult | None = None
+    institutional_checklist: InstitutionalChecklistResult | None = None
+    trade_thesis: "TradeThesisResult | None" = None
     missing_components: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     timestamp: datetime = field(
