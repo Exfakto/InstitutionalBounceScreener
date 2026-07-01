@@ -22,6 +22,7 @@ from ui.widgets.operations_toolbar import OperationsToolbar
 from ui.widgets.header_bar import HeaderBar
 from ui.widgets.price_chart import PriceChart
 from ui.widgets.research_preview import ResearchPreview
+from ui.widgets.trade_card import TradeCard
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -110,12 +111,19 @@ class MainWindow(QMainWindow):
 
         self.price_chart = PriceChart()
         self.research_preview = ResearchPreview()
+        self.trade_card = TradeCard()
 
         left_workspace.addWidget(self.candidates_table, stretch=3)
         left_workspace.addWidget(self.price_chart, stretch=2)
 
+        decision_workspace = QVBoxLayout()
+        decision_workspace.setContentsMargins(0, 0, 0, 0)
+        decision_workspace.setSpacing(12)
+        decision_workspace.addWidget(self.research_preview, stretch=3)
+        decision_workspace.addWidget(self.trade_card, stretch=2)
+
         workspace_layout.addLayout(left_workspace, stretch=5)
-        workspace_layout.addWidget(self.research_preview, stretch=1)
+        workspace_layout.addLayout(decision_workspace, stretch=2)
 
         main_layout.addLayout(workspace_layout, stretch=5)
 
@@ -369,9 +377,31 @@ class MainWindow(QMainWindow):
 
         if ticker is None:
             self.research_preview.clear()
+            self.update_trade_card(None)
             return
 
-        self.research_preview.set_candidate(self.candidates_by_ticker.get(ticker))
+        candidate = self.candidates_by_ticker.get(ticker)
+        self.research_preview.set_candidate(candidate)
+        self.update_trade_card(candidate)
+
+    # ----------------------------------------------------------
+
+    def update_trade_card(self, candidate):
+
+        if not hasattr(self, "trade_card"):
+            return
+
+        if candidate is None:
+            self.trade_card.clear()
+            return
+
+        trade_card = ResearchPreview.trade_card_for_candidate(candidate)
+
+        if trade_card is None:
+            self.trade_card.set_placeholder("No trade plan available.")
+            return
+
+        self.trade_card.set_trade_card(trade_card)
 
     # ----------------------------------------------------------
 

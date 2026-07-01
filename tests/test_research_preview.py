@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtWidgets import QApplication, QLabel
@@ -311,6 +312,21 @@ def test_research_preview_repeated_updates_do_not_duplicate_widgets(app):
     assert len(preview.summary_labels) == initial_summary_labels
     assert len(preview.findChildren(QLabel)) == initial_label_count
     assert preview.empty_state_label.isHidden() is False
+
+
+def test_research_preview_returns_trade_card_from_candidate_object(app):
+    trade_card = {"ticker": "AAPL", "entry": 100.0}
+    candidate = SimpleNamespace(trade_card=trade_card)
+
+    assert ResearchPreview.trade_card_for_candidate(candidate) == trade_card
+
+
+def test_research_preview_returns_trade_card_from_candidate_dict(app):
+    trade_card = {"ticker": "MSFT", "entry": 410.0}
+
+    assert ResearchPreview.trade_card_for_candidate({"trade_card": trade_card}) == trade_card
+    assert ResearchPreview.trade_card_for_candidate({}) is None
+    assert ResearchPreview.trade_card_for_candidate(None) is None
 
 
 def test_research_preview_handles_missing_component_scores(app):

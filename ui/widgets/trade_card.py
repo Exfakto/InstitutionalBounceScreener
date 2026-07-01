@@ -128,8 +128,16 @@ class TradeCard(QWidget):
         Reset every section to the empty state.
         """
 
+        self.set_placeholder("No trade card available.")
+
+    def set_placeholder(self, text):
+        """
+        Show an unavailable message without rendering stale trade plan data.
+        """
+
         self.empty_state_label.show()
         self.dashboard_frame.hide()
+        self.empty_state_label.setText(text)
 
         self.ticker_label.setText("")
         self.company_label.setText("")

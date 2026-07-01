@@ -542,6 +542,20 @@ class ResearchPreview(QWidget):
             )
         )
 
+    @staticmethod
+    def trade_card_for_candidate(candidate_score):
+        """
+        Return the prepared trade card attached to a candidate, when present.
+        """
+
+        if candidate_score is None:
+            return None
+
+        if isinstance(candidate_score, dict):
+            return candidate_score.get("trade_card")
+
+        return getattr(candidate_score, "trade_card", None)
+
     def set_trade_thesis(self, thesis):
         """
         Display a generated trade thesis.
