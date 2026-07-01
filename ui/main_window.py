@@ -14,6 +14,7 @@ from controllers.support_controller import SupportController
 from controllers.bounce_controller import BounceController
 from controllers.scoring_controller import ScoringController
 from controllers.chart_controller import ChartController
+from controllers.watchlist_controller import WatchlistController
 
 from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
@@ -23,6 +24,7 @@ from ui.widgets.header_bar import HeaderBar
 from ui.widgets.price_chart import PriceChart
 from ui.widgets.research_preview import ResearchPreview
 from ui.widgets.trade_card import TradeCard
+from ui.widgets.watchlist_panel import WatchlistPanel
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -37,6 +39,7 @@ class MainWindow(QMainWindow):
         self.bounce_controller = BounceController()
         self.scoring_controller = ScoringController()
         self.chart_controller = ChartController()
+        self.watchlist_controller = WatchlistController()
         self.candidates_by_ticker = {}
 
         self.setWindowTitle("Institutional Bounce Screener")
@@ -112,6 +115,14 @@ class MainWindow(QMainWindow):
         self.price_chart = PriceChart()
         self.research_preview = ResearchPreview()
         self.trade_card = TradeCard()
+        self.watchlist_panel = WatchlistPanel()
+        self.watchlist_panel.add_selected_candidate_requested.connect(
+            self.add_selected_candidate_to_watchlist
+        )
+        self.watchlist_panel.remove_selected_requested.connect(
+            self.remove_selected_watchlist_item
+        )
+        self.watchlist_panel.refresh_requested.connect(self.refresh_watchlist)
 
         left_workspace.addWidget(self.candidates_table, stretch=3)
         left_workspace.addWidget(self.price_chart, stretch=2)
@@ -121,6 +132,7 @@ class MainWindow(QMainWindow):
         decision_workspace.setSpacing(12)
         decision_workspace.addWidget(self.research_preview, stretch=3)
         decision_workspace.addWidget(self.trade_card, stretch=2)
+        decision_workspace.addWidget(self.watchlist_panel, stretch=2)
 
         workspace_layout.addLayout(left_workspace, stretch=5)
         workspace_layout.addLayout(decision_workspace, stretch=2)
@@ -134,6 +146,7 @@ class MainWindow(QMainWindow):
         self.activity_panel = ActivityPanel()
 
         main_layout.addWidget(self.activity_panel, stretch=1)
+        self.refresh_watchlist()
 
     # ----------------------------------------------------------
 
@@ -427,6 +440,77 @@ class MainWindow(QMainWindow):
             return
 
         self.price_chart.set_chart_data(chart_data)
+
+    # ----------------------------------------------------------
+
+    def add_selected_candidate_to_watchlist(self):
+
+        ticker = self.candidates_table.selected_ticker()
+
+        if ticker is None:
+            return
+
+        candidate = self.candidates_by_ticker.get(ticker)
+        result = self.watchlist_controller.add_candidate(
+            ticker,
+            company_name=self.company_name_for_candidate(candidate),
+        )
+
+        if result.get("success"):
+            self.refresh_watchlist()
+
+        self.log(result.get("message", "Watchlist update complete."))
+
+    # ----------------------------------------------------------
+
+    def remove_selected_watchlist_item(self):
+
+        item_id = self.watchlist_panel.selected_item_id()
+
+        if item_id is None:
+            return
+
+        result = self.watchlist_controller.remove_item(item_id)
+
+        if result.get("success"):
+            self.refresh_watchlist()
+
+        self.log(result.get("message", "Watchlist update complete."))
+
+    # ----------------------------------------------------------
+
+    def refresh_watchlist(self):
+
+        if not hasattr(self, "watchlist_panel"):
+            return
+
+        result = self.watchlist_controller.get_items()
+
+        if result.get("success"):
+            self.watchlist_panel.refresh_items(result.get("item") or [])
+        else:
+            self.watchlist_panel.clear()
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def company_name_for_candidate(candidate):
+
+        if candidate is None:
+            return None
+
+        if isinstance(candidate, dict):
+            return (
+                candidate.get("company_name")
+                or candidate.get("company")
+                or candidate.get("name")
+            )
+
+        return (
+            getattr(candidate, "company_name", None)
+            or getattr(candidate, "company", None)
+            or getattr(candidate, "name", None)
+        )
 
     # ----------------------------------------------------------
 
