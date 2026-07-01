@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime, timedelta
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -16,6 +17,8 @@ from controllers.scoring_controller import ScoringController
 from controllers.chart_controller import ChartController
 from controllers.watchlist_controller import WatchlistController
 from controllers.trade_journal_controller import TradeJournalController
+from services.market_status_service import MarketStatusService
+from services.refresh_scheduler import RefreshScheduler
 
 from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
@@ -33,6 +36,13 @@ from ui.stock_detail_window import StockDetailWindow
 
 class MainWindow(QMainWindow):
 
+    LIVE_REFRESH_INTERVALS = {
+        "Open": 300,
+        "Pre-market": 600,
+        "After-hours": 900,
+        "Closed": 1800,
+    }
+
     def __init__(self):
         super().__init__()
 
@@ -44,6 +54,11 @@ class MainWindow(QMainWindow):
         self.chart_controller = ChartController()
         self.watchlist_controller = WatchlistController()
         self.trade_journal_controller = TradeJournalController()
+        self.market_status_service = MarketStatusService()
+        self.refresh_scheduler = RefreshScheduler()
+        self.refresh_scheduler.register_callback(self.handle_live_refresh_result)
+        self.last_refresh_at = None
+        self.next_refresh_at = None
         self.candidates_by_ticker = {}
 
         self.setWindowTitle("Institutional Bounce Screener")
@@ -52,6 +67,7 @@ class MainWindow(QMainWindow):
         self.build_ui()
 
         self.refresh_statistics()
+        self.configure_live_refresh()
 
     # ----------------------------------------------------------
 
@@ -223,6 +239,8 @@ class MainWindow(QMainWindow):
 
         self.refresh_statistics()
 
+        self.mark_refresh_completed()
+
         self.log("")
         self.log(f"Database Rows: {total:,}")
 
@@ -343,6 +361,7 @@ class MainWindow(QMainWindow):
             candidate.ticker: candidate
             for candidate in results["candidates"]
         }
+        self.register_refresh_tickers(results["candidates"])
         self.candidates_table.populate(results["candidates"])
         self.update_open_detail_state()
 
@@ -578,6 +597,124 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def configure_live_refresh(self, now=None):
+
+        market_status = self.market_status_service.get_status(now)
+        interval = self.refresh_interval_for_status(market_status.status)
+
+        if interval is None:
+            self.refresh_scheduler.stop()
+            self.next_refresh_at = None
+            self.update_refresh_status_header(market_status)
+            return market_status
+
+        self.refresh_scheduler.set_refresh_interval(interval)
+        self.refresh_scheduler.start()
+        self.next_refresh_at = self.next_refresh_time(interval, now=now)
+        self.update_refresh_status_header(market_status)
+
+        return market_status
+
+    # ----------------------------------------------------------
+
+    def register_refresh_tickers(self, candidates):
+
+        if not hasattr(self, "refresh_scheduler"):
+            return
+
+        self.refresh_scheduler.clear_tickers()
+
+        for candidate in candidates:
+            ticker = self.ticker_for_candidate(candidate)
+
+            if ticker is not None:
+                self.refresh_scheduler.register_ticker(ticker)
+
+    # ----------------------------------------------------------
+
+    @classmethod
+    def refresh_interval_for_status(cls, status):
+
+        return cls.LIVE_REFRESH_INTERVALS.get(status)
+
+    # ----------------------------------------------------------
+
+    def update_refresh_status_header(self, market_status=None):
+
+        if not hasattr(self, "header_bar"):
+            return
+
+        if market_status is None:
+            market_status = self.market_status_service.get_status()
+
+        interval = self.refresh_interval_for_status(market_status.status)
+        is_running = (
+            self.refresh_scheduler.is_running()
+            if hasattr(self.refresh_scheduler, "is_running")
+            else False
+        )
+
+        self.header_bar.set_refresh_status(
+            market_status=market_status.status,
+            auto_refresh=is_running,
+            refresh_interval=interval if is_running else None,
+            last_refresh=self.last_refresh_at,
+            next_refresh=self.next_refresh_at if is_running else None,
+        )
+
+    # ----------------------------------------------------------
+
+    def mark_refresh_completed(self, when=None):
+
+        self.last_refresh_at = self.current_refresh_time(when)
+        interval = getattr(self.refresh_scheduler, "refresh_interval", None)
+
+        if self.refresh_scheduler.is_running() and interval is not None:
+            self.next_refresh_at = self.next_refresh_time(interval, now=self.last_refresh_at)
+
+        self.update_refresh_status_header()
+
+    # ----------------------------------------------------------
+
+    def handle_live_refresh_result(self, ticker, result):
+
+        self.mark_refresh_completed()
+
+    # ----------------------------------------------------------
+
+    @classmethod
+    def next_refresh_time(cls, interval, now=None):
+
+        return cls.current_refresh_time(now) + timedelta(seconds=interval)
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def current_refresh_time(value=None):
+
+        if value is None:
+            return datetime.now().astimezone()
+
+        if isinstance(value, datetime):
+            return value
+
+        return datetime.now().astimezone()
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def ticker_for_candidate(candidate):
+
+        if candidate is None:
+            return None
+
+        if isinstance(candidate, dict):
+            return candidate.get("ticker")
+
+        return getattr(candidate, "ticker", None)
+
+    # ----------------------------------------------------------
+
     @staticmethod
     def company_name_for_candidate(candidate):
 
@@ -626,6 +763,9 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------
 
     def closeEvent(self, event):
+
+        if hasattr(self, "refresh_scheduler"):
+            self.refresh_scheduler.stop()
 
         self.controller.close()
         self.indicator_controller.close()
