@@ -12,11 +12,12 @@ The design is intentionally layered so analytics, persistence, services, and UI 
 UI widgets
 Controllers
 Services
+Providers
 DatabaseManager
 SQLite
 ```
 
-Pure analytics live beside this workflow and are called by services or pipelines when orchestration is required.
+Pure analytics live beside this workflow and are called by services or pipelines when orchestration is required. Provider infrastructure is intentionally separate from analysis and UI code.
 
 ## UI Layer
 
@@ -66,7 +67,28 @@ Responsibilities:
 - Call pure calculators when workflow orchestration is needed.
 - Return structured results to controllers.
 
-Service areas include market workflows, indicator calculation, support detection, bounce validation, scoring context assembly, composite intelligence, chart data, watchlist persistence, and trade journal persistence.
+Service areas include market workflows, indicator calculation, support detection, bounce validation, scoring context assembly, composite intelligence, chart data, watchlist persistence, trade journal persistence, live provider data access, and scheduled refresh orchestration.
+
+`LiveDataService` is the service boundary for provider-backed reads. `RefreshScheduler` periodically refreshes registered tickers through `LiveDataService` and reports results through callbacks without importing UI code.
+
+## Provider Layer
+
+Provider code lives in `providers/`.
+
+Responsibilities:
+
+- Define data-provider interfaces.
+- Normalize provider results into `ProviderResult`.
+- Route calls through `ProviderManager`.
+- Cache successful provider responses through `CacheManager`.
+- Load active-provider settings through `ProviderConfig`.
+
+Current providers:
+
+- `LocalProvider` reads local database-backed data where available.
+- `PolygonProvider` supports daily OHLCV price history when configured with `POLYGON_API_KEY`.
+
+Providers must not perform scoring, analysis calculations, UI work, controller coordination, database writes, or secret storage. Polygon endpoints beyond price history remain not-yet-implemented until added in source.
 
 ## Database Layer
 
@@ -85,7 +107,7 @@ Current schema areas include:
 - `watchlist`
 - `paper_trades`
 
-The application remains local-first. External or premium data-provider integrations are planned future work, not current implementation.
+The application remains local-first. Optional provider-backed reads are infrastructure additions and do not replace SQLite persistence or analysis workflows.
 
 ## Analysis Engines
 
@@ -138,6 +160,15 @@ Pure calculators must not read SQLite, call services, or import UI code.
 ### Performance Analytics
 
 Portfolio and strategy analytics are pure analysis engines. The current dashboard widget is read-only and expects precomputed statistics. It does not query the database or run analytics itself.
+
+### Provider-Backed Data
+
+1. A service calls `LiveDataService`.
+2. `LiveDataService` validates and normalizes the ticker.
+3. `ProviderManager` checks `CacheManager`.
+4. On cache miss, the active provider retrieves data.
+5. Successful `ProviderResult` values are cached and returned.
+6. Failed provider results pass through safely and are not cached.
 
 ## Testing Philosophy
 

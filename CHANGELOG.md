@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.0 - Beta Infrastructure
+
+### Added
+
+- Provider configuration for selecting active data providers without code changes.
+- Optional Polygon.io price-history provider using `POLYGON_API_KEY`.
+- In-memory provider cache manager with endpoint-specific TTLs.
+- Live data service for routing provider data into service workflows.
+- Automatic refresh scheduler for periodic ticker refreshes through `LiveDataService`.
+
+### Stabilized
+
+- Provider failures return structured `ProviderResult` objects.
+- Provider tests use mocks and fake services; no paid API calls are required.
+- Documentation updated for the v3.0 Beta architecture.
+
+## v2.9 - Data Provider Abstraction
+
+### Added
+
+- Provider interfaces and `ProviderResult`.
+- Local provider for database-backed reads.
+- Provider manager for registration, provider selection, and request delegation.
+- Safe provider config defaults for missing or malformed configuration.
+
 ## v2.8 - Stabilization / Performance / Validation
 
 ### Status

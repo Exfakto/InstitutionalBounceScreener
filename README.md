@@ -23,6 +23,8 @@ Completed platform areas include:
 - Paper trade journal persistence, service, controller, and UI panel.
 - Portfolio statistics and strategy analytics engines.
 - Read-only performance dashboard widget for precomputed analytics.
+- Provider abstraction with local and optional Polygon.io price-history providers.
+- Provider configuration, in-memory provider caching, live data service, and automatic refresh scheduler.
 
 ## Architecture
 
@@ -32,11 +34,12 @@ The application follows a layered local architecture:
 UI widgets
 Controllers
 Services
+Providers
 DatabaseManager
 SQLite
 ```
 
-Pure calculation modules live in `analysis/`, `support/`, `bounce/`, and `indicators/`. Widgets display supplied data and emit user actions; they do not perform database reads, service calls, or analytics calculations.
+Pure calculation modules live in `analysis/`, `support/`, `bounce/`, and `indicators/`. Provider infrastructure lives in `providers/` and feeds service workflows without changing analysis engines or UI code. Widgets display supplied data and emit user actions; they do not perform database reads, service calls, or analytics calculations.
 
 ## Technology
 
@@ -59,17 +62,18 @@ Completed:
 - v2.5 Trade Card
 - v2.6 Watchlist
 - v2.7 Portfolio Intelligence
+- v2.8 Stabilization / Performance / Validation
+- v2.9 Data Provider Abstraction
 
 Current focus:
 
-- v2.8 Stabilization / Performance / Validation
+- v3.0 Beta
 
 Planned:
 
-- v2.9 Data Provider Abstraction
-- v3.0 Beta
+- Post-beta packaging, validation, and operational hardening
 
-Future premium data integrations are planned only; they are not currently implemented.
+Polygon.io price history is available as an optional configured provider. Additional premium data endpoints and providers remain planned unless implemented in source.
 
 ## Testing
 

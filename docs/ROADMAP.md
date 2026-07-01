@@ -76,48 +76,54 @@ Completed:
 - Strategy analytics engine.
 - Read-only performance dashboard widget.
 
-## Current Track
-
 ### v2.8 Stabilization / Performance / Validation
 
-Goals:
+Completed:
 
 - Stabilize the expanded workstation experience.
 - Validate key workflows across dashboard, chart, watchlist, journal, and analytics areas.
-- Review performance of data-heavy workflows.
 - Keep documentation, tests, and architecture boundaries current.
-- Avoid feature expansion that belongs in later milestones.
-
-Planned work:
-
-- Workflow validation.
-- Performance profiling where needed.
-- Error-state and empty-state review.
-- Documentation polish.
-- Release readiness checklist.
-
-## Next Planned Work
 
 ### v2.9 Data Provider Abstraction
 
-Planned:
+Completed:
 
-- Abstract market and reference data provider boundaries.
-- Keep yfinance/local CSV behavior working.
-- Prepare optional provider adapters.
-- Clearly separate free/local data paths from future premium integrations.
+- Provider interfaces and `ProviderResult`.
+- Local provider.
+- Provider manager.
+- Provider configuration.
+- Optional Polygon.io price-history provider.
 
-Premium data integrations are planned only and are not implemented.
+## Current Track
 
 ### v3.0 Beta
 
+Goals:
+
+- Stabilize provider-backed infrastructure.
+- Keep live data service and refresh scheduling independent from UI code.
+- Preserve local-first SQLite workflows.
+- Validate release readiness through full tests and compile checks.
+
+Completed:
+
+- Provider cache manager.
+- Live data service.
+- Automatic refresh scheduler.
+- Release stabilization documentation pass.
+
+## Next Planned Work
+
+### Post-Beta Release Readiness
+
 Planned:
 
-- Beta packaging and release readiness.
+- Packaging and installer review.
 - Broader workflow validation.
-- Usability polish.
-- Configuration and setup review.
+- Operational setup documentation.
 - Known limitations and operational documentation.
+
+Additional premium data integrations are planned only when explicitly implemented in source.
 
 ## Ongoing Principles
 

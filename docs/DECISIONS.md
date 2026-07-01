@@ -115,12 +115,23 @@ Reason:
 - Keeps all SQL centralized in `DatabaseManager`.
 - Provides durable workflow state without introducing external infrastructure.
 
-## 2026-07-01 - Premium Data Provider Integrations Are Planned Only
+## 2026-07-01 - Provider Abstraction Is the Boundary for External Data
 
-Future data-provider abstraction and premium data integrations are roadmap items, not implemented features.
+The application uses provider interfaces, `ProviderResult`, `ProviderManager`, `ProviderConfig`, and `CacheManager` to isolate local and external data reads from services, analysis engines, and UI widgets.
 
 Reason:
 
-- Current workflows depend on local SQLite, yfinance, and CSV inputs.
-- Provider abstraction should be introduced deliberately so existing local workflows remain stable.
-- Documentation should not imply unavailable integrations are production-ready.
+- Local SQLite workflows remain the default and continue to work without API keys.
+- Optional external data access can be added behind providers without rewriting analysis or UI code.
+- Successful provider responses can be cached to reduce repeated provider calls.
+- Provider failures stay structured and safe for services to pass through.
+
+## 2026-07-01 - Polygon Is Optional Price History Only
+
+`PolygonProvider` supports daily OHLCV price history when `POLYGON_API_KEY` is available and selected through provider configuration. Other Polygon endpoints return not-yet-implemented `ProviderResult` failures.
+
+Reason:
+
+- Keeps secrets out of source and configuration files.
+- Avoids implying unsupported provider endpoints are production-ready.
+- Allows live price-history validation without changing scoring formulas, persistence, or UI behavior.

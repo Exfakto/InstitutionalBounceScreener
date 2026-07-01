@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import time
+from typing import Any, Callable
 
 
 @dataclass(frozen=True)
 class CacheEntry:
+    """Single in-memory cache entry with an absolute insertion timestamp."""
+
     data: object
     timestamp: float
     ttl_seconds: int
@@ -14,13 +17,22 @@ class CacheEntry:
 class CacheManager:
     """
     In-memory provider response cache.
+
+    Cache keys are normalized by provider, endpoint, ticker, and request
+    parameters so provider responses remain isolated from one another.
     """
 
-    def __init__(self, clock=None):
+    def __init__(self, clock: Callable[[], float] | None = None) -> None:
         self.clock = clock or time
         self._entries = {}
 
-    def get(self, provider, endpoint, ticker=None, parameters=None):
+    def get(
+        self,
+        provider: str,
+        endpoint: str,
+        ticker: str | None = None,
+        parameters: dict | None = None,
+    ) -> object | None:
         key = self.make_key(provider, endpoint, ticker, parameters)
         entry = self._entries.get(key)
 
@@ -35,13 +47,13 @@ class CacheManager:
 
     def put(
         self,
-        provider,
-        endpoint,
-        ticker=None,
-        parameters=None,
-        data=None,
-        ttl_seconds=0,
-    ):
+        provider: str,
+        endpoint: str,
+        ticker: str | None = None,
+        parameters: dict | None = None,
+        data: object = None,
+        ttl_seconds: int = 0,
+    ) -> object:
         key = self.make_key(provider, endpoint, ticker, parameters)
         self._entries[key] = CacheEntry(
             data=data,
@@ -50,7 +62,13 @@ class CacheManager:
         )
         return data
 
-    def invalidate(self, provider, endpoint=None, ticker=None, parameters=None):
+    def invalidate(
+        self,
+        provider: str,
+        endpoint: str | None = None,
+        ticker: str | None = None,
+        parameters: dict | None = None,
+    ) -> bool:
         if endpoint is not None:
             key = self.make_key(provider, endpoint, ticker, parameters)
             return self._entries.pop(key, None) is not None
@@ -65,20 +83,26 @@ class CacheManager:
 
         return removed
 
-    def invalidate_provider(self, provider):
+    def invalidate_provider(self, provider: str) -> bool:
         return self.invalidate(provider)
 
-    def clear(self):
+    def clear(self) -> None:
         self._entries.clear()
 
-    def is_expired(self, entry):
+    def is_expired(self, entry: CacheEntry) -> bool:
         if entry.ttl_seconds <= 0:
             return True
 
         return (float(self.clock()) - entry.timestamp) >= entry.ttl_seconds
 
     @classmethod
-    def make_key(cls, provider, endpoint, ticker=None, parameters=None):
+    def make_key(
+        cls,
+        provider: str,
+        endpoint: str,
+        ticker: str | None = None,
+        parameters: dict | None = None,
+    ) -> tuple:
         return (
             cls.normalize(provider),
             cls.normalize(endpoint),
@@ -87,7 +111,7 @@ class CacheManager:
         )
 
     @classmethod
-    def normalize_parameters(cls, parameters):
+    def normalize_parameters(cls, parameters: dict | None) -> tuple:
         if not parameters:
             return ()
 
@@ -100,14 +124,14 @@ class CacheManager:
         )
 
     @staticmethod
-    def normalize_parameter_value(value):
+    def normalize_parameter_value(value: Any) -> object:
         if isinstance(value, (list, tuple)):
             return tuple(str(item) for item in value)
 
         return str(value)
 
     @staticmethod
-    def normalize(value):
+    def normalize(value: object) -> str | None:
         if value is None:
             return None
 

@@ -8,10 +8,10 @@ The app combines market data, technical indicators, support-zone detection, boun
 
 ## Current Status
 
-- Current active track: v2.8 Stabilization / Performance / Validation.
-- Completed through: v2.7 Portfolio Intelligence.
-- Current architecture: local-first SQLite, layered GUI/controller/service/database workflow, and pure analysis engines.
-- Future premium or alternate data-provider integrations are planned, not implemented.
+- Current active track: v3.0 Beta stabilization.
+- Completed through: v2.9 Data Provider Abstraction and v3.0 Beta infrastructure.
+- Current architecture: local-first SQLite, layered GUI/controller/service/provider/database workflow, and pure analysis engines.
+- Optional Polygon.io price history exists behind provider configuration. Additional premium provider endpoints remain planned unless implemented in source.
 
 ## Repository Structure
 
@@ -21,6 +21,7 @@ The app combines market data, technical indicators, support-zone detection, boun
 - `ui/widgets/` - reusable dashboard, decision, trade, watchlist, journal, and performance widgets.
 - `controllers/` - GUI-to-service coordination.
 - `services/` - business workflows and persistence orchestration.
+- `providers/` - provider interfaces, local and optional live providers, provider manager, configuration, and cache.
 - `database/` - SQLite schema and `DatabaseManager`.
 - `market/` - universe loading and market data download helpers.
 - `indicators/` - indicator calculation framework and SMA implementation.
@@ -47,7 +48,11 @@ Controllers expose GUI-safe workflows and delegate to services. Implemented cont
 
 ### Services
 
-Services own workflow orchestration for market data, indicators, support detection, bounce validation, scoring context, composite intelligence, chart data, watchlist persistence, and trade journal persistence.
+Services own workflow orchestration for market data, indicators, support detection, bounce validation, scoring context, composite intelligence, chart data, watchlist persistence, trade journal persistence, live provider data access, and scheduled refresh.
+
+### Providers
+
+Providers expose a consistent read-only data access boundary through `ProviderResult`. `ProviderManager` selects the active provider, `ProviderConfig` loads safe configuration defaults, and `CacheManager` stores successful responses in memory. `LocalProvider` remains the default. `PolygonProvider` currently supports daily OHLCV price history only.
 
 ### Database
 
@@ -67,22 +72,23 @@ The analysis layer includes score providers, composite scoring, composite intell
 - v2.5 Trade Card.
 - v2.6 Watchlist.
 - v2.7 Portfolio Intelligence.
+- v2.8 Stabilization / Performance / Validation.
+- v2.9 Data Provider Abstraction.
 
 ## Current Focus
 
-v2.8 Stabilization / Performance / Validation:
+v3.0 Beta Stabilization:
 
-- Review architecture boundaries.
-- Validate workflows end to end.
-- Improve performance where bottlenecks are found.
-- Keep documentation aligned with implemented behavior.
-- Avoid broad redesigns unless explicitly planned.
+- Keep architecture boundaries stable.
+- Validate provider-backed workflows without changing analysis or UI behavior.
+- Keep configuration, cache, live data, and refresh scheduling production-ready.
+- Maintain documentation and tests with each release-oriented change.
 
 ## Planned
 
-- v2.9 Data Provider Abstraction.
-- v3.0 Beta.
-- Premium data integrations remain future planned work only.
+- Post-beta packaging and release validation.
+- Additional provider endpoints where explicitly implemented.
+- Premium provider integrations beyond current Polygon price history remain future planned work.
 
 ## Dependencies
 
@@ -103,5 +109,5 @@ For code changes, run:
 
 ```powershell
 .venv\Scripts\python.exe -m pytest
-.venv\Scripts\python.exe -m compileall app.py main.py controllers services support bounce analysis fundamentals institutional earnings database ui market tests
+.venv\Scripts\python.exe -m compileall app.py main.py controllers services support bounce analysis fundamentals institutional earnings database ui market providers tests
 ```
