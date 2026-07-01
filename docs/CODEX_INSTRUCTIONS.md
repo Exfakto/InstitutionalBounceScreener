@@ -56,8 +56,8 @@ Rules:
 Before completion of code changes, run:
 
 ```powershell
-.venv\Scripts\python.exe -m compileall app.py main.py controllers services support bounce database ui analysis tests
 .venv\Scripts\python.exe -m pytest
+.venv\Scripts\python.exe -m compileall app.py main.py controllers services support bounce analysis fundamentals institutional earnings database ui market tests
 ```
 
 If a task only changes documentation, tests are not required unless documentation tooling exists.

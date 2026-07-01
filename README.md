@@ -1,62 +1,76 @@
 # Institutional Bounce Screener
 
-A professional desktop application for identifying high-probability institutional bounce opportunities in U.S. stocks.
+A local-first PySide6 desktop workstation for identifying, reviewing, planning, and tracking institutional bounce opportunities in U.S. stocks.
 
 ## Overview
 
-The Institutional Bounce Screener analyzes NYSE and NASDAQ stocks using:
+Institutional Bounce Screener combines market data, technical indicators, support-zone analysis, bounce validation, fundamentals, institutional metrics, candidate scoring, decision support, trade planning, watchlists, paper trade journaling, and portfolio analytics.
 
-- Fundamental analysis
-- Technical trend analysis
-- Relative strength
-- Proprietary institutional support detection
-- Bounce quality scoring
+The project is designed as a professional research tool, not an execution platform. It uses SQLite as the local persistent store and keeps analytics engines testable outside the GUI.
 
-The goal is to identify stocks that repeatedly bounce from institutional support levels while maintaining strong fundamentals.
+## Current Platform
 
----
+Completed platform areas include:
 
-## Features
+- Professional dashboard shell with dark institutional styling.
+- Candidate ranking using Gen 2 Institutional Bounce Intelligence with legacy score fallback.
+- Price chart workspace with support and bounce context.
+- Research Preview decision dashboard.
+- Opportunity rating, institutional checklist, and trade thesis engines.
+- Trade planning engines for entry zone, stop loss, targets, risk/reward, and position size.
+- Read-only Trade Card widget and dashboard integration.
+- Local watchlist persistence, service, controller, and UI panel.
+- Paper trade journal persistence, service, controller, and UI panel.
+- Portfolio statistics and strategy analytics engines.
+- Read-only performance dashboard widget for precomputed analytics.
 
-### Current
+## Architecture
 
-- Desktop application (PySide6)
-- Market data download
-- Save historical prices to CSV
-- SQLite database storage
-- Technical indicator engine foundation
-- SMA20, SMA50, and SMA200 calculations
-- Dashboard workflow for calculating indicators
-- Support Detection Engine foundation
-- Dashboard workflow for detecting support zones
-- Bounce Validation Engine foundation
-- Dashboard workflow for validating historical bounces
-- Git version control
+The application follows a layered local architecture:
 
-### Planned
+```text
+UI widgets
+Controllers
+Services
+DatabaseManager
+SQLite
+```
 
-- Automatic market updates
-- Institutional Support Engine
-- Ranking engine
-- Professional dashboard
-- Chart viewer
-- Trade scoring
-- Backtesting
-
----
+Pure calculation modules live in `analysis/`, `support/`, `bounce/`, and `indicators/`. Widgets display supplied data and emit user actions; they do not perform database reads, service calls, or analytics calculations.
 
 ## Technology
 
 - Python 3.13
 - PySide6
+- pandas
 - yfinance
-- Pandas
 - SQLite
+- pytest
 
----
+## Milestone Status
 
-## Project Status
+Completed:
 
-Version 1.0-RC2
+- v2.0 Professional Dashboard
+- v2.1 Intelligence Layer
+- v2.2 Chart Workspace
+- v2.3 Decision Engine
+- v2.4 Trade Planning Suite
+- v2.5 Trade Card
+- v2.6 Watchlist
+- v2.7 Portfolio Intelligence
 
-Bounce Validation Engine release candidate.
+Current focus:
+
+- v2.8 Stabilization / Performance / Validation
+
+Planned:
+
+- v2.9 Data Provider Abstraction
+- v3.0 Beta
+
+Future premium data integrations are planned only; they are not currently implemented.
+
+## Testing
+
+The test suite uses `pytest` and covers pure analytics, persistence, service workflows, controller coordination, and stable UI widgets. Before completing code changes, run the full test suite and compile check.

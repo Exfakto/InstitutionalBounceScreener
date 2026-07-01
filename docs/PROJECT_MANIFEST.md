@@ -2,161 +2,106 @@
 
 ## Purpose
 
-Institutional Bounce Screener is a local desktop research application for finding U.S. stocks that may be strong institutional bounce candidates.
+Institutional Bounce Screener is a local desktop research workstation for identifying, evaluating, planning, and tracking institutional bounce opportunities in U.S. stocks.
 
-The app combines market data, technical indicators, support-zone detection, bounce validation, fundamentals, institutional metrics, and candidate scoring into a PySide6 workstation.
+The app combines market data, technical indicators, support-zone detection, bounce validation, fundamentals, institutional metrics, candidate scoring, decision support, trade planning, watchlists, paper trade journaling, and analytics into a PySide6 application backed by SQLite.
 
 ## Current Status
 
-- Current active track: v2.1 Intelligence Layer Stabilization, in progress.
-- Latest completed UI work: reusable `CandidateTable` and compact `KpiStrip`.
-- Core analytics foundation: v1.0 support and bounce engines completed.
-- Candidate scoring foundation: v1.1 analysis pipeline and score providers completed.
-- Gen 2 Institutional Bounce Intelligence Score is wired into screener ranking with legacy composite fallback.
-- Last known full test status: passing with 228 tests.
+- Current active track: v2.8 Stabilization / Performance / Validation.
+- Completed through: v2.7 Portfolio Intelligence.
+- Current architecture: local-first SQLite, layered GUI/controller/service/database workflow, and pure analysis engines.
+- Future premium or alternate data-provider integrations are planned, not implemented.
 
 ## Repository Structure
 
 - `app.py` - primary application entry point.
 - `main.py` - compatibility entry point.
 - `ui/` - PySide6 user interface.
-- `ui/widgets/` - reusable dashboard widgets.
+- `ui/widgets/` - reusable dashboard, decision, trade, watchlist, journal, and performance widgets.
 - `controllers/` - GUI-to-service coordination.
-- `services/` - workflow orchestration and business use cases.
+- `services/` - business workflows and persistence orchestration.
 - `database/` - SQLite schema and `DatabaseManager`.
 - `market/` - universe loading and market data download helpers.
-- `indicators/` - indicator calculation framework and SMA source implementation.
+- `indicators/` - indicator calculation framework and SMA implementation.
 - `support/` - swing-low detection, support-zone clustering, and support scoring.
 - `bounce/` - historical bounce validation logic.
-- `analysis/` - scoring framework, score providers, candidate model, and pipeline.
+- `analysis/` - scoring, decision engines, trade planning, portfolio statistics, and strategy analytics.
 - `fundamentals/` - CSV importer for fundamental metrics.
 - `institutional/` - CSV importer for institutional metrics.
+- `earnings/` - earnings import and scoring support.
 - `config/` - settings, logging, and scoring weights.
-- `data/` - local CSV inputs, sample price data, and generated local data.
-- `tests/` - unit tests for analytics, persistence, services, controllers, and stable UI widgets.
-- `docs/` - project governance and planning documents.
+- `data/` - local input and generated local data.
+- `tests/` - tests for analytics, persistence, services, controllers, and stable UI widgets.
+- `docs/` - architecture, roadmap, decisions, and project governance.
 
 ## Major Modules
 
 ### UI
 
-- `ui/main_window.py` builds the current dashboard and wires user actions to controllers.
-- `ui/stock_detail_window.py` displays read-only candidate detail data.
-- `ui/widgets/candidate_table.py` displays ranked candidates.
-- `ui/widgets/kpi_strip.py` displays compact KPI cards.
-- `ui/widgets/statistics_card.py`, `activity_log.py`, and `progress_panel.py` provide smaller reusable controls.
-- `ui/theme.py` currently contains early theme constants; the full dark theme is planned.
+`ui/main_window.py` composes the desktop workspace and wires widget signals to controllers. Reusable widgets include candidate ranking, KPI summary, operations toolbar, activity panel, chart workspace, research preview, trade card, watchlist panel, trade journal panel, and performance dashboard.
 
 ### Controllers
 
-Controllers expose GUI-safe methods and delegate work to services or analysis orchestration:
-
-- `market_controller.py`
-- `indicator_controller.py`
-- `support_controller.py`
-- `bounce_controller.py`
-- `scoring_controller.py`
-- `application_controller.py`
+Controllers expose GUI-safe workflows and delegate to services. Implemented controller areas include market, indicators, support, bounce, scoring, chart data, watchlist, and trade journal.
 
 ### Services
 
-Services own workflows:
-
-- Market universe import and price download.
-- Indicator calculation and persistence.
-- Support detection and persistence.
-- Bounce validation and persistence.
-- Candidate scoring context assembly and read-only detail data.
-- Gen 2 composite intelligence orchestration from existing analytics components.
+Services own workflow orchestration for market data, indicators, support detection, bounce validation, scoring context, composite intelligence, chart data, watchlist persistence, and trade journal persistence.
 
 ### Database
 
-SQLite is the local source of truth. `DatabaseManager` owns SQL access. Schema tables include:
-
-- `stocks`
-- `price_history`
-- `technical_indicators`
-- `support_levels`
-- `bounce_validations`
-- `fundamentals`
-- `institutional_metrics`
+SQLite is the local source of truth. `DatabaseManager` owns all SQL. Current tables include stocks, price history, technical indicators, support levels, bounce validations, fundamentals, institutional metrics, earnings, watchlist, and paper trades.
 
 ### Analysis
 
-The scoring layer includes:
+The analysis layer includes score providers, composite scoring, composite intelligence, opportunity rating, institutional checklist, trade thesis, trade planning engines, portfolio statistics, and strategy analytics. These engines are pure and must not depend on UI, services, or database access.
 
-- `BaseScore`
-- `ScoreResult`
-- `ScoringEngine`
-- `QualityScore`
-- `InstitutionalScore`
-- `TechnicalScore`
-- `SupportScore`
-- `BounceScore`
-- `CompositeScore`
-- `CompositeIntelligenceCalculator`
-- `CandidateScore`
-- `AnalysisPipeline`
+## Completed Milestones
 
-## Completed Modules
+- v2.0 Professional Dashboard.
+- v2.1 Intelligence Layer.
+- v2.2 Chart Workspace.
+- v2.3 Decision Engine.
+- v2.4 Trade Planning Suite.
+- v2.5 Trade Card.
+- v2.6 Watchlist.
+- v2.7 Portfolio Intelligence.
 
-- PySide6 desktop shell.
-- Market universe import.
-- Market price download.
-- SQLite persistence layer.
-- SMA indicator workflow.
-- Support Detection Engine.
-- Bounce Validation Engine.
-- Fundamentals and institutional CSV importer foundations.
-- Candidate scoring providers and composite score.
-- Gen 2 Institutional Bounce Intelligence Score and screener ranking integration.
-- Analysis pipeline for ranked candidates.
-- Run Screener dashboard workflow.
-- Read-only stock detail window.
-- Candidate table widget extraction.
-- Compact KPI strip extraction.
+## Current Focus
 
-## In Progress
+v2.8 Stabilization / Performance / Validation:
 
-- v2.1 Intelligence Layer Stabilization.
-- Documentation and label clarity for Gen 2 scoring.
-- Test coverage around Gen 2 fallback and display compatibility.
+- Review architecture boundaries.
+- Validate workflows end to end.
+- Improve performance where bottlenecks are found.
+- Keep documentation aligned with implemented behavior.
+- Avoid broad redesigns unless explicitly planned.
 
 ## Planned
 
-- v2.1 chart and research workspace.
-- v2.2 deeper institutional intelligence.
-- v3.0 strategy lab and backtesting.
-- Expanded sourced implementations for technical indicators beyond current SMA source, where needed.
+- v2.9 Data Provider Abstraction.
+- v3.0 Beta.
+- Premium data integrations remain future planned work only.
 
 ## Dependencies
 
-Runtime dependencies are listed in `requirements.txt`:
-
-- PySide6
-- yfinance
-- pandas
-
-The project also uses Python standard library modules including `sqlite3`, `dataclasses`, `datetime`, `logging`, and `pathlib`.
+Runtime dependencies are listed in `requirements.txt` and include PySide6, pandas, and yfinance. The project also uses SQLite through Python's standard `sqlite3` module.
 
 ## Test Status
 
-The test suite is based on `pytest`. Current coverage includes:
+The suite uses `pytest` and covers:
 
-- Indicator calculations.
-- Support detection calculations.
-- Bounce validation calculations.
+- Pure analysis engines.
 - Database persistence methods.
-- Service workflows.
-- Scoring providers and scoring engine.
-- Analysis pipeline.
-- Gen 2 intelligence scoring and fallback behavior.
-- Controller behavior where practical.
-- Stable UI widgets such as `CandidateTable` and `KpiStrip`.
+- Services.
+- Controllers.
+- Stable UI widgets.
+- MainWindow integration paths where practical.
 
-Before completing code changes, run:
+For code changes, run:
 
 ```powershell
-.venv\Scripts\python.exe -m compileall app.py main.py controllers services support bounce database ui analysis tests
 .venv\Scripts\python.exe -m pytest
+.venv\Scripts\python.exe -m compileall app.py main.py controllers services support bounce analysis fundamentals institutional earnings database ui market tests
 ```

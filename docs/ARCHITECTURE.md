@@ -2,74 +2,92 @@
 
 ## Overview
 
-Institutional Bounce Screener is a local PySide6 desktop application backed by SQLite. It imports market data, calculates analytics, validates support-zone bounces, scores candidates, and displays ranked results in a GUI.
+Institutional Bounce Screener is a local-first PySide6 desktop application backed by SQLite. It imports market data, calculates analytics, validates support-zone bounces, scores candidates, supports institutional decision review, plans trades, tracks watchlist and paper trade records, and displays portfolio analytics.
 
-The design is intentionally layered so analytics and persistence remain testable outside the GUI.
+The design is intentionally layered so analytics, persistence, services, and UI widgets remain independently testable.
 
 ## Layered Architecture
 
 ```text
-GUI
+UI widgets
 Controllers
 Services
 DatabaseManager
 SQLite
 ```
 
-### GUI
+Pure analytics live beside this workflow and are called by services or pipelines when orchestration is required.
 
-The GUI lives in `ui/`.
+## UI Layer
+
+The UI lives in `ui/` and reusable widgets live in `ui/widgets/`.
 
 Responsibilities:
 
-- Build screens and widgets.
-- Display statistics, candidate rows, status, progress, logs, and read-only details.
-- Forward user actions to controllers.
-- Avoid calculations, SQL, market downloads, and persistence logic.
+- Display supplied data.
+- Emit user actions.
+- Keep `MainWindow` focused on composition and signal wiring.
+- Avoid SQL, service calls from widgets, market downloads, scoring formulas, and analytics calculations.
 
-Current UI modules:
+Current major widgets include:
 
-- `main_window.py` - dashboard composition and signal wiring.
-- `stock_detail_window.py` - read-only detail window.
-- `widgets/candidate_table.py` - ranked candidate table.
-- `widgets/kpi_strip.py` - compact KPI cards.
-- `widgets/statistics_card.py` - reusable statistic card.
-- `widgets/activity_log.py` - read-only activity log.
-- `widgets/progress_panel.py` - status and progress bar.
-- `theme.py` - early theme constants.
+- `CandidateTable`
+- `KpiStrip`
+- `OperationsToolbar`
+- `HeaderBar`
+- `ActivityPanel`
+- `PriceChart`
+- `ResearchPreview`
+- `TradeCard`
+- `WatchlistPanel`
+- `TradeJournalPanel`
+- `PerformanceDashboard`
 
-### Controllers
+## Controller Layer
 
 Controllers live in `controllers/`.
 
 Responsibilities:
 
-- Expose GUI-safe methods.
-- Own or call services and orchestration objects.
-- Keep scoring, calculations, and persistence out of the GUI.
+- Provide GUI-safe methods.
+- Own service instances.
+- Coordinate workflows without direct SQL or analytics formulas.
 
-### Services
+Current controller areas include market data, indicators, support detection, bounce validation, scoring, chart data, watchlist, and trade journal workflows.
+
+## Service Layer
 
 Services live in `services/`.
 
 Responsibilities:
 
-- Run workflows such as price download, indicator calculation, support detection, bounce validation, and candidate scoring context assembly.
-- Coordinate calculators and database reads/writes.
-- Return structured summaries to controllers and the GUI.
+- Own business workflows.
+- Coordinate database reads/writes through `DatabaseManager`.
+- Call pure calculators when workflow orchestration is needed.
+- Return structured results to controllers.
 
-### DatabaseManager
+Service areas include market workflows, indicator calculation, support detection, bounce validation, scoring context assembly, composite intelligence, chart data, watchlist persistence, and trade journal persistence.
 
-Database code lives in `database/`.
+## Database Layer
 
-Responsibilities:
+Database code lives in `database/`. `DatabaseManager` owns all SQL and uses SQLite as the local persistent store.
 
-- Create and manage SQLite schema.
-- Own all SQL.
-- Use parameterized SQL.
-- Return simple data structures or DataFrames to services.
+Current schema areas include:
 
-### Domain Calculators
+- `stocks`
+- `price_history`
+- `technical_indicators`
+- `support_levels`
+- `bounce_validations`
+- `fundamentals`
+- `institutional_metrics`
+- `earnings`
+- `watchlist`
+- `paper_trades`
+
+The application remains local-first. External or premium data-provider integrations are planned future work, not current implementation.
+
+## Analysis Engines
 
 Pure calculation modules live in:
 
@@ -78,110 +96,68 @@ Pure calculation modules live in:
 - `bounce/`
 - `analysis/`
 
-These modules should not read or write SQLite and should not call GUI code.
+Implemented analysis areas include:
 
-## Data Flow
+- Technical and support scoring.
+- Bounce validation metrics.
+- Candidate scoring and composite intelligence.
+- Opportunity rating.
+- Institutional checklist.
+- Trade thesis generation.
+- Entry zone, stop loss, target projection, risk/reward, and position sizing.
+- Portfolio statistics.
+- Strategy analytics.
 
-### Market Data
+Pure calculators must not read SQLite, call services, or import UI code.
 
-1. GUI action calls `MarketController`.
-2. Controller calls market service workflow.
-3. Market helpers load universe or download prices.
-4. `DatabaseManager` persists stocks and price history.
-5. GUI refreshes KPI statistics.
+## Primary Data Flow
 
-### Indicators
+### Screening
 
-1. GUI action calls `IndicatorController`.
-2. Controller calls `IndicatorService`.
-3. Service reads price history from SQLite.
-4. Indicator calculators produce DataFrames.
-5. Service persists rows through `DatabaseManager`.
-6. GUI refreshes KPI statistics and logs a summary.
+1. UI action calls `ScoringController`.
+2. Controller runs `AnalysisPipeline`.
+3. Pipeline and scoring service build read-only contexts from existing SQLite data.
+4. Analysis providers calculate score results.
+5. Composite intelligence and decision-support engines enrich `CandidateScore`.
+6. UI widgets display ranked candidates and read-only decision details.
 
-### Support Detection
+### Chart Workspace
 
-1. GUI action calls `SupportController`.
-2. Controller calls `SupportDetectionService`.
-3. Service reads price history.
-4. Swing lows are detected and clustered into support zones.
-5. Strength and distance metrics are calculated.
-6. Zones are saved through `DatabaseManager`.
+1. Candidate selection triggers chart update in `MainWindow`.
+2. `ChartController` retrieves chart data through its service.
+3. `PriceChart` renders supplied price, support, and bounce context.
 
-### Bounce Validation
+### Watchlist and Journal
 
-1. GUI action calls `BounceController`.
-2. Controller calls `BounceValidationService`.
-3. Service reads support zones and price history.
-4. `BounceValidator` validates historical touches.
-5. Metrics are saved through `DatabaseManager`.
+1. UI panels emit user actions.
+2. `MainWindow` calls the appropriate controller.
+3. Controllers delegate to services.
+4. Services persist through `DatabaseManager`.
+5. Panels refresh from supplied rows.
 
-### Candidate Scoring
+### Performance Analytics
 
-1. GUI action calls `ScoringController`.
-2. Controller owns `AnalysisPipeline`.
-3. Pipeline reads active tickers through `ScoringService`.
-4. `ScoringService` builds a read-only context from existing database metrics.
-5. Score providers calculate individual `ScoreResult` objects.
-6. `CompositeScore` calculates the legacy composite score using `legacy_weights` in `config/scoring.json`.
-7. `CompositeIntelligenceService` calculates the Gen 2 Institutional Bounce Intelligence Score from available component scores using `gen2_weights`.
-8. `CandidateScore` keeps both scores; candidate ranking and Overall displays prefer `institutional_bounce_score` when available and fall back to the legacy composite score.
-9. Pipeline returns ranked `CandidateScore` objects.
-10. GUI displays rows in `CandidateTable` without persisting Gen 2 scores.
-
-## UI Architecture
-
-`MainWindow` is being reduced to composition and signal wiring. Reusable widgets should live under `ui/widgets/`.
-
-Current extracted widgets:
-
-- `CandidateTable`
-- `KpiStrip`
-- `StatisticsCard`
-- `ActivityLog`
-- `ProgressPanel`
-
-Planned v2.0 UI components:
-
-- Operations toolbar.
-- Secondary activity/progress panel.
-- Professional dark theme.
-- Clear selected-row stock detail action.
-
-## Analysis Pipeline
-
-The analysis layer provides:
-
-- Score provider base class and result model.
-- Plugin-style score provider discovery in `ScoringEngine`.
-- Individual score providers for quality, institutional, technical, support, and bounce metrics.
-- `CompositeScore` weighted by `legacy_weights` in `config/scoring.json`.
-- `CompositeIntelligenceCalculator` weighted by `gen2_weights` in `config/scoring.json`.
-- `CandidateScore` value object.
-- `AnalysisPipeline` to run scoring across active tickers and return ranked candidates.
-
-Score providers must remain pure and must tolerate missing data by returning safe low or neutral results with warnings.
-Gen 2 intelligence calculation must tolerate missing optional components and leave the legacy composite score available for fallback and backward compatibility.
+Portfolio and strategy analytics are pure analysis engines. The current dashboard widget is read-only and expects precomputed statistics. It does not query the database or run analytics itself.
 
 ## Testing Philosophy
 
-Tests should focus on behavior and architecture boundaries:
+Tests focus on behavior and architecture boundaries:
 
 - Pure calculators get direct unit tests.
 - Database methods get persistence tests.
 - Services get workflow tests with controlled data.
-- Controllers get thin coordination tests where practical.
-- UI tests should cover stable reusable widgets, not brittle visual details.
+- Controllers get delegation and coordination tests.
+- UI tests cover stable reusable widgets without relying on fragile visual details.
 
-Code changes should compile and pass the full test suite before completion.
+Before completing code changes, run the full test suite and compile check.
 
 ## Architectural Rules
 
-- GUI must not contain analytics logic.
-- GUI must not read or write the database.
-- Controllers must not calculate scores or indicators.
-- Services may orchestrate workflows but should delegate persistence to `DatabaseManager`.
+- UI widgets must not contain analytics logic.
+- UI widgets must not read or write the database.
+- Controllers coordinate; they do not calculate.
+- Services own business workflows and delegate SQL to `DatabaseManager`.
 - SQL belongs only in `DatabaseManager`.
-- Domain calculators must stay pure.
+- Pure analysis engines must stay free of database, service, and UI dependencies.
 - Missing optional data must not crash workflows.
-- Future modules must be clearly marked planned until source files exist.
+- Planned integrations must remain clearly marked as planned until implemented.

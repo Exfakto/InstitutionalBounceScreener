@@ -84,3 +84,43 @@ Reason:
 - Legacy composite scoring remains useful for backward compatibility and safe fallback.
 - Missing optional Gen 2 components should reduce confidence or produce warnings, not crash the screener.
 - Gen 2 scores are read-only runtime outputs for now; no database persistence or schema changes are introduced.
+
+## 2026-07-01 - Decision and Trade Planning Engines Remain Pure
+
+Opportunity rating, institutional checklist, trade thesis, entry zone, stop loss, target projection, risk/reward, position sizing, portfolio statistics, and strategy analytics are implemented as pure analysis engines.
+
+Reason:
+
+- Keeps decision support deterministic and testable.
+- Prevents database, service, and UI dependencies from entering calculation code.
+- Allows dashboards and controllers to display or coordinate results without recalculating inside widgets.
+
+## 2026-07-01 - Research, Trade, Journal, and Performance Widgets Are Passive
+
+Research Preview, Trade Card, Watchlist Panel, Trade Journal Panel, and Performance Dashboard are UI widgets that render supplied data and emit user actions.
+
+Reason:
+
+- Preserves the boundary that widgets do not perform persistence, service calls, or business calculations.
+- Keeps `MainWindow` responsible for composition and signal wiring.
+- Supports stable UI tests that check behavior without coupling to implementation details.
+
+## 2026-07-01 - Watchlist and Paper Trades Use Local SQLite
+
+Watchlist items and paper trade journal entries are stored locally in SQLite through `DatabaseManager`, with services and controllers layered above.
+
+Reason:
+
+- Maintains the local-first desktop model.
+- Keeps all SQL centralized in `DatabaseManager`.
+- Provides durable workflow state without introducing external infrastructure.
+
+## 2026-07-01 - Premium Data Provider Integrations Are Planned Only
+
+Future data-provider abstraction and premium data integrations are roadmap items, not implemented features.
+
+Reason:
+
+- Current workflows depend on local SQLite, yfinance, and CSV inputs.
+- Provider abstraction should be introduced deliberately so existing local workflows remain stable.
+- Documentation should not imply unavailable integrations are production-ready.
