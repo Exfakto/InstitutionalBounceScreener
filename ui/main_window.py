@@ -27,6 +27,7 @@ from ui.widgets.research_preview import ResearchPreview
 from ui.widgets.trade_card import TradeCard
 from ui.widgets.watchlist_panel import WatchlistPanel
 from ui.widgets.trade_journal_panel import TradeJournalPanel
+from ui.widgets.performance_dashboard import PerformanceDashboard
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -137,6 +138,7 @@ class MainWindow(QMainWindow):
             self.delete_selected_trade
         )
         self.trade_journal_panel.refresh_requested.connect(self.refresh_trade_journal)
+        self.performance_dashboard = PerformanceDashboard()
 
         left_workspace.addWidget(self.candidates_table, stretch=3)
         left_workspace.addWidget(self.price_chart, stretch=2)
@@ -148,6 +150,7 @@ class MainWindow(QMainWindow):
         decision_workspace.addWidget(self.trade_card, stretch=2)
         decision_workspace.addWidget(self.watchlist_panel, stretch=2)
         decision_workspace.addWidget(self.trade_journal_panel, stretch=2)
+        decision_workspace.addWidget(self.performance_dashboard, stretch=2)
 
         workspace_layout.addLayout(left_workspace, stretch=5)
         workspace_layout.addLayout(decision_workspace, stretch=2)
