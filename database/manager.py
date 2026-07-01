@@ -7,6 +7,7 @@ from database.schema import (
     EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
     INSTITUTIONAL_METRICS_TABLE,
+    PAPER_TRADES_TABLE,
     PRICE_HISTORY_TABLE,
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
@@ -58,6 +59,7 @@ class DatabaseManager:
         self.cursor.execute(INSTITUTIONAL_METRICS_TABLE)
         self.cursor.execute(EARNINGS_TABLE)
         self.cursor.execute(WATCHLIST_TABLE)
+        self.cursor.execute(PAPER_TRADES_TABLE)
 
         self.connection.commit()
 
@@ -1122,6 +1124,312 @@ class DatabaseManager:
         return self.cursor.fetchone()[0]
 
     # ==========================================================
+    # Paper Trade Journal
+    # ==========================================================
+
+    def create_trade(
+        self,
+        ticker,
+        company_name=None,
+        entry_date=None,
+        entry_price=None,
+        stop_price=None,
+        target_price=None,
+        status="Watching",
+        shares=None,
+        risk_reward=None,
+        opportunity_rating=None,
+        confidence=None,
+        notes=None,
+    ):
+        """
+        Create a paper trade journal entry.
+        """
+
+        normalized_ticker = self._normalize_ticker(ticker)
+
+        if normalized_ticker is None:
+            return None
+
+        if not self._valid_trade_status(status or "Watching"):
+            return None
+
+        self.cursor.execute(
+            """
+            INSERT INTO paper_trades
+            (
+                ticker,
+                company_name,
+                entry_date,
+                entry_price,
+                stop_price,
+                target_price,
+                status,
+                shares,
+                risk_reward,
+                opportunity_rating,
+                confidence,
+                notes
+            )
+            VALUES
+            (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                normalized_ticker,
+                company_name,
+                self._format_date(entry_date),
+                self._sqlite_float(entry_price),
+                self._sqlite_float(stop_price),
+                self._sqlite_float(target_price),
+                status or "Watching",
+                self._sqlite_int_or_none(shares),
+                self._sqlite_float(risk_reward),
+                opportunity_rating,
+                confidence,
+                notes,
+            ),
+        )
+
+        self.connection.commit()
+
+        return self.get_trade(self.cursor.lastrowid)
+
+    def update_trade(self, trade_id, **updates):
+        """
+        Update provided fields for a paper trade.
+        """
+
+        if trade_id is None:
+            return None
+
+        allowed_fields = {
+            "ticker",
+            "company_name",
+            "entry_date",
+            "entry_price",
+            "stop_price",
+            "target_price",
+            "exit_date",
+            "exit_price",
+            "status",
+            "shares",
+            "risk_reward",
+            "opportunity_rating",
+            "confidence",
+            "notes",
+        }
+        fields = []
+        values = []
+
+        for field, value in updates.items():
+            if field not in allowed_fields or value is None:
+                continue
+
+            fields.append(f"{field} = ?")
+
+            if field == "ticker":
+                normalized_ticker = self._normalize_ticker(value)
+                if normalized_ticker is None:
+                    return None
+                values.append(normalized_ticker)
+            elif field in {"entry_date", "exit_date"}:
+                values.append(self._format_date(value))
+            elif field in {
+                "entry_price",
+                "stop_price",
+                "target_price",
+                "exit_price",
+                "risk_reward",
+            }:
+                values.append(self._sqlite_float(value))
+            elif field == "shares":
+                values.append(self._sqlite_int_or_none(value))
+            elif field == "status":
+                if not self._valid_trade_status(value):
+                    return None
+                values.append(value)
+            else:
+                values.append(value)
+
+        if not fields:
+            return self.get_trade(trade_id)
+
+        fields.append("updated_at = CURRENT_TIMESTAMP")
+        values.append(trade_id)
+
+        self.cursor.execute(
+            f"""
+            UPDATE paper_trades
+            SET {", ".join(fields)}
+            WHERE id = ?
+            """,
+            values,
+        )
+
+        self.connection.commit()
+
+        if self.cursor.rowcount == 0:
+            return None
+
+        return self.get_trade(trade_id)
+
+    def close_trade(
+        self,
+        trade_id,
+        exit_date=None,
+        exit_price=None,
+        status="Exited Win",
+        notes=None,
+    ):
+        """
+        Close a paper trade with exit information.
+        """
+
+        updates = {
+            "exit_date": exit_date,
+            "exit_price": exit_price,
+            "status": status,
+        }
+
+        if notes is not None:
+            updates["notes"] = notes
+
+        return self.update_trade(trade_id, **updates)
+
+    def delete_trade(self, trade_id):
+        """
+        Delete a paper trade by id.
+        """
+
+        if trade_id is None:
+            return False
+
+        self.cursor.execute(
+            """
+            DELETE FROM paper_trades
+            WHERE id = ?
+            """,
+            (trade_id,),
+        )
+
+        self.connection.commit()
+
+        return self.cursor.rowcount > 0
+
+    def get_trade(self, trade_id):
+        """
+        Return one paper trade by id.
+        """
+
+        if trade_id is None:
+            return None
+
+        self.cursor.execute(
+            """
+            SELECT
+                id,
+                ticker,
+                company_name,
+                entry_date,
+                entry_price,
+                stop_price,
+                target_price,
+                exit_date,
+                exit_price,
+                status,
+                shares,
+                risk_reward,
+                opportunity_rating,
+                confidence,
+                notes,
+                created_at,
+                updated_at
+            FROM paper_trades
+            WHERE id = ?
+            """,
+            (trade_id,),
+        )
+
+        return self.cursor.fetchone()
+
+    def get_trades(self, status=None, ticker=None):
+        """
+        Return paper trades, optionally filtered by status and/or ticker.
+        """
+
+        filters = []
+        values = []
+
+        if status is not None:
+            filters.append("status = ?")
+            values.append(status)
+
+        normalized_ticker = self._normalize_ticker(ticker)
+        if normalized_ticker is not None:
+            filters.append("ticker = ?")
+            values.append(normalized_ticker)
+
+        where_clause = ""
+        if filters:
+            where_clause = "WHERE " + " AND ".join(filters)
+
+        self.cursor.execute(
+            f"""
+            SELECT
+                id,
+                ticker,
+                company_name,
+                entry_date,
+                entry_price,
+                stop_price,
+                target_price,
+                exit_date,
+                exit_price,
+                status,
+                shares,
+                risk_reward,
+                opportunity_rating,
+                confidence,
+                notes,
+                created_at,
+                updated_at
+            FROM paper_trades
+            {where_clause}
+            ORDER BY created_at DESC, id DESC
+            """,
+            values,
+        )
+
+        return self.cursor.fetchall()
+
+    def count_trades(self, status=None):
+        """
+        Count paper trades, optionally filtered by status.
+        """
+
+        if status is None:
+            self.cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM paper_trades
+                """
+            )
+            return self.cursor.fetchone()[0]
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM paper_trades
+            WHERE status = ?
+            """,
+            (status,),
+        )
+
+        return self.cursor.fetchone()[0]
+
+    # ==========================================================
     # Utilities
     # ==========================================================
 
@@ -1205,6 +1513,17 @@ class DatabaseManager:
             return None
 
         return normalized
+
+    @staticmethod
+    def _valid_trade_status(status):
+
+        return status in {
+            "Watching",
+            "Entered",
+            "Exited Win",
+            "Exited Loss",
+            "Cancelled",
+        }
 
     # ==========================================================
     # Shutdown

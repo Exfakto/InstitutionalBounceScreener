@@ -244,3 +244,53 @@ CREATE TABLE IF NOT EXISTS watchlist (
 
 );
 """
+
+
+PAPER_TRADES_TABLE = """
+CREATE TABLE IF NOT EXISTS paper_trades (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    ticker TEXT NOT NULL,
+
+    company_name TEXT,
+
+    entry_date TEXT,
+
+    entry_price REAL,
+
+    stop_price REAL,
+
+    target_price REAL,
+
+    exit_date TEXT,
+
+    exit_price REAL,
+
+    status TEXT NOT NULL DEFAULT 'Watching'
+        CHECK (
+            status IN (
+                'Watching',
+                'Entered',
+                'Exited Win',
+                'Exited Loss',
+                'Cancelled'
+            )
+        ),
+
+    shares INTEGER,
+
+    risk_reward REAL,
+
+    opportunity_rating TEXT,
+
+    confidence TEXT,
+
+    notes TEXT,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""

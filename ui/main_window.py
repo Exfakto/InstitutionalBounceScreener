@@ -15,6 +15,7 @@ from controllers.bounce_controller import BounceController
 from controllers.scoring_controller import ScoringController
 from controllers.chart_controller import ChartController
 from controllers.watchlist_controller import WatchlistController
+from controllers.trade_journal_controller import TradeJournalController
 
 from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
@@ -25,6 +26,7 @@ from ui.widgets.price_chart import PriceChart
 from ui.widgets.research_preview import ResearchPreview
 from ui.widgets.trade_card import TradeCard
 from ui.widgets.watchlist_panel import WatchlistPanel
+from ui.widgets.trade_journal_panel import TradeJournalPanel
 from ui.stock_detail_window import StockDetailWindow
 
 
@@ -40,6 +42,7 @@ class MainWindow(QMainWindow):
         self.scoring_controller = ScoringController()
         self.chart_controller = ChartController()
         self.watchlist_controller = WatchlistController()
+        self.trade_journal_controller = TradeJournalController()
         self.candidates_by_ticker = {}
 
         self.setWindowTitle("Institutional Bounce Screener")
@@ -123,6 +126,17 @@ class MainWindow(QMainWindow):
             self.remove_selected_watchlist_item
         )
         self.watchlist_panel.refresh_requested.connect(self.refresh_watchlist)
+        self.trade_journal_panel = TradeJournalPanel()
+        self.trade_journal_panel.new_trade_requested.connect(
+            self.create_selected_candidate_trade
+        )
+        self.trade_journal_panel.close_trade_requested.connect(
+            self.close_selected_trade
+        )
+        self.trade_journal_panel.delete_trade_requested.connect(
+            self.delete_selected_trade
+        )
+        self.trade_journal_panel.refresh_requested.connect(self.refresh_trade_journal)
 
         left_workspace.addWidget(self.candidates_table, stretch=3)
         left_workspace.addWidget(self.price_chart, stretch=2)
@@ -133,6 +147,7 @@ class MainWindow(QMainWindow):
         decision_workspace.addWidget(self.research_preview, stretch=3)
         decision_workspace.addWidget(self.trade_card, stretch=2)
         decision_workspace.addWidget(self.watchlist_panel, stretch=2)
+        decision_workspace.addWidget(self.trade_journal_panel, stretch=2)
 
         workspace_layout.addLayout(left_workspace, stretch=5)
         workspace_layout.addLayout(decision_workspace, stretch=2)
@@ -147,6 +162,7 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.activity_panel, stretch=1)
         self.refresh_watchlist()
+        self.refresh_trade_journal()
 
     # ----------------------------------------------------------
 
@@ -490,6 +506,72 @@ class MainWindow(QMainWindow):
             self.watchlist_panel.refresh_items(result.get("item") or [])
         else:
             self.watchlist_panel.clear()
+
+    # ----------------------------------------------------------
+
+    def create_selected_candidate_trade(self):
+
+        ticker = self.candidates_table.selected_ticker()
+
+        if ticker is None:
+            return
+
+        candidate = self.candidates_by_ticker.get(ticker)
+        result = self.trade_journal_controller.create_trade(
+            ticker=ticker,
+            company_name=self.company_name_for_candidate(candidate),
+        )
+
+        if result.get("success"):
+            self.refresh_trade_journal()
+
+        self.log(result.get("message", "Trade journal update complete."))
+
+    # ----------------------------------------------------------
+
+    def close_selected_trade(self):
+
+        trade_id = self.trade_journal_panel.selected_trade()
+
+        if trade_id is None:
+            return
+
+        result = self.trade_journal_controller.close_trade(trade_id)
+
+        if result.get("success"):
+            self.refresh_trade_journal()
+
+        self.log(result.get("message", "Trade journal update complete."))
+
+    # ----------------------------------------------------------
+
+    def delete_selected_trade(self):
+
+        trade_id = self.trade_journal_panel.selected_trade()
+
+        if trade_id is None:
+            return
+
+        result = self.trade_journal_controller.delete_trade(trade_id)
+
+        if result.get("success"):
+            self.refresh_trade_journal()
+
+        self.log(result.get("message", "Trade journal update complete."))
+
+    # ----------------------------------------------------------
+
+    def refresh_trade_journal(self):
+
+        if not hasattr(self, "trade_journal_panel"):
+            return
+
+        result = self.trade_journal_controller.get_trades()
+
+        if result.get("success"):
+            self.trade_journal_panel.refresh_trades(result.get("trades") or [])
+        else:
+            self.trade_journal_panel.clear()
 
     # ----------------------------------------------------------
 
