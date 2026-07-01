@@ -214,6 +214,17 @@ class Theme:
             margin-bottom: 2px;
         }}
 
+        QFrame#ResearchPreviewDashboard {{
+            background-color: transparent;
+            border: none;
+        }}
+
+        QFrame#ResearchPreviewSection {{
+            background-color: {cls.SECONDARY};
+            border: 1px solid {cls.BORDER};
+            border-radius: 4px;
+        }}
+
         QFrame#KpiCard {{
             background-color: {cls.SURFACE};
             border: 1px solid {cls.BORDER};
@@ -222,7 +233,17 @@ class Theme:
 
         QLabel#ResearchPreviewTicker {{
             color: {cls.TEXT};
-            font-size: 18pt;
+            font-size: 16pt;
+            font-weight: 700;
+        }}
+
+        QLabel#ResearchPreviewCompany,
+        QLabel#ResearchPreviewFieldLabel {{
+            color: {cls.MUTED_TEXT};
+        }}
+
+        QLabel#ResearchPreviewFieldValue {{
+            color: {cls.TEXT};
             font-weight: 700;
         }}
 
@@ -233,6 +254,39 @@ class Theme:
             border-radius: 4px;
             padding: 4px 8px;
             font-weight: 700;
+        }}
+
+        QLabel#ResearchPreviewChecklistStatus {{
+            color: {cls.TEXT};
+            background-color: {cls.SURFACE};
+            border: 1px solid {cls.BORDER};
+            border-radius: 3px;
+            padding: 2px 5px;
+            font-size: 8pt;
+            font-weight: 700;
+        }}
+
+        QLabel#ResearchPreviewChecklistStatus[status="pass"] {{
+            color: {cls.SUCCESS};
+            border-color: {cls.SUCCESS};
+        }}
+
+        QLabel#ResearchPreviewChecklistStatus[status="warning"] {{
+            color: {cls.WARNING};
+            border-color: {cls.WARNING};
+        }}
+
+        QLabel#ResearchPreviewChecklistStatus[status="fail"] {{
+            color: {cls.ERROR};
+            border-color: {cls.ERROR};
+        }}
+
+        QLabel#ResearchPreviewThesis {{
+            color: {cls.MUTED_TEXT};
+            background-color: {cls.BACKGROUND};
+            border: 1px solid {cls.BORDER};
+            border-radius: 4px;
+            padding: 7px;
         }}
 
         QLabel#ResearchPreviewOverall {{

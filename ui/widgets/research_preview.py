@@ -1,3 +1,5 @@
+from analysis.opportunity_rating import OpportunityRatingCalculator
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
@@ -9,7 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 
-class ResearchPreview(QWidget):
+class LegacyResearchPreview(QWidget):
     """
     Read-only preview of the selected candidate score.
     """
@@ -266,6 +268,471 @@ class ResearchPreview(QWidget):
             lines.append(f"...and {remaining} more")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def create_separator():
+        separator = QFrame()
+        separator.setObjectName("ResearchPreviewSeparator")
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Plain)
+
+        return separator
+
+
+class ResearchPreview(QWidget):
+    """
+    Read-only decision dashboard for the selected candidate score.
+    """
+
+    SUMMARY_FIELDS = [
+        ("overall", "Overall Intelligence Score"),
+        ("opportunity", "Opportunity Score"),
+        ("checklist", "Checklist Completion"),
+    ]
+    SCORE_FIELDS = LegacyResearchPreview.SCORE_FIELDS
+    CHECKLIST_ITEMS = [
+        ("near_support", "Near Support", "support_score"),
+        ("relative_strength", "Relative Strength", "relative_strength_score"),
+        ("trend", "Trend", "trend_score"),
+        ("institutional_buying", "Institutional Buying", "institutional_score"),
+        ("volume", "Volume", "volume_score"),
+        ("earnings_window", "Earnings Window", "earnings_risk_score"),
+        ("atr_risk", "ATR Risk", "risk_score"),
+        ("bounce_validation", "Bounce Validation", "bounce_score"),
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.opportunity_calculator = OpportunityRatingCalculator()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        self.group = QGroupBox("Research Preview 2.0")
+        self.group.setObjectName("ResearchPreviewCard")
+        group_layout = QVBoxLayout()
+        group_layout.setContentsMargins(12, 14, 12, 12)
+        group_layout.setSpacing(8)
+
+        self.empty_state_label = QLabel("Select a candidate to begin research.")
+        self.empty_state_label.setAlignment(Qt.AlignCenter)
+        self.empty_state_label.setWordWrap(True)
+        self.empty_state_label.setMinimumHeight(160)
+
+        self.dashboard_frame = QFrame()
+        self.dashboard_frame.setObjectName("ResearchPreviewDashboard")
+        dashboard_layout = QVBoxLayout(self.dashboard_frame)
+        dashboard_layout.setContentsMargins(0, 0, 0, 0)
+        dashboard_layout.setSpacing(8)
+
+        header_section = self.create_section()
+        header_layout = header_section.layout()
+        header_layout.setContentsMargins(8, 8, 8, 8)
+        header_layout.setSpacing(3)
+
+        self.ticker_label = QLabel("")
+        self.ticker_label.setObjectName("ResearchPreviewTicker")
+        self.ticker_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.company_label = QLabel("")
+        self.company_label.setObjectName("ResearchPreviewCompany")
+        self.company_label.setWordWrap(True)
+
+        self.rating_label = QLabel("")
+        self.rating_label.setObjectName("ResearchPreviewSignal")
+        self.rating_label.setMinimumHeight(24)
+        rating_font = self.rating_label.font()
+        rating_font.setBold(True)
+        self.rating_label.setFont(rating_font)
+        self.signal_label = self.rating_label
+
+        header_layout.addWidget(self.ticker_label)
+        header_layout.addWidget(self.company_label)
+        header_layout.addWidget(self.rating_label)
+
+        summary_section = self.create_section("Score Summary")
+        summary_layout = summary_section.layout()
+        summary_layout.setContentsMargins(8, 8, 8, 8)
+        summary_layout.setSpacing(5)
+
+        self.summary_labels = {}
+        for key, label in self.SUMMARY_FIELDS:
+            self.summary_labels[key] = self.create_value_row(summary_layout, label)
+
+        self.overall_score_label = self.summary_labels["overall"]
+        self.score_labels = {}
+        for key, label in self.SCORE_FIELDS:
+            self.score_labels[key] = self.create_value_row(summary_layout, label)
+
+        checklist_section = self.create_section("Institutional Checklist")
+        checklist_layout = checklist_section.layout()
+        checklist_layout.setContentsMargins(8, 8, 8, 8)
+        checklist_layout.setSpacing(4)
+
+        self.checklist_rows = {}
+        self.checklist_status_labels = {}
+        for key, label, _metric in self.CHECKLIST_ITEMS:
+            self.checklist_status_labels[key] = self.create_checklist_row(
+                checklist_layout,
+                key,
+                label,
+            )
+
+        thesis_section = self.create_section("Trade Thesis")
+        thesis_layout = thesis_section.layout()
+        thesis_layout.setContentsMargins(8, 8, 8, 8)
+        thesis_layout.setSpacing(4)
+
+        self.thesis_label = QLabel("No trade thesis available.")
+        self.thesis_label.setObjectName("ResearchPreviewThesis")
+        self.thesis_label.setWordWrap(True)
+        self.thesis_label.setMinimumHeight(42)
+        thesis_layout.addWidget(self.thesis_label)
+
+        self.warning_title_label = QLabel("Warnings")
+        self.warning_title_label.setObjectName("ResearchPreviewSectionTitle")
+        self.warning_label = QLabel("No warnings")
+        self.warning_label.setObjectName("ResearchPreviewWarnings")
+        self.warning_label.setWordWrap(True)
+
+        self.timestamp_label = QLabel("")
+        self.timestamp_label.setObjectName("ResearchPreviewTimestamp")
+        self.timestamp_label.setAlignment(Qt.AlignLeft)
+        self.timestamp_label.setWordWrap(True)
+
+        self.score_rows = {}
+        self.summary_separator = self.create_separator()
+        self.time_separator = self.create_separator()
+        self.warning_separator = self.create_separator()
+
+        dashboard_layout.addWidget(header_section)
+        dashboard_layout.addWidget(summary_section)
+        dashboard_layout.addWidget(checklist_section)
+        dashboard_layout.addWidget(thesis_section)
+        dashboard_layout.addWidget(self.warning_title_label)
+        dashboard_layout.addWidget(self.warning_label)
+        dashboard_layout.addWidget(self.timestamp_label)
+
+        group_layout.addWidget(self.empty_state_label)
+        group_layout.addWidget(self.dashboard_frame)
+        group_layout.addStretch()
+
+        self.group.setLayout(group_layout)
+        layout.addWidget(self.group)
+
+        self.clear()
+
+    def clear(self):
+        """
+        Clear every dashboard section.
+        """
+
+        self.empty_state_label.show()
+        self.dashboard_frame.hide()
+        self.ticker_label.hide()
+        self.company_label.hide()
+        self.rating_label.hide()
+        self.overall_score_label.hide()
+        self.timestamp_label.hide()
+        self.warning_title_label.hide()
+        self.warning_label.hide()
+
+        self.ticker_label.setText("")
+        self.company_label.setText("")
+        self.rating_label.setText("")
+        self.timestamp_label.setText("")
+
+        for label in self.summary_labels.values():
+            label.setText("-")
+        for label in self.score_labels.values():
+            label.setText("-")
+
+        self.set_placeholder_checklist()
+        self.set_trade_thesis("")
+        self.warning_label.setText("No warnings")
+
+    def set_candidate(self, candidate_score):
+        """
+        Display a CandidateScore object.
+        """
+
+        if candidate_score is None:
+            self.clear()
+            return
+
+        metrics = self.metrics_for_candidate(candidate_score)
+        opportunity = self.opportunity_calculator.calculate(metrics)
+        checklist = self.placeholder_checklist(metrics)
+
+        self.empty_state_label.hide()
+        self.dashboard_frame.show()
+        self.ticker_label.show()
+        self.company_label.setVisible(
+            bool(self.company_name_for_candidate(candidate_score))
+        )
+        self.rating_label.show()
+        self.overall_score_label.show()
+        self.timestamp_label.show()
+        self.warning_title_label.show()
+        self.warning_label.show()
+
+        self.ticker_label.setText(candidate_score.ticker)
+        self.company_label.setText(self.company_name_for_candidate(candidate_score))
+        self.rating_label.setText(
+            self.opportunity_label(opportunity.stars, opportunity.rating_label)
+        )
+        self.summary_labels["overall"].setText(
+            self.format_score(candidate_score.primary_score_value)
+        )
+        self.summary_labels["opportunity"].setText(
+            self.format_score(opportunity.rating_score)
+        )
+        self.summary_labels["checklist"].setText(
+            self.format_percent(self.checklist_completion(checklist))
+        )
+        self.timestamp_label.setText(f"Analysis Time: {candidate_score.timestamp}")
+
+        score_map = candidate_score.score_map
+        for key, _label in self.SCORE_FIELDS:
+            self.score_labels[key].setText(self.format_score(score_map.get(key)))
+
+        self.set_checklist(checklist)
+        self.warning_label.setText(
+            self.format_warnings(candidate_score, opportunity.warnings)
+        )
+
+    def set_trade_thesis(self, text):
+        """
+        Set the reserved thesis area for future controller wiring.
+        """
+
+        cleaned = (text or "").strip()
+        self.thesis_label.setText(cleaned or "No trade thesis available.")
+
+    def set_placeholder_checklist(self):
+        """
+        Reset checklist rows until the checklist engine is wired.
+        """
+
+        self.set_checklist({
+            key: "warning"
+            for key, _label, _metric in self.CHECKLIST_ITEMS
+        })
+
+    def set_checklist(self, checklist):
+        """
+        Display checklist statuses without rebuilding row widgets.
+        """
+
+        for key, _label, _metric in self.CHECKLIST_ITEMS:
+            status = (checklist or {}).get(key, "warning")
+            self.update_checklist_status(key, status)
+
+    def update_checklist_status(self, key, status):
+        label = self.checklist_status_labels[key]
+        normalized = status if status in {"pass", "warning", "fail"} else "warning"
+        label.setText({
+            "pass": "PASS",
+            "warning": "WARN",
+            "fail": "FAIL",
+        }[normalized])
+        label.setProperty("status", normalized)
+        label.style().unpolish(label)
+        label.style().polish(label)
+
+    def placeholder_checklist(self, metrics):
+        """
+        Placeholder rules for compact status display, ready for later wiring.
+        """
+
+        return {
+            key: self.status_for_metric(metric, metrics.get(metric))
+            for key, _label, metric in self.CHECKLIST_ITEMS
+        }
+
+    @staticmethod
+    def status_for_metric(metric, value):
+        if value is None:
+            return "warning"
+
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return "warning"
+
+        if metric == "earnings_risk_score":
+            if numeric_value >= 70:
+                return "fail"
+            if numeric_value >= 50:
+                return "warning"
+            return "pass"
+
+        if numeric_value >= 75:
+            return "pass"
+        if numeric_value >= 50:
+            return "warning"
+        return "fail"
+
+    @staticmethod
+    def checklist_completion(checklist):
+        if not checklist:
+            return 0.0
+
+        passed = sum(1 for status in checklist.values() if status == "pass")
+        return passed / len(checklist) * 100.0
+
+    @staticmethod
+    def metrics_for_candidate(candidate_score):
+        metrics = {
+            name: score.value
+            for name, score in candidate_score.score_map.items()
+        }
+        metrics.update(candidate_score.composite_intelligence_component_scores)
+        metrics["composite_score"] = candidate_score.composite_score.value
+
+        if candidate_score.institutional_bounce_score is not None:
+            metrics["institutional_bounce_score"] = (
+                candidate_score.institutional_bounce_score
+            )
+
+        return metrics
+
+    @staticmethod
+    def company_name_for_candidate(candidate_score):
+        return (
+            getattr(candidate_score, "company_name", "")
+            or getattr(candidate_score, "company", "")
+            or getattr(candidate_score, "name", "")
+            or ""
+        )
+
+    @staticmethod
+    def format_score(score):
+        if score is None:
+            return "-"
+
+        if not hasattr(score, "value"):
+            return f"{float(score):.1f}"
+
+        return f"{score.value:.1f}"
+
+    @staticmethod
+    def format_percent(value):
+        return f"{float(value):.0f}%"
+
+    @staticmethod
+    def opportunity_label(stars, label):
+        return f"{'★' * stars}{'☆' * (5 - stars)} {label}"
+
+    @staticmethod
+    def signal_label_for_score(score):
+        if score >= 90.0:
+            return "STRONG BUY"
+
+        if score >= 80.0:
+            return "BUY"
+
+        if score >= 70.0:
+            return "WATCH"
+
+        return "AVOID"
+
+    @staticmethod
+    def format_warnings(candidate_score, extra_warnings=None):
+        warnings = []
+
+        for score in candidate_score.scores:
+            warnings.extend(score.details.get("warnings", []))
+
+            if score.error:
+                warnings.append(score.error)
+
+        warnings.extend(candidate_score.warnings)
+        warnings.extend(extra_warnings or [])
+
+        if not warnings:
+            return "No warnings"
+
+        deduped_warnings = []
+        for warning in warnings:
+            if warning not in deduped_warnings:
+                deduped_warnings.append(warning)
+        warnings = deduped_warnings
+
+        missing_count = sum(
+            1
+            for warning in warnings
+            if warning.lower().startswith("missing ")
+        )
+        lines = []
+
+        if missing_count:
+            metric_word = "metric" if missing_count == 1 else "metrics"
+            lines.append(f"{missing_count} missing {metric_word}")
+
+        lines.extend(warnings[:2])
+
+        remaining = len(warnings) - 2
+
+        if remaining > 0:
+            lines.append(f"...and {remaining} more")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def create_section(title=None):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        if title:
+            title_label = QLabel(title)
+            title_label.setObjectName("ResearchPreviewSectionTitle")
+            layout.addWidget(title_label)
+
+        return section
+
+    @staticmethod
+    def create_value_row(parent_layout, label):
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+
+        name_label = QLabel(label)
+        name_label.setObjectName("ResearchPreviewFieldLabel")
+        value_label = QLabel("-")
+        value_label.setObjectName("ResearchPreviewFieldValue")
+        value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        row_layout.addWidget(name_label, stretch=1)
+        row_layout.addWidget(value_label)
+        parent_layout.addWidget(row)
+
+        return value_label
+
+    def create_checklist_row(self, parent_layout, key, label):
+        row = QWidget()
+        row.setObjectName("ResearchPreviewChecklistRow")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+
+        name_label = QLabel(label)
+        status_label = QLabel("WARN")
+        status_label.setObjectName("ResearchPreviewChecklistStatus")
+        status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        status_label.setMinimumWidth(48)
+
+        row_layout.addWidget(name_label, stretch=1)
+        row_layout.addWidget(status_label)
+        parent_layout.addWidget(row)
+        self.checklist_rows[key] = row
+
+        return status_label
 
     @staticmethod
     def create_separator():

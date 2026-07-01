@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from analysis.candidate_score import CandidateScore
 from analysis.score_result import ScoreResult
@@ -18,7 +18,7 @@ def app():
     return application
 
 
-def make_candidate(overall=88.5, scores=None):
+def make_candidate(overall=88.5, scores=None, components=None, warnings=None):
     return CandidateScore(
         ticker="AAPL",
         composite_score=ScoreResult("composite_score", overall),
@@ -35,36 +35,58 @@ def make_candidate(overall=88.5, scores=None):
             ScoreResult("support_score", 91.0),
             ScoreResult("bounce_score", 76.0),
         ],
+        composite_intelligence_component_scores=components or {},
+        warnings=warnings or [],
         timestamp=datetime(2026, 6, 30, tzinfo=timezone.utc),
     )
 
 
-def test_research_preview_clear_shows_empty_state(app):
+def test_research_preview_empty_state(app):
+    preview = ResearchPreview()
+
+    assert preview.empty_state_label.text() == "Select a candidate to begin research."
+    assert preview.empty_state_label.isHidden() is False
+    assert preview.dashboard_frame.isHidden() is True
+    assert preview.warning_label.text() == "No warnings"
+    assert preview.thesis_label.text() == "No trade thesis available."
+
+
+def test_research_preview_clear_resets_every_section(app):
     preview = ResearchPreview()
     preview.set_candidate(make_candidate())
+    preview.set_trade_thesis("Buy near support after confirmation.")
 
     preview.clear()
 
-    assert (
-        preview.empty_state_label.text()
-        == "Select a candidate to begin research."
-    )
     assert preview.empty_state_label.isHidden() is False
-    assert preview.ticker_label.isHidden() is True
-    assert preview.overall_score_label.isHidden() is True
+    assert preview.dashboard_frame.isHidden() is True
+    assert preview.ticker_label.text() == ""
+    assert preview.signal_label.text() == ""
+    assert preview.summary_labels["overall"].text() == "-"
+    assert preview.summary_labels["opportunity"].text() == "-"
+    assert preview.summary_labels["checklist"].text() == "-"
     assert preview.warning_label.text() == "No warnings"
+    assert preview.thesis_label.text() == "No trade thesis available."
+    assert all(
+        label.text() == "WARN"
+        for label in preview.checklist_status_labels.values()
+    )
 
 
-def test_research_preview_displays_candidate_score(app):
+def test_research_preview_displays_score_summary(app):
     preview = ResearchPreview()
 
     preview.set_candidate(make_candidate())
 
-    assert preview.group.title() == "Research Preview - Gen 2 Overall"
+    assert preview.group.title() == "Research Preview 2.0"
     assert preview.empty_state_label.isHidden() is True
+    assert preview.dashboard_frame.isHidden() is False
     assert preview.ticker_label.text() == "AAPL"
-    assert preview.signal_label.text() == "🟢 BUY"
+    assert preview.signal_label.text().endswith("High Probability")
     assert preview.overall_score_label.text() == "88.5"
+    assert preview.summary_labels["overall"].text() == "88.5"
+    assert preview.summary_labels["opportunity"].text() != "-"
+    assert preview.summary_labels["checklist"].text().endswith("%")
     assert preview.score_labels["quality_score"].text() == "90.0"
     assert preview.score_labels["institutional_score"].text() == "72.0"
     assert preview.score_labels["technical_score"].text() == "84.0"
@@ -74,19 +96,17 @@ def test_research_preview_displays_candidate_score(app):
 
 def test_research_preview_displays_gen2_overall_when_available(app):
     preview = ResearchPreview()
-    candidate = make_candidate(overall=40.0)
     candidate = CandidateScore(
-        ticker=candidate.ticker,
-        composite_score=candidate.composite_score,
-        scores=candidate.scores,
+        ticker="AAPL",
+        composite_score=ScoreResult("composite_score", 40.0),
+        scores=make_candidate().scores,
         institutional_bounce_score=91.0,
         warnings=["Missing components reduced confidence"],
-        timestamp=candidate.timestamp,
+        timestamp=datetime(2026, 6, 30, tzinfo=timezone.utc),
     )
 
     preview.set_candidate(candidate)
 
-    assert preview.signal_label.text() == "🟢 STRONG BUY"
     assert preview.overall_score_label.text() == "91.0"
     assert "Missing components reduced confidence" in preview.warning_label.text()
 
@@ -94,26 +114,22 @@ def test_research_preview_displays_gen2_overall_when_available(app):
 @pytest.mark.parametrize(
     ("overall", "signal"),
     [
-        (90.0, "🟢 STRONG BUY"),
-        (80.0, "🟢 BUY"),
-        (70.0, "🟡 WATCH"),
-        (69.9, "🔴 AVOID"),
+        (90.0, "STRONG BUY"),
+        (80.0, "BUY"),
+        (70.0, "WATCH"),
+        (69.9, "AVOID"),
     ],
 )
-def test_research_preview_signal_labels(app, overall, signal):
-    preview = ResearchPreview()
-
-    preview.set_candidate(make_candidate(overall=overall))
-
-    assert preview.signal_label.text() == signal
+def test_research_preview_signal_label_compatibility(app, overall, signal):
+    assert ResearchPreview.signal_label_for_score(overall) == signal
 
 
-def test_research_preview_displays_warnings(app):
+def test_research_preview_warning_updates(app):
     preview = ResearchPreview()
 
     preview.set_candidate(make_candidate())
 
-    assert preview.warning_label.text() == "Institutional data is stale"
+    assert "Institutional data is stale" in preview.warning_label.text()
 
 
 def test_research_preview_summarizes_missing_metric_warnings(app):
@@ -130,12 +146,57 @@ def test_research_preview_summarizes_missing_metric_warnings(app):
 
     preview.set_candidate(make_candidate(scores=scores))
 
-    assert preview.warning_label.text() == (
-        "4 missing metrics\n"
-        "Missing revenue_growth_ttm\n"
-        "Missing eps_growth_ttm\n"
-        "...and 2 more"
+    assert "missing metrics" in preview.warning_label.text()
+    assert "Missing revenue_growth_ttm" in preview.warning_label.text()
+
+
+def test_research_preview_placeholder_checklist(app):
+    preview = ResearchPreview()
+    candidate = make_candidate(
+        components={
+            "relative_strength_score": 80.0,
+            "trend_score": 45.0,
+            "volume_score": 65.0,
+            "earnings_risk_score": 20.0,
+            "risk_score": 78.0,
+        },
     )
+
+    preview.set_candidate(candidate)
+
+    assert preview.checklist_status_labels["near_support"].text() == "PASS"
+    assert preview.checklist_status_labels["relative_strength"].text() == "PASS"
+    assert preview.checklist_status_labels["trend"].text() == "FAIL"
+    assert preview.checklist_status_labels["volume"].text() == "WARN"
+    assert preview.checklist_status_labels["earnings_window"].text() == "PASS"
+
+
+def test_research_preview_placeholder_thesis(app):
+    preview = ResearchPreview()
+
+    preview.set_trade_thesis("Wait for a confirmed bounce above support.")
+
+    assert preview.thesis_label.text() == "Wait for a confirmed bounce above support."
+
+    preview.set_trade_thesis("")
+
+    assert preview.thesis_label.text() == "No trade thesis available."
+
+
+def test_research_preview_repeated_updates_do_not_duplicate_widgets(app):
+    preview = ResearchPreview()
+    initial_label_count = len(preview.findChildren(QLabel))
+    initial_checklist_rows = len(preview.checklist_rows)
+    initial_summary_labels = len(preview.summary_labels)
+
+    preview.set_candidate(make_candidate(overall=88.5))
+    preview.set_candidate(make_candidate(overall=72.0, scores=[]))
+    preview.set_candidate(None)
+
+    assert len(preview.checklist_rows) == initial_checklist_rows
+    assert len(preview.summary_labels) == initial_summary_labels
+    assert len(preview.findChildren(QLabel)) == initial_label_count
+    assert preview.empty_state_label.isHidden() is False
 
 
 def test_research_preview_handles_missing_component_scores(app):
@@ -144,11 +205,11 @@ def test_research_preview_handles_missing_component_scores(app):
     preview.set_candidate(make_candidate(overall=50.0, scores=[]))
 
     assert preview.ticker_label.text() == "AAPL"
-    assert preview.signal_label.text() == "🔴 AVOID"
+    assert preview.signal_label.text().endswith("Avoid")
     assert preview.overall_score_label.text() == "50.0"
-    assert preview.score_labels["quality_score"].text() == "—"
-    assert preview.score_labels["institutional_score"].text() == "—"
-    assert preview.score_labels["technical_score"].text() == "—"
-    assert preview.score_labels["support_score"].text() == "—"
-    assert preview.score_labels["bounce_score"].text() == "—"
-    assert preview.warning_label.text() == "No warnings"
+    assert preview.score_labels["quality_score"].text() == "-"
+    assert preview.score_labels["institutional_score"].text() == "-"
+    assert preview.score_labels["technical_score"].text() == "-"
+    assert preview.score_labels["support_score"].text() == "-"
+    assert preview.score_labels["bounce_score"].text() == "-"
+    assert "missing metrics" in preview.warning_label.text()
