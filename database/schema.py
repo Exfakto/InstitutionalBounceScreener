@@ -220,3 +220,27 @@ CREATE TABLE IF NOT EXISTS earnings (
 
 );
 """
+
+
+WATCHLIST_TABLE = """
+CREATE TABLE IF NOT EXISTS watchlist (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    ticker TEXT NOT NULL UNIQUE,
+
+    company_name TEXT,
+
+    status TEXT NOT NULL DEFAULT 'Watching'
+        CHECK (status IN ('Watching', 'Ready', 'Entered', 'Rejected', 'Closed')),
+
+    notes TEXT,
+
+    source TEXT,
+
+    added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""

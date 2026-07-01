@@ -11,6 +11,7 @@ from database.schema import (
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
     TECHNICAL_INDICATORS_TABLE,
+    WATCHLIST_TABLE,
 )
 
 DATABASE_NAME = "InstitutionalBounce.db"
@@ -56,6 +57,7 @@ class DatabaseManager:
         self.cursor.execute(FUNDAMENTALS_TABLE)
         self.cursor.execute(INSTITUTIONAL_METRICS_TABLE)
         self.cursor.execute(EARNINGS_TABLE)
+        self.cursor.execute(WATCHLIST_TABLE)
 
         self.connection.commit()
 
@@ -884,6 +886,242 @@ class DatabaseManager:
         return self.cursor.fetchone()[0]
 
     # ==========================================================
+    # Watchlist
+    # ==========================================================
+
+    def add_watchlist_item(
+        self,
+        ticker,
+        company_name=None,
+        status="Watching",
+        notes=None,
+        source=None,
+    ):
+        """
+        Add a ticker to the watchlist or return the existing item.
+        """
+
+        normalized_ticker = self._normalize_ticker(ticker)
+
+        if normalized_ticker is None:
+            return None
+
+        existing = self.get_watchlist_item_by_ticker(normalized_ticker)
+
+        if existing is not None:
+            return existing
+
+        self.cursor.execute(
+            """
+            INSERT INTO watchlist
+            (
+                ticker,
+                company_name,
+                status,
+                notes,
+                source
+            )
+            VALUES
+            (
+                ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                normalized_ticker,
+                company_name,
+                status or "Watching",
+                notes,
+                source,
+            ),
+        )
+
+        self.connection.commit()
+
+        return self.get_watchlist_item_by_ticker(normalized_ticker)
+
+    def update_watchlist_item(self, item_id, status=None, notes=None):
+        """
+        Update status and/or notes for an existing watchlist item.
+        """
+
+        if item_id is None:
+            return None
+
+        fields = []
+        values = []
+
+        if status is not None:
+            fields.append("status = ?")
+            values.append(status)
+
+        if notes is not None:
+            fields.append("notes = ?")
+            values.append(notes)
+
+        if not fields:
+            return self.get_watchlist_item_by_id(item_id)
+
+        fields.append("updated_at = CURRENT_TIMESTAMP")
+        values.append(item_id)
+
+        self.cursor.execute(
+            f"""
+            UPDATE watchlist
+            SET {", ".join(fields)}
+            WHERE id = ?
+            """,
+            values,
+        )
+
+        self.connection.commit()
+
+        if self.cursor.rowcount == 0:
+            return None
+
+        return self.get_watchlist_item_by_id(item_id)
+
+    def remove_watchlist_item(self, item_id):
+        """
+        Remove a watchlist item by id.
+        """
+
+        if item_id is None:
+            return False
+
+        self.cursor.execute(
+            """
+            DELETE FROM watchlist
+            WHERE id = ?
+            """,
+            (item_id,),
+        )
+
+        self.connection.commit()
+
+        return self.cursor.rowcount > 0
+
+    def get_watchlist_items(self, status=None):
+        """
+        Return watchlist items, optionally filtered by status.
+        """
+
+        if status is None:
+            self.cursor.execute(
+                """
+                SELECT
+                    id,
+                    ticker,
+                    company_name,
+                    status,
+                    notes,
+                    source,
+                    added_at,
+                    updated_at
+                FROM watchlist
+                ORDER BY added_at DESC, ticker
+                """
+            )
+            return self.cursor.fetchall()
+
+        self.cursor.execute(
+            """
+            SELECT
+                id,
+                ticker,
+                company_name,
+                status,
+                notes,
+                source,
+                added_at,
+                updated_at
+            FROM watchlist
+            WHERE status = ?
+            ORDER BY added_at DESC, ticker
+            """,
+            (status,),
+        )
+
+        return self.cursor.fetchall()
+
+    def get_watchlist_item_by_ticker(self, ticker):
+        """
+        Return one watchlist item by normalized ticker.
+        """
+
+        normalized_ticker = self._normalize_ticker(ticker)
+
+        if normalized_ticker is None:
+            return None
+
+        self.cursor.execute(
+            """
+            SELECT
+                id,
+                ticker,
+                company_name,
+                status,
+                notes,
+                source,
+                added_at,
+                updated_at
+            FROM watchlist
+            WHERE ticker = ?
+            """,
+            (normalized_ticker,),
+        )
+
+        return self.cursor.fetchone()
+
+    def get_watchlist_item_by_id(self, item_id):
+        """
+        Return one watchlist item by id.
+        """
+
+        self.cursor.execute(
+            """
+            SELECT
+                id,
+                ticker,
+                company_name,
+                status,
+                notes,
+                source,
+                added_at,
+                updated_at
+            FROM watchlist
+            WHERE id = ?
+            """,
+            (item_id,),
+        )
+
+        return self.cursor.fetchone()
+
+    def count_watchlist_items(self, status=None):
+        """
+        Count watchlist items, optionally filtered by status.
+        """
+
+        if status is None:
+            self.cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM watchlist
+                """
+            )
+            return self.cursor.fetchone()[0]
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM watchlist
+            WHERE status = ?
+            """,
+            (status,),
+        )
+
+        return self.cursor.fetchone()[0]
+
+    # ==========================================================
     # Utilities
     # ==========================================================
 
@@ -954,6 +1192,19 @@ class DatabaseManager:
             return None
 
         return int(value)
+
+    @staticmethod
+    def _normalize_ticker(ticker):
+
+        if ticker is None:
+            return None
+
+        normalized = str(ticker).strip().upper()
+
+        if not normalized:
+            return None
+
+        return normalized
 
     # ==========================================================
     # Shutdown
