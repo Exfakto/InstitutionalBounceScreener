@@ -56,6 +56,7 @@ class DatabaseManager:
         self.cursor.execute(SUPPORT_LEVELS_TABLE)
         self.cursor.execute(BOUNCE_VALIDATIONS_TABLE)
         self.cursor.execute(FUNDAMENTALS_TABLE)
+        self.ensure_fundamentals_profile_columns()
         self.cursor.execute(INSTITUTIONAL_METRICS_TABLE)
         self.cursor.execute(EARNINGS_TABLE)
         self.cursor.execute(WATCHLIST_TABLE)
@@ -650,6 +651,9 @@ class DatabaseManager:
             rows.append(
                 (
                     record["ticker"],
+                    record.get("company_name"),
+                    record.get("sector"),
+                    record.get("industry"),
                     self._sqlite_float(record.get("market_cap")),
                     self._sqlite_float(record.get("revenue_growth_ttm")),
                     self._sqlite_float(record.get("eps_growth_ttm")),
@@ -668,6 +672,9 @@ class DatabaseManager:
                 INSERT OR REPLACE INTO fundamentals
                 (
                     ticker,
+                    company_name,
+                    sector,
+                    industry,
                     market_cap,
                     revenue_growth_ttm,
                     eps_growth_ttm,
@@ -680,7 +687,7 @@ class DatabaseManager:
                 )
                 VALUES
                 (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 rows,
@@ -696,6 +703,9 @@ class DatabaseManager:
             """
             SELECT
                 ticker,
+                company_name,
+                sector,
+                industry,
                 market_cap,
                 revenue_growth_ttm,
                 eps_growth_ttm,
@@ -712,6 +722,22 @@ class DatabaseManager:
         )
 
         return self.cursor.fetchone()
+
+    def ensure_fundamentals_profile_columns(self):
+        """
+        Add v3.2 profile columns to existing local fundamentals tables.
+        """
+
+        self.cursor.execute("PRAGMA table_info(fundamentals)")
+        existing_columns = {row[1] for row in self.cursor.fetchall()}
+
+        for column in ("company_name", "sector", "industry"):
+            if column in existing_columns:
+                continue
+
+            self.cursor.execute(
+                f"ALTER TABLE fundamentals ADD COLUMN {column} TEXT"
+            )
 
     def fundamentals_count(self):
 

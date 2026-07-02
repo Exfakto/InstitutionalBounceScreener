@@ -262,7 +262,7 @@ def test_provider_manager_unknown_configured_provider_falls_back_to_local():
     assert manager.active_provider_name == "local"
 
 
-def test_provider_manager_registers_enabled_polygon_without_requiring_api_key(monkeypatch):
+def test_provider_manager_does_not_auto_register_polygon_with_injected_default(monkeypatch):
     monkeypatch.delenv("POLYGON_API_KEY", raising=False)
     manager = ProviderManager(
         default_provider=FakeProvider("local"),
@@ -276,7 +276,7 @@ def test_provider_manager_registers_enabled_polygon_without_requiring_api_key(mo
     )
 
     assert manager.active_provider_name == "local"
-    assert "polygon" in manager._providers
+    assert "polygon" not in manager._providers
 
 
 def test_provider_manager_local_provider_requires_no_api_key(monkeypatch):

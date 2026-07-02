@@ -152,6 +152,12 @@ CREATE TABLE IF NOT EXISTS fundamentals (
 
     ticker TEXT PRIMARY KEY,
 
+    company_name TEXT,
+
+    sector TEXT,
+
+    industry TEXT,
+
     market_cap REAL,
 
     revenue_growth_ttm REAL,

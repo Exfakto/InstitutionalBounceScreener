@@ -43,20 +43,36 @@ class ProviderManager:
         cache_manager=None,
         provider_priorities=None,
     ):
+        has_explicit_default_provider = default_provider is not None
         self._lock = RLock()
         self._providers = {}
         self._active_provider_name = self.DEFAULT_PROVIDER_NAME
-        self.provider_config = provider_config or ProviderConfig.load()
+        self.provider_config = (
+            provider_config
+            if provider_config is not None
+            else (
+                ProviderConfig()
+                if has_explicit_default_provider
+                else ProviderConfig.load()
+            )
+        )
         self.cache_manager = cache_manager or CacheManager()
         self.provider_priorities = self.normalize_priorities(
-            provider_priorities or self.DEFAULT_PROVIDER_PRIORITIES
+            provider_priorities
+            if provider_priorities is not None
+            else (
+                {}
+                if has_explicit_default_provider
+                else self.DEFAULT_PROVIDER_PRIORITIES
+            )
         )
         self.register_provider(
             self.DEFAULT_PROVIDER_NAME,
             default_provider or LocalProvider(),
         )
-        self.register_configured_providers()
-        self.apply_configured_active_provider()
+        if not has_explicit_default_provider:
+            self.register_configured_providers()
+            self.apply_configured_active_provider()
 
     @property
     def active_provider_name(self):
