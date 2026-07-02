@@ -83,6 +83,99 @@ def test_incomplete_ticker_with_gap():
     assert result["missing_days_count"] == 1
 
 
+def test_polygon_251_row_dataset_open_ended_is_not_incomplete():
+    dates = pd.bdate_range(end="2026-07-01", periods=251)
+    db = FakeDatabaseManager({"AAPL": price_history(dates)})
+    service = SyncDiagnosticsService(db)
+
+    result = service.diagnose_ticker(
+        "AAPL",
+        stale_threshold_days=3,
+        today="2026-07-02",
+    )
+
+    assert result["status"] == "Current"
+    assert result["row_count"] == 251
+    assert result["missing_days_count"] == 0
+    assert result["expected_start"] is None
+    assert result["expected_end"] is None
+
+
+def test_weekend_gaps_are_not_incomplete_for_explicit_range():
+    db = FakeDatabaseManager(
+        {"AAPL": price_history(["2026-07-03", "2026-07-06"])}
+    )
+    service = SyncDiagnosticsService(db)
+
+    result = service.diagnose_ticker(
+        "AAPL",
+        start="2026-07-03",
+        end="2026-07-06",
+        today="2026-07-06",
+    )
+
+    assert result["status"] == "Current"
+    assert result["missing_days_count"] == 0
+    assert result["expected_start"] == "2026-07-03"
+    assert result["expected_end"] == "2026-07-06"
+
+
+def test_holiday_gaps_are_not_incomplete_for_explicit_range():
+    db = FakeDatabaseManager(
+        {"AAPL": price_history(["2024-07-03", "2024-07-05"])}
+    )
+    service = SyncDiagnosticsService(db)
+
+    result = service.diagnose_ticker(
+        "AAPL",
+        start="2024-07-03",
+        end="2024-07-05",
+        today="2024-07-05",
+    )
+
+    assert result["status"] == "Current"
+    assert result["missing_days_count"] == 0
+
+
+def test_open_ended_sync_only_reports_current_stale_or_missing():
+    db = FakeDatabaseManager(
+        {"AAPL": price_history(["2026-07-01", "2026-07-03"])}
+    )
+    service = SyncDiagnosticsService(db)
+
+    result = service.diagnose_ticker(
+        "AAPL",
+        today="2026-07-03",
+    )
+
+    assert result["status"] == "Current"
+    assert result["missing_days_count"] == 0
+
+
+def test_explicit_date_range_compares_only_requested_range():
+    db = FakeDatabaseManager(
+        {
+            "AAPL": price_history(
+                ["2026-06-30", "2026-07-01", "2026-07-03", "2026-07-06"]
+            )
+        }
+    )
+    service = SyncDiagnosticsService(db)
+
+    result = service.diagnose_ticker(
+        "AAPL",
+        start="2026-07-01",
+        end="2026-07-03",
+        today="2026-07-03",
+    )
+
+    assert result["status"] == "Incomplete"
+    assert result["row_count"] == 2
+    assert result["first_date"] == "2026-07-01"
+    assert result["last_date"] == "2026-07-03"
+    assert result["missing_days_count"] == 1
+
+
 def test_missing_ticker_history():
     db = FakeDatabaseManager({"AAPL": pd.DataFrame()})
     service = SyncDiagnosticsService(db)

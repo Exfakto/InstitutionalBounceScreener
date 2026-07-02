@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -70,7 +70,13 @@ class SyncDiagnosticsService:
             result["warnings"].append("No local price history rows found.")
             return result
 
-        frame = history.sort_index()
+        frame = self.filter_frame(history.sort_index(), expected_start, expected_end)
+
+        if frame.empty:
+            result["status"] = "Missing"
+            result["warnings"].append("No local price history rows found for expected range.")
+            return result
+
         first_date = self.index_date(frame.index.min())
         last_date = self.index_date(frame.index.max())
         result["row_count"] = int(len(frame))
@@ -78,11 +84,15 @@ class SyncDiagnosticsService:
         result["last_date"] = last_date
         result["stale_days"] = self.business_days_between(last_date, reference_date)
 
-        missing_days = self.missing_business_days(
-            frame,
-            expected_start or first_date,
-            expected_end or last_date,
-        )
+        missing_days = []
+
+        if expected_start is not None and expected_end is not None:
+            missing_days = self.missing_business_days(
+                frame,
+                expected_start,
+                expected_end,
+            )
+
         result["missing_days_count"] = len(missing_days)
 
         if missing_days:
@@ -153,7 +163,11 @@ class SyncDiagnosticsService:
         if start is None or end is None:
             return []
 
-        expected_days = pd.bdate_range(start=start, end=end)
+        expected_days = [
+            value
+            for value in pd.bdate_range(start=start, end=end)
+            if cls.is_expected_trading_day(value)
+        ]
         existing_days = {
             cls.index_date(value)
             for value in frame.index
@@ -164,6 +178,72 @@ class SyncDiagnosticsService:
             for value in expected_days
             if value.date().isoformat() not in existing_days
         ]
+
+    @classmethod
+    def filter_frame(
+        cls,
+        frame: pd.DataFrame,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> pd.DataFrame:
+        filtered = frame
+
+        if start is not None:
+            filtered = filtered[filtered.index >= pd.to_datetime(start)]
+
+        if end is not None:
+            filtered = filtered[filtered.index <= pd.to_datetime(end)]
+
+        return filtered
+
+    @classmethod
+    def is_expected_trading_day(cls, value: Any) -> bool:
+        day = pd.to_datetime(value).date()
+
+        if day.weekday() >= 5:
+            return False
+
+        return not cls.is_market_holiday(day)
+
+    @staticmethod
+    def is_market_holiday(value: date) -> bool:
+        """
+        Small placeholder holiday calendar for sync diagnostics.
+
+        This intentionally stays isolated so a fuller exchange calendar can be
+        wired later without changing callers.
+        """
+
+        year = value.year
+        thanksgiving = SyncDiagnosticsService.nth_weekday(year, 11, 3, 4)
+        holidays = {
+            date(year, 1, 1),
+            date(year, 7, 4),
+            date(year, 12, 25),
+            thanksgiving,
+        }
+        observed = set()
+
+        for holiday in holidays:
+            if holiday.weekday() == 5:
+                observed.add(holiday - timedelta(days=1))
+            elif holiday.weekday() == 6:
+                observed.add(holiday + timedelta(days=1))
+
+        return value in holidays or value in observed
+
+    @staticmethod
+    def nth_weekday(year: int, month: int, weekday: int, occurrence: int) -> date:
+        days = [
+            candidate.date()
+            for candidate in pd.date_range(
+                start=date(year, month, 1),
+                end=date(year, month, 28) + pd.offsets.MonthEnd(0),
+            )
+            if candidate.weekday() == weekday
+        ]
+
+        return days[occurrence - 1]
 
     @staticmethod
     def business_days_between(start: str | None, end: str | None) -> int:

@@ -16,13 +16,15 @@ class FMPProvider(BaseProvider):
     """
 
     SOURCE = "fmp"
-    BASE_URL = "https://financialmodelingprep.com/api/v3"
+    BASE_URL = "https://financialmodelingprep.com/stable"
 
     ENDPOINTS = {
-        "company_profile": "profile/{ticker}",
-        "fundamentals": "income-statement/{ticker}",
-        "earnings": "earnings-surprises/{ticker}",
-        "institutional_metrics": "institutional-holder/{ticker}",
+        "company_profile": "profile",
+        "income_statement": "income-statement",
+        "balance_sheet_statement": "balance-sheet-statement",
+        "cash_flow_statement": "cash-flow-statement",
+        "ratios": "ratios",
+        "earnings": "earnings",
         "insider_activity": "insider-trading",
     }
 
@@ -53,11 +55,71 @@ class FMPProvider(BaseProvider):
         )
 
     def get_fundamentals(self, ticker):
-        return self.get_endpoint_result(
-            ticker,
-            endpoint_name="fundamentals",
-            success_message="FMP fundamentals retrieved.",
-            missing_message="No FMP fundamentals found",
+        normalized_ticker = self.normalize_ticker(ticker)
+
+        if normalized_ticker is None:
+            return self.missing_ticker_result()
+
+        if not self.api_key:
+            return self.failure(
+                "FMP API key is required.",
+                normalized_ticker,
+                warnings=["Missing FMP_API_KEY."],
+            )
+
+        payloads = {}
+
+        for endpoint_name in [
+            "income_statement",
+            "balance_sheet_statement",
+            "cash_flow_statement",
+            "ratios",
+        ]:
+            url = self.endpoint_url(endpoint_name, normalized_ticker)
+
+            try:
+                payload = self.fetch_json(url)
+            except HTTPError as exc:
+                return self.http_failure(exc, normalized_ticker)
+            except (URLError, TimeoutError, OSError) as exc:
+                return self.failure(
+                    f"FMP request failed for {normalized_ticker}.",
+                    normalized_ticker,
+                    warnings=[str(exc)],
+                )
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                return self.failure(
+                    f"FMP response was malformed for {normalized_ticker}.",
+                    normalized_ticker,
+                    warnings=[str(exc)],
+                )
+
+            normalized = self.normalize_payload(payload)
+
+            if normalized is None:
+                return self.failure(
+                    f"FMP response was malformed for {normalized_ticker}.",
+                    normalized_ticker,
+                    warnings=["Malformed response."],
+                )
+
+            payloads[endpoint_name] = normalized
+
+        if not any(payloads.values()):
+            return self.failure(
+                f"No FMP fundamentals found for {normalized_ticker}.",
+                normalized_ticker,
+            )
+
+        return ProviderResult.ok(
+            data=payloads,
+            message="FMP fundamentals retrieved.",
+            source=self.SOURCE,
+            metadata={
+                "ticker": normalized_ticker,
+                "endpoint": "fundamentals",
+                "rows": sum(len(value) for value in payloads.values()),
+            },
         )
 
     def get_earnings(self, ticker):
@@ -69,11 +131,15 @@ class FMPProvider(BaseProvider):
         )
 
     def get_institutional_metrics(self, ticker):
-        return self.get_endpoint_result(
-            ticker,
-            endpoint_name="institutional_metrics",
-            success_message="FMP institutional metrics retrieved.",
-            missing_message="No FMP institutional metrics found",
+        normalized_ticker = self.normalize_ticker(ticker)
+
+        if normalized_ticker is None:
+            return self.missing_ticker_result()
+
+        return self.failure(
+            "FMP institutional metrics provider is not yet implemented on stable API.",
+            normalized_ticker,
+            warnings=["Not yet implemented."],
         )
 
     def get_insider_activity(self, ticker):
@@ -152,11 +218,11 @@ class FMPProvider(BaseProvider):
         )
 
     def endpoint_url(self, endpoint_name, ticker):
-        endpoint = self.ENDPOINTS[endpoint_name].format(ticker=ticker)
-        query = {"apikey": self.api_key}
-
-        if endpoint_name == "insider_activity":
-            query["symbol"] = ticker
+        endpoint = self.ENDPOINTS[endpoint_name]
+        query = {
+            "symbol": ticker,
+            "apikey": self.api_key,
+        }
 
         return f"{self.base_url}/{endpoint}?{urlencode(query)}"
 

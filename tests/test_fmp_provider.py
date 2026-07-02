@@ -24,8 +24,9 @@ class FakeResponse:
 
 class FakeOpener:
 
-    def __init__(self, payload=None, error=None):
+    def __init__(self, payload=None, error=None, payloads=None):
         self.payload = payload
+        self.payloads = list(payloads or [])
         self.error = error
         self.calls = []
 
@@ -35,12 +36,15 @@ class FakeOpener:
         if self.error is not None:
             raise self.error
 
+        if self.payloads:
+            return FakeResponse(self.payloads.pop(0))
+
         return FakeResponse(self.payload)
 
 
 def http_error(status):
     return HTTPError(
-        url="https://financialmodelingprep.com/api/v3/test",
+        url="https://financialmodelingprep.com/stable/test",
         code=status,
         msg="planned",
         hdrs=None,
@@ -102,35 +106,43 @@ def test_fmp_provider_successful_company_profile(monkeypatch):
         "endpoint": "company_profile",
         "rows": 1,
     }
-    assert "/profile/AAPL?" in opener.calls[0][0]
+    assert "/stable/profile?" in opener.calls[0][0]
+    assert "symbol=AAPL" in opener.calls[0][0]
     assert "apikey=test-key" in opener.calls[0][0]
+    assert "/api/v3/" not in opener.calls[0][0]
     assert opener.calls[0][1] == 30
 
 
 def test_fmp_provider_successful_fundamentals(monkeypatch):
     monkeypatch.setenv("FMP_API_KEY", "test-key")
-    provider = FMPProvider(
-        opener=FakeOpener(
-            payload=[
-                {"symbol": "MSFT", "date": "2025-12-31", "revenue": 1000},
-                {"symbol": "MSFT", "date": "2024-12-31", "revenue": 900},
-            ]
-        )
+    opener = FakeOpener(
+        payloads=[
+            [{"symbol": "MSFT", "date": "2025-12-31", "revenue": 1000}],
+            [{"symbol": "MSFT", "date": "2025-12-31", "totalAssets": 2000}],
+            [{"symbol": "MSFT", "date": "2025-12-31", "freeCashFlow": 300}],
+            [{"symbol": "MSFT", "date": "2025-12-31", "roe": 0.3}],
+        ]
     )
+    provider = FMPProvider(opener=opener)
 
     result = provider.get_fundamentals("msft")
 
     assert result.success is True
     assert result.message == "FMP fundamentals retrieved."
-    assert result.data[0]["symbol"] == "MSFT"
-    assert result.metadata["rows"] == 2
+    assert result.data["income_statement"][0]["symbol"] == "MSFT"
+    assert result.data["balance_sheet_statement"][0]["totalAssets"] == 2000
+    assert result.data["cash_flow_statement"][0]["freeCashFlow"] == 300
+    assert result.data["ratios"][0]["roe"] == 0.3
+    assert result.metadata["rows"] == 4
+    assert len(opener.calls) == 4
+    assert all("/stable/" in call[0] for call in opener.calls)
+    assert all("/api/v3/" not in call[0] for call in opener.calls)
 
 
 def test_fmp_provider_successful_earnings(monkeypatch):
     monkeypatch.setenv("FMP_API_KEY", "test-key")
-    provider = FMPProvider(
-        opener=FakeOpener(payload=[{"symbol": "NVDA", "date": "2026-02-20"}])
-    )
+    opener = FakeOpener(payload=[{"symbol": "NVDA", "date": "2026-02-20"}])
+    provider = FMPProvider(opener=opener)
 
     result = provider.get_earnings("nvda")
 
@@ -138,6 +150,9 @@ def test_fmp_provider_successful_earnings(monkeypatch):
     assert result.message == "FMP earnings retrieved."
     assert result.data == [{"symbol": "NVDA", "date": "2026-02-20"}]
     assert result.metadata["endpoint"] == "earnings"
+    assert "/stable/earnings?" in opener.calls[0][0]
+    assert "symbol=NVDA" in opener.calls[0][0]
+    assert "/api/v3/" not in opener.calls[0][0]
 
 
 def test_fmp_provider_successful_institutional_metrics(monkeypatch):
@@ -148,10 +163,12 @@ def test_fmp_provider_successful_institutional_metrics(monkeypatch):
 
     result = provider.get_institutional_metrics("amzn")
 
-    assert result.success is True
-    assert result.message == "FMP institutional metrics retrieved."
-    assert result.data == [{"holder": "Example Fund", "shares": 1000}]
+    assert result.success is False
+    assert result.message == (
+        "FMP institutional metrics provider is not yet implemented on stable API."
+    )
     assert result.metadata["ticker"] == "AMZN"
+    assert "Not yet implemented." in result.warnings
 
 
 def test_fmp_provider_successful_insider_activity(monkeypatch):
@@ -164,8 +181,9 @@ def test_fmp_provider_successful_insider_activity(monkeypatch):
     assert result.success is True
     assert result.message == "FMP insider activity retrieved."
     assert result.data == [{"symbol": "TSLA", "transactionType": "Buy"}]
-    assert "/insider-trading?" in opener.calls[0][0]
+    assert "/stable/insider-trading?" in opener.calls[0][0]
     assert "symbol=TSLA" in opener.calls[0][0]
+    assert "/api/v3/" not in opener.calls[0][0]
 
 
 def test_fmp_provider_malformed_response(monkeypatch):
