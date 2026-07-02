@@ -28,16 +28,19 @@ class KpiStrip(QWidget):
         for key, title in self.CARD_DEFINITIONS:
             card = StatisticsCard(title)
             card.setObjectName("KpiCard")
-            card.setMaximumHeight(82)
-            card.setMinimumHeight(72)
-            card.setMinimumWidth(165)
+            card.setMaximumHeight(92)
+            card.setMinimumHeight(78)
+            card.setMinimumWidth(172)
+            card.title.setObjectName("KpiTitle")
+            card.value.setObjectName("KpiValue")
 
             title_font = card.title.font()
             title_font.setPointSize(9)
+            title_font.setBold(True)
             card.title.setFont(title_font)
 
             value_font = card.value.font()
-            value_font.setPointSize(16)
+            value_font.setPointSize(18)
             value_font.setBold(True)
             card.value.setFont(value_font)
 

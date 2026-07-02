@@ -27,6 +27,7 @@ class CandidateTable(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(0, len(self.COLUMNS), parent)
 
+        self.setObjectName("CandidateTable")
         self.setHorizontalHeaderLabels(self.COLUMNS)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -34,10 +35,10 @@ class CandidateTable(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setShowGrid(False)
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(34)
+        self.verticalHeader().setDefaultSectionSize(36)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.horizontalHeader().setStretchLastSection(True)
-        self.horizontalHeader().setMinimumSectionSize(92)
+        self.horizontalHeader().setMinimumSectionSize(104)
         self.cellDoubleClicked.connect(self.emit_double_clicked_ticker)
 
     def populate(self, candidates):

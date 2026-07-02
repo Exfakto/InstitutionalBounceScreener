@@ -5,8 +5,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QLabel,
     QMainWindow,
     QSplitter,
+    QStatusBar,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -20,6 +25,7 @@ from controllers.scoring_controller import ScoringController
 from controllers.chart_controller import ChartController
 from controllers.watchlist_controller import WatchlistController
 from controllers.trade_journal_controller import TradeJournalController
+from controllers.screener_preset_controller import ScreenerPresetController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 
@@ -95,6 +101,7 @@ class MainWindow(QMainWindow):
         self.chart_controller = ChartController()
         self.watchlist_controller = WatchlistController()
         self.trade_journal_controller = TradeJournalController()
+        self.screener_preset_controller = ScreenerPresetController()
         self.market_status_service = MarketStatusService()
         self.refresh_scheduler = RefreshScheduler()
         self.refresh_scheduler.register_callback(self.handle_live_refresh_result)
@@ -116,11 +123,12 @@ class MainWindow(QMainWindow):
     def build_ui(self):
 
         central = QWidget()
+        central.setObjectName("MainWorkspace")
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(14, 14, 14, 14)
-        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(14)
 
         ##########################################################
         # Header
@@ -142,6 +150,10 @@ class MainWindow(QMainWindow):
         self.operations_toolbar.detect_support_requested.connect(self.detect_support)
         self.operations_toolbar.validate_bounces_requested.connect(self.validate_bounces)
         self.operations_toolbar.run_screener_requested.connect(self.run_screener)
+        self.operations_toolbar.save_preset_requested.connect(self.save_screener_preset)
+        self.operations_toolbar.load_preset_requested.connect(self.load_screener_preset)
+        self.operations_toolbar.reset_filters_requested.connect(self.reset_screener_filters)
+        self.operations_toolbar.refresh_results_requested.connect(self.refresh_screener_results)
         self.operations_toolbar.open_detail_requested.connect(
             self.open_selected_stock_detail
         )
@@ -191,6 +203,12 @@ class MainWindow(QMainWindow):
         self.performance_dashboard = PerformanceDashboard()
         self.activity_panel = ActivityPanel()
 
+        self.screener_filters_panel = self.build_screener_filters_panel()
+
+        self.screener_workspace_splitter = QSplitter(Qt.Horizontal)
+        self.screener_workspace_splitter.setObjectName("ScreenerWorkspaceSplitter")
+        self.screener_workspace_splitter.setChildrenCollapsible(False)
+
         self.workspace_splitter = QSplitter(Qt.Vertical)
         self.workspace_splitter.setObjectName("MainWorkspaceSplitter")
         self.workspace_splitter.setChildrenCollapsible(False)
@@ -200,6 +218,9 @@ class MainWindow(QMainWindow):
         self.center_splitter.setChildrenCollapsible(False)
 
         self.price_chart.setMinimumSize(720, 360)
+        self.candidates_table.setMinimumSize(640, 360)
+        self.screener_filters_panel.setMinimumWidth(240)
+        self.screener_filters_panel.setMaximumWidth(360)
         self.research_preview.setMinimumWidth(360)
         self.trade_card.setMinimumWidth(360)
 
@@ -213,9 +234,17 @@ class MainWindow(QMainWindow):
 
         self.center_splitter.addWidget(self.price_chart)
         self.center_splitter.addWidget(self.decision_panel)
-        self.center_splitter.setStretchFactor(0, 65)
-        self.center_splitter.setStretchFactor(1, 35)
-        self.center_splitter.setSizes([1040, 560])
+        self.center_splitter.setStretchFactor(0, 55)
+        self.center_splitter.setStretchFactor(1, 45)
+        self.center_splitter.setSizes([520, 430])
+
+        self.screener_workspace_splitter.addWidget(self.screener_filters_panel)
+        self.screener_workspace_splitter.addWidget(self.candidates_table)
+        self.screener_workspace_splitter.addWidget(self.center_splitter)
+        self.screener_workspace_splitter.setStretchFactor(0, 20)
+        self.screener_workspace_splitter.setStretchFactor(1, 50)
+        self.screener_workspace_splitter.setStretchFactor(2, 30)
+        self.screener_workspace_splitter.setSizes([280, 820, 500])
 
         self.bottom_splitter = QSplitter(Qt.Horizontal)
         self.bottom_splitter.setObjectName("BottomWorkspaceSplitter")
@@ -224,7 +253,9 @@ class MainWindow(QMainWindow):
         self.bottom_left_tabs = QTabWidget()
         self.bottom_left_tabs.setObjectName("BottomLeftTabs")
         self.bottom_left_tabs.setMinimumSize(720, 220)
-        self.bottom_left_tabs.addTab(self.candidates_table, "Candidates")
+        self.candidates_tab_anchor = QWidget()
+        self.candidates_tab_anchor.setObjectName("CandidatesTabAnchor")
+        self.bottom_left_tabs.addTab(self.candidates_tab_anchor, "Candidates")
         self.bottom_left_tabs.addTab(self.watchlist_panel, "Watchlist")
         self.bottom_left_tabs.addTab(self.performance_dashboard, "Portfolio")
         self.bottom_left_tabs.addTab(self.trade_journal_panel, "Trade Journal")
@@ -240,15 +271,71 @@ class MainWindow(QMainWindow):
         self.bottom_splitter.setStretchFactor(1, 35)
         self.bottom_splitter.setSizes([1040, 560])
 
-        self.workspace_splitter.addWidget(self.center_splitter)
+        self.workspace_splitter.addWidget(self.screener_workspace_splitter)
         self.workspace_splitter.addWidget(self.bottom_splitter)
         self.workspace_splitter.setStretchFactor(0, 3)
         self.workspace_splitter.setStretchFactor(1, 1)
         self.workspace_splitter.setSizes([600, 260])
 
         main_layout.addWidget(self.workspace_splitter, stretch=1)
+        self.build_screener_status_bar()
         self.refresh_watchlist()
         self.refresh_trade_journal()
+
+    # ----------------------------------------------------------
+
+    def build_screener_filters_panel(self):
+
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.filter_sections = {}
+        for title, fields in [
+            ("Universe", ["Universe"]),
+            ("Fundamentals", ["Revenue Growth", "EPS Growth"]),
+            ("Institutional", ["Institutional Score", "Ownership"]),
+            ("Technical", ["Technical Score", "Support"]),
+            ("Risk", ["Risk/Reward", "Warnings"]),
+        ]:
+            section = QGroupBox(title)
+            section.setCheckable(True)
+            section.setChecked(True)
+            section.setObjectName("ScreenerFilterSection")
+            form = QFormLayout(section)
+            form.setContentsMargins(12, 16, 12, 12)
+            form.setVerticalSpacing(8)
+            for field in fields:
+                control = QComboBox()
+                control.addItems(["Any", "Low", "Moderate", "High"])
+                form.addRow(field, control)
+            self.filter_sections[title] = section
+            layout.addWidget(section)
+
+        layout.addStretch()
+        return panel
+
+    # ----------------------------------------------------------
+
+    def build_screener_status_bar(self):
+
+        status_bar = QStatusBar()
+        self.setStatusBar(status_bar)
+        self.selected_ticker_status = QLabel("Selected ticker: --")
+        self.candidate_count_status = QLabel("Candidate count: 0")
+        self.last_screen_time_status = QLabel("Last screen time: --")
+        self.active_preset_status = QLabel("Active preset: --")
+
+        for label in [
+            self.selected_ticker_status,
+            self.candidate_count_status,
+            self.last_screen_time_status,
+            self.active_preset_status,
+        ]:
+            status_bar.addPermanentWidget(label)
+
+        self.update_screener_status()
 
     # ----------------------------------------------------------
 
@@ -331,6 +418,111 @@ class MainWindow(QMainWindow):
                 clear_selection()
 
         self.update_open_detail_state()
+
+    # ----------------------------------------------------------
+
+    def current_screener_filters(self):
+
+        filters = {}
+        for name, section in getattr(self, "filter_sections", {}).items():
+            filters[name] = {
+                "enabled": section.isChecked(),
+            }
+        return filters
+
+    # ----------------------------------------------------------
+
+    def save_screener_preset(self):
+
+        result = self.screener_preset_controller.save_preset(
+            "Default",
+            self.current_screener_filters(),
+        )
+        self.update_screener_status(active_preset=result.get("name"))
+        self.log(result.get("message", "Preset saved."))
+        return result
+
+    # ----------------------------------------------------------
+
+    def load_screener_preset(self):
+
+        result = self.screener_preset_controller.load_preset()
+        self.apply_screener_filters(result.get("filters") or {})
+        self.update_screener_status(active_preset=result.get("name"))
+        self.log(result.get("message", "Preset load complete."))
+        return result
+
+    # ----------------------------------------------------------
+
+    def reset_screener_filters(self):
+
+        result = self.screener_preset_controller.reset_filters()
+        self.apply_screener_filters({})
+        self.clear_screener_results()
+        self.update_screener_status(active_preset=None, candidate_count=0)
+        self.log(result.get("message", "Screener filters reset."))
+        return result
+
+    # ----------------------------------------------------------
+
+    def refresh_screener_results(self):
+
+        return self.run_screener()
+
+    # ----------------------------------------------------------
+
+    def apply_screener_filters(self, filters):
+
+        for name, section in getattr(self, "filter_sections", {}).items():
+            section.setChecked((filters or {}).get(name, {}).get("enabled", True))
+
+    # ----------------------------------------------------------
+
+    def clear_screener_results(self):
+
+        if hasattr(self, "candidates_table"):
+            self.candidates_table.populate([])
+        self.candidates_by_ticker = {}
+        if hasattr(self, "research_preview"):
+            self.research_preview.clear()
+        if hasattr(self, "trade_card"):
+            self.trade_card.clear()
+        if hasattr(self, "price_chart"):
+            self.price_chart.clear()
+
+    # ----------------------------------------------------------
+
+    def update_screener_status(
+        self,
+        selected_ticker=None,
+        candidate_count=None,
+        last_screen_time=None,
+        active_preset=None,
+    ):
+
+        if not hasattr(self, "selected_ticker_status"):
+            return
+
+        if selected_ticker is None and hasattr(self, "candidates_table"):
+            selected_ticker = self.candidates_table.selected_ticker()
+
+        if candidate_count is None:
+            candidate_count = len(getattr(self, "candidates_by_ticker", {}) or {})
+
+        if last_screen_time is None:
+            last_screen_time = getattr(self, "last_screen_time", None)
+
+        if active_preset is None:
+            active_preset = getattr(self.screener_preset_controller, "active_preset", None)
+
+        self.selected_ticker_status.setText(
+            f"Selected ticker: {selected_ticker or '--'}"
+        )
+        self.candidate_count_status.setText(f"Candidate count: {candidate_count}")
+        self.last_screen_time_status.setText(
+            f"Last screen time: {last_screen_time or '--'}"
+        )
+        self.active_preset_status.setText(f"Active preset: {active_preset or '--'}")
 
     # ----------------------------------------------------------
 
@@ -505,6 +697,11 @@ class MainWindow(QMainWindow):
         self.register_refresh_tickers(results["candidates"])
         self.candidates_table.populate(results["candidates"])
         self.update_open_detail_state()
+        self.last_screen_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.update_screener_status(
+            candidate_count=len(results["candidates"]),
+            last_screen_time=self.last_screen_time,
+        )
 
         self.activity_panel.set_progress(100)
 
@@ -562,6 +759,7 @@ class MainWindow(QMainWindow):
         self.operations_toolbar.set_open_detail_enabled(ticker is not None)
         self.update_research_preview(ticker)
         self.update_price_chart(ticker)
+        self.update_screener_status(selected_ticker=ticker)
 
     # ----------------------------------------------------------
 

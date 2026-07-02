@@ -13,6 +13,10 @@ class OperationsToolbar(QWidget):
     detect_support_requested = Signal()
     validate_bounces_requested = Signal()
     run_screener_requested = Signal()
+    save_preset_requested = Signal()
+    load_preset_requested = Signal()
+    reset_filters_requested = Signal()
+    refresh_results_requested = Signal()
     open_detail_requested = Signal()
 
     ACTION_GROUPS = [
@@ -39,6 +43,10 @@ class OperationsToolbar(QWidget):
             "Research",
             [
                 ("run_screener", "Run Screener", "run_screener_requested"),
+                ("save_preset", "Save Preset", "save_preset_requested"),
+                ("load_preset", "Load Preset", "load_preset_requested"),
+                ("reset_filters", "Reset Filters", "reset_filters_requested"),
+                ("refresh_results", "Refresh Results", "refresh_results_requested"),
                 ("open_detail", "Open Detail", "open_detail_requested"),
             ],
         ),
@@ -51,7 +59,7 @@ class OperationsToolbar(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
 
         for group_index, (group_label, actions) in enumerate(self.ACTION_GROUPS):
             if group_index > 0:
@@ -63,6 +71,11 @@ class OperationsToolbar(QWidget):
 
             for key, text, signal_name in actions:
                 button = QPushButton(text)
+                button.setProperty(
+                    "variant",
+                    "primary" if key in {"run_screener", "refresh_results"} else "secondary",
+                )
+                button.setMinimumHeight(34)
                 button.clicked.connect(getattr(self, signal_name).emit)
 
                 self.buttons[key] = button

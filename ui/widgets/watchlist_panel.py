@@ -44,8 +44,8 @@ class WatchlistPanel(QWidget):
 
         self.group = QGroupBox("Watchlist")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(12, 16, 12, 12)
-        group_layout.setSpacing(10)
+        group_layout.setContentsMargins(14, 18, 14, 14)
+        group_layout.setSpacing(12)
 
         self.table = QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
@@ -61,10 +61,11 @@ class WatchlistPanel(QWidget):
 
         self.intelligence_group = QGroupBox("Watchlist Intelligence")
         intelligence_layout = QVBoxLayout()
-        intelligence_layout.setContentsMargins(10, 14, 10, 10)
-        intelligence_layout.setSpacing(8)
+        intelligence_layout.setContentsMargins(12, 16, 12, 12)
+        intelligence_layout.setSpacing(9)
 
         self.intelligence_empty_label = QLabel("No watchlist intelligence available.")
+        self.intelligence_empty_label.setObjectName("ResearchPreviewWarnings")
         self.intelligence_empty_label.setWordWrap(True)
 
         metrics_layout = QGridLayout()
@@ -83,7 +84,9 @@ class WatchlistPanel(QWidget):
             ]
         ):
             name_label = QLabel(label)
+            name_label.setObjectName("ResearchPreviewFieldLabel")
             value_label = QLabel("--")
+            value_label.setObjectName("ResearchPreviewFieldValue")
             self.intelligence_labels[key] = value_label
             metrics_layout.addWidget(name_label, index // 3, (index % 3) * 2)
             metrics_layout.addWidget(value_label, index // 3, (index % 3) * 2 + 1)

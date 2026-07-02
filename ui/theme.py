@@ -3,20 +3,110 @@ class Theme:
     Central application theme.
     """
 
-    BACKGROUND = "#15181C"
-    SECONDARY = "#1E242B"
-    SURFACE = "#262D35"
-    ELEVATED = "#2F3842"
-    BORDER = "#3D4652"
-    SOFT_BORDER = "#2B333D"
-    PRIMARY = "#4F8FDB"
-    PRIMARY_SOFT = "#203B58"
-    SUCCESS = "#41B883"
+    BACKGROUND = "#0F1419"
+    PANEL_BACKGROUND = "#171D24"
+    ELEVATED_PANEL = "#202833"
+    BORDER = "#34404D"
+    MUTED_BORDER = "#26313B"
+    PRIMARY_TEXT = "#F4F7FA"
+    SECONDARY_TEXT = "#B9C4D0"
+    MUTED_TEXT = "#7F8C99"
+    POSITIVE = "#35B779"
+    NEGATIVE = "#E05A5A"
     WARNING = "#D6A23A"
-    ERROR = "#E05A5A"
-    TEXT = "#F4F7FA"
-    MUTED_TEXT = "#A8B3C1"
-    SUBTLE_TEXT = "#778391"
+    ACCENT = "#5A9BEF"
+    ACCENT_MUTED = "#1E3A56"
+    CARD_BACKGROUND = "#1B232C"
+    HEADER_BACKGROUND = "#151C24"
+
+    SECONDARY = PANEL_BACKGROUND
+    SURFACE = CARD_BACKGROUND
+    ELEVATED = ELEVATED_PANEL
+    SOFT_BORDER = MUTED_BORDER
+    PRIMARY = ACCENT
+    PRIMARY_SOFT = ACCENT_MUTED
+    SUCCESS = POSITIVE
+    ERROR = NEGATIVE
+    TEXT = PRIMARY_TEXT
+    SUBTLE_TEXT = MUTED_TEXT
+
+    @classmethod
+    def card_style(cls):
+        return (
+            f"background-color: {cls.CARD_BACKGROUND};"
+            f"border: 1px solid {cls.BORDER};"
+            "border-radius: 8px;"
+            "padding: 10px;"
+        )
+
+    @classmethod
+    def section_title_style(cls):
+        return (
+            f"color: {cls.SECONDARY_TEXT};"
+            "font-size: 9pt;"
+            "font-weight: 700;"
+            "letter-spacing: 0px;"
+        )
+
+    @classmethod
+    def muted_label_style(cls):
+        return f"color: {cls.MUTED_TEXT}; font-weight: 500;"
+
+    @classmethod
+    def value_label_style(cls):
+        return f"color: {cls.PRIMARY_TEXT}; font-weight: 700;"
+
+    @classmethod
+    def badge_style(cls, kind="neutral"):
+        colors = {
+            "positive": (cls.POSITIVE, "#11281F"),
+            "negative": (cls.NEGATIVE, "#2B1719"),
+            "warning": (cls.WARNING, "#2A2314"),
+            "accent": (cls.ACCENT, cls.ACCENT_MUTED),
+            "neutral": (cls.SECONDARY_TEXT, cls.ELEVATED_PANEL),
+        }
+        foreground, background = colors.get(kind, colors["neutral"])
+        return (
+            f"color: {foreground};"
+            f"background-color: {background};"
+            f"border: 1px solid {foreground};"
+            "border-radius: 6px;"
+            "padding: 4px 8px;"
+            "font-weight: 700;"
+        )
+
+    @classmethod
+    def button_style(cls, kind="secondary"):
+        if kind == "primary":
+            return (
+                f"background-color: {cls.ACCENT};"
+                f"color: {cls.PRIMARY_TEXT};"
+                f"border: 1px solid {cls.ACCENT};"
+                "border-radius: 6px;"
+                "padding: 8px 13px;"
+                "font-weight: 700;"
+            )
+        return (
+            f"background-color: {cls.ELEVATED_PANEL};"
+            f"color: {cls.PRIMARY_TEXT};"
+            f"border: 1px solid {cls.BORDER};"
+            "border-radius: 6px;"
+            "padding: 8px 12px;"
+            "font-weight: 600;"
+        )
+
+    @classmethod
+    def table_style(cls):
+        return (
+            f"background-color: {cls.PANEL_BACKGROUND};"
+            f"alternate-background-color: {cls.CARD_BACKGROUND};"
+            f"color: {cls.PRIMARY_TEXT};"
+            f"border: 1px solid {cls.BORDER};"
+            "border-radius: 8px;"
+            "gridline-color: transparent;"
+            f"selection-background-color: {cls.ACCENT_MUTED};"
+            f"selection-color: {cls.PRIMARY_TEXT};"
+        )
 
     @classmethod
     def load_stylesheet(cls):
@@ -28,6 +118,13 @@ class Theme:
         QMainWindow {{
             background-color: {cls.BACKGROUND};
             color: {cls.TEXT};
+        }}
+
+        QStatusBar {{
+            background-color: {cls.HEADER_BACKGROUND};
+            color: {cls.SECONDARY_TEXT};
+            border-top: 1px solid {cls.MUTED_BORDER};
+            padding: 4px 8px;
         }}
 
         QWidget {{
@@ -51,10 +148,10 @@ class Theme:
         }}
 
         QPushButton {{
-            background-color: {cls.SURFACE};
+            background-color: {cls.ELEVATED_PANEL};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 5px;
+            border-radius: 6px;
             padding: 8px 12px;
             min-height: 26px;
             font-weight: 600;
@@ -62,7 +159,7 @@ class Theme:
 
         QPushButton:hover {{
             border-color: {cls.PRIMARY};
-            background-color: {cls.ELEVATED};
+            background-color: {cls.CARD_BACKGROUND};
         }}
 
         QPushButton:pressed {{
@@ -76,13 +173,25 @@ class Theme:
             border-color: {cls.SOFT_BORDER};
         }}
 
+        QPushButton[variant="primary"] {{
+            background-color: {cls.ACCENT};
+            border-color: {cls.ACCENT};
+            color: {cls.PRIMARY_TEXT};
+            font-weight: 800;
+        }}
+
+        QPushButton[variant="secondary"] {{
+            background-color: {cls.ELEVATED_PANEL};
+            border-color: {cls.BORDER};
+        }}
+
         QTableWidget {{
             background-color: {cls.SECONDARY};
             alternate-background-color: {cls.SURFACE};
             color: {cls.TEXT};
-            gridline-color: {cls.SOFT_BORDER};
+            gridline-color: transparent;
             border: 1px solid {cls.BORDER};
-            border-radius: 6px;
+            border-radius: 8px;
             selection-background-color: {cls.PRIMARY_SOFT};
             selection-color: {cls.TEXT};
             outline: none;
@@ -104,13 +213,18 @@ class Theme:
         }}
 
         QHeaderView::section {{
-            background-color: {cls.ELEVATED};
+            background-color: {cls.HEADER_BACKGROUND};
             color: {cls.TEXT};
             border: none;
             border-right: 1px solid {cls.SOFT_BORDER};
             border-bottom: 1px solid {cls.BORDER};
             padding: 8px;
             font-weight: 700;
+        }}
+
+        QTableCornerButton::section {{
+            background-color: {cls.HEADER_BACKGROUND};
+            border: none;
         }}
 
         QProgressBar {{
@@ -155,7 +269,7 @@ class Theme:
             background-color: {cls.SECONDARY};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 6px;
+            border-radius: 8px;
             margin-top: 14px;
             padding-top: 14px;
             font-weight: 700;
@@ -177,15 +291,15 @@ class Theme:
         }}
 
         QFrame#HeaderBar {{
-            background-color: {cls.SURFACE};
+            background-color: {cls.HEADER_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 7px;
+            border-radius: 9px;
         }}
 
         QLabel#HeaderTitle {{
             color: {cls.TEXT};
-            font-size: 16pt;
-            font-weight: 700;
+            font-size: 18pt;
+            font-weight: 800;
         }}
 
         QLabel#HeaderSubtitle,
@@ -195,6 +309,23 @@ class Theme:
         QLabel#ResearchPreviewTimestamp,
         QLabel#ResearchPreviewSectionTitle {{
             color: {cls.MUTED_TEXT};
+        }}
+
+        QLabel#HeaderMarketStatus {{
+            color: {cls.SECONDARY_TEXT};
+            background-color: {cls.ACCENT_MUTED};
+            border: 1px solid {cls.BORDER};
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-weight: 700;
+        }}
+
+        QLabel#HeaderRefreshStatus {{
+            color: {cls.SECONDARY_TEXT};
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: 5px;
+            padding: 3px 7px;
         }}
 
         QLabel#ToolbarGroupLabel {{
@@ -228,15 +359,27 @@ class Theme:
         }}
 
         QFrame#ResearchPreviewSection {{
-            background-color: {cls.SECONDARY};
+            background-color: {cls.CARD_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 6px;
+            border-radius: 8px;
         }}
 
         QFrame#KpiCard {{
-            background-color: {cls.SURFACE};
+            background-color: {cls.CARD_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 7px;
+            border-radius: 9px;
+        }}
+
+        QLabel#KpiTitle {{
+            color: {cls.MUTED_TEXT};
+            font-size: 9pt;
+            font-weight: 700;
+        }}
+
+        QLabel#KpiValue {{
+            color: {cls.PRIMARY_TEXT};
+            font-size: 18pt;
+            font-weight: 800;
         }}
 
         QLabel#ResearchPreviewTicker {{
@@ -291,9 +434,9 @@ class Theme:
 
         QLabel#ResearchPreviewThesis {{
             color: {cls.MUTED_TEXT};
-            background-color: {cls.BACKGROUND};
+            background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 9px;
         }}
 
@@ -304,7 +447,11 @@ class Theme:
         }}
 
         QLabel#ResearchPreviewWarnings {{
-            color: {cls.MUTED_TEXT};
+            color: {cls.SECONDARY_TEXT};
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: 6px;
+            padding: 7px;
             line-height: 125%;
         }}
 
@@ -357,22 +504,28 @@ class Theme:
         }}
 
         QLabel#PriceChartSummary {{
-            color: {cls.MUTED_TEXT};
-            background-color: {cls.SECONDARY};
+            color: {cls.SECONDARY_TEXT};
+            background-color: {cls.CARD_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 6px;
-            padding: 12px;
+            border-radius: 8px;
+            padding: 14px;
             font-weight: 600;
         }}
 
         QLabel#PriceChartReadout {{
             color: {cls.MUTED_TEXT};
-            background-color: {cls.SECONDARY};
+            background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.SOFT_BORDER};
-            border-radius: 5px;
+            border-radius: 6px;
             padding: 7px 9px;
             font-family: "Consolas", "Segoe UI", monospace;
             font-size: 9pt;
+        }}
+
+        QWidget#PriceChartPanel {{
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.BORDER};
+            border-radius: 8px;
         }}
 
         QScrollBar:vertical {{
