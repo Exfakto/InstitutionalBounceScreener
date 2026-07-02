@@ -6,8 +6,9 @@ from ui.main_window import MainWindow
 
 class FakeWatchlistService:
 
-    def __init__(self):
+    def __init__(self, items=None):
         self.calls = []
+        self.items = items or []
 
     def add_item(self, ticker, company_name=None, notes=None, source=None):
         self.calls.append(
@@ -25,7 +26,12 @@ class FakeWatchlistService:
 
     def get_items(self, status=None):
         self.calls.append(("get_items", status))
-        return {"success": True, "message": "items", "item": [], "count": 0}
+        return {
+            "success": True,
+            "message": "items",
+            "item": self.items,
+            "count": len(self.items),
+        }
 
     def count_items(self, status=None):
         self.calls.append(("count_items", status))
@@ -91,6 +97,12 @@ class FakeActivityPanel:
         self.logs.append(text)
 
 
+class FailingLiveDataService:
+
+    def get_price_history(self, ticker):
+        raise AssertionError("live data should not be called")
+
+
 def test_controller_delegates_add_candidate_to_service():
     service = FakeWatchlistService()
     controller = WatchlistController(service)
@@ -122,6 +134,34 @@ def test_controller_delegates_update_remove_get_and_count():
         ("get_items", "Ready"),
         ("count_items", "Ready"),
     ]
+
+
+def test_controller_returns_watchlist_intelligence():
+    service = FakeWatchlistService(
+        [
+            {
+                "ticker": "AAPL",
+                "status": "Ready",
+                "opportunity_rating": {"rating_score": 91},
+                "confidence": "Very High",
+            },
+            {
+                "ticker": "MSFT",
+                "status": "Watching",
+                "overall_score": 72,
+            },
+        ]
+    )
+    controller = WatchlistController(service, live_data_service=FailingLiveDataService())
+
+    result = controller.get_watchlist_intelligence()
+
+    assert result.total_items == 2
+    assert result.ready_count == 1
+    assert result.watching_count == 1
+    assert result.high_conviction_count == 1
+    assert result.top_candidates[0]["ticker"] == "AAPL"
+    assert service.calls == [("get_items", None)]
 
 
 def test_main_window_adds_selected_candidate_to_watchlist():

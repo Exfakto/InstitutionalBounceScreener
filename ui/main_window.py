@@ -667,6 +667,9 @@ class MainWindow(QMainWindow):
 
         if result.get("success"):
             self.watchlist_panel.refresh_items(result.get("item") or [])
+            if hasattr(self.watchlist_controller, "get_watchlist_intelligence"):
+                intelligence = self.watchlist_controller.get_watchlist_intelligence()
+                self.watchlist_panel.refresh_intelligence(intelligence)
         else:
             self.watchlist_panel.clear()
 

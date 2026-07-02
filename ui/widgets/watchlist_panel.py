@@ -1,9 +1,11 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -57,6 +59,49 @@ class WatchlistPanel(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
 
+        self.intelligence_group = QGroupBox("Watchlist Intelligence")
+        intelligence_layout = QVBoxLayout()
+        intelligence_layout.setContentsMargins(10, 14, 10, 10)
+        intelligence_layout.setSpacing(8)
+
+        self.intelligence_empty_label = QLabel("No watchlist intelligence available.")
+        self.intelligence_empty_label.setWordWrap(True)
+
+        metrics_layout = QGridLayout()
+        metrics_layout.setHorizontalSpacing(16)
+        metrics_layout.setVerticalSpacing(4)
+        self.intelligence_labels = {}
+
+        for index, (key, label) in enumerate(
+            [
+                ("total_items", "Total items"),
+                ("ready_count", "Ready"),
+                ("watching_count", "Watching"),
+                ("high_conviction_count", "High conviction"),
+                ("average_opportunity_score", "Avg opportunity"),
+                ("warning_count", "Warnings"),
+            ]
+        ):
+            name_label = QLabel(label)
+            value_label = QLabel("--")
+            self.intelligence_labels[key] = value_label
+            metrics_layout.addWidget(name_label, index // 3, (index % 3) * 2)
+            metrics_layout.addWidget(value_label, index // 3, (index % 3) * 2 + 1)
+
+        self.top_candidates_table = self.intelligence_table()
+        self.weak_candidates_table = self.intelligence_table()
+        self.stale_items_table = self.intelligence_table()
+
+        intelligence_layout.addWidget(self.intelligence_empty_label)
+        intelligence_layout.addLayout(metrics_layout)
+        intelligence_layout.addWidget(QLabel("Top Candidates"))
+        intelligence_layout.addWidget(self.top_candidates_table)
+        intelligence_layout.addWidget(QLabel("Weak Candidates"))
+        intelligence_layout.addWidget(self.weak_candidates_table)
+        intelligence_layout.addWidget(QLabel("Stale Items"))
+        intelligence_layout.addWidget(self.stale_items_table)
+        self.intelligence_group.setLayout(intelligence_layout)
+
         button_layout = QHBoxLayout()
         button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.setSpacing(8)
@@ -73,6 +118,7 @@ class WatchlistPanel(QWidget):
         button_layout.addWidget(self.remove_button)
         button_layout.addWidget(self.refresh_button)
 
+        group_layout.addWidget(self.intelligence_group)
         group_layout.addWidget(self.table)
         group_layout.addLayout(button_layout)
 
@@ -109,6 +155,34 @@ class WatchlistPanel(QWidget):
 
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setStretchLastSection(True)
+
+    def refresh_intelligence(self, intelligence):
+        result = self.normalize_intelligence(intelligence)
+
+        if not result or result.get("total_items", 0) == 0:
+            self.reset_intelligence()
+            self.intelligence_empty_label.setText("No watchlist intelligence available.")
+            return
+
+        self.intelligence_empty_label.setText("")
+
+        for key in self.intelligence_labels:
+            self.intelligence_labels[key].setText(
+                self.format_metric(result.get(key))
+            )
+
+        self.populate_intelligence_table(
+            self.top_candidates_table,
+            result.get("top_candidates") or [],
+        )
+        self.populate_intelligence_table(
+            self.weak_candidates_table,
+            result.get("weak_candidates") or [],
+        )
+        self.populate_intelligence_table(
+            self.stale_items_table,
+            result.get("stale_items") or [],
+        )
 
     def visible_tickers(self):
         tickers = []
@@ -190,6 +264,63 @@ class WatchlistPanel(QWidget):
 
     def clear(self):
         self.table.setRowCount(0)
+        self.reset_intelligence()
+
+    @staticmethod
+    def intelligence_table():
+        table = QTableWidget(0, 4)
+        table.setHorizontalHeaderLabels(["Ticker", "Company", "Status", "Score"])
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionMode(QAbstractItemView.NoSelection)
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
+        table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(26)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        table.horizontalHeader().setStretchLastSection(True)
+        table.setMaximumHeight(96)
+        return table
+
+    def populate_intelligence_table(self, table, items):
+        table.setRowCount(0)
+
+        for row, item in enumerate(items or []):
+            table.insertRow(row)
+            values = [
+                self.value_for(item, "ticker"),
+                self.value_for(item, "company_name"),
+                self.value_for(item, "status"),
+                self.value_for(item, "opportunity_score"),
+            ]
+            if values[3] is None:
+                values[3] = self.value_for(item, "updated_at")
+
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(self.format_metric(value)))
+
+        table.resizeColumnsToContents()
+        table.horizontalHeader().setStretchLastSection(True)
+
+    def reset_intelligence(self):
+        self.intelligence_empty_label.setText("No watchlist intelligence available.")
+        for label in self.intelligence_labels.values():
+            label.setText("--")
+        self.top_candidates_table.setRowCount(0)
+        self.weak_candidates_table.setRowCount(0)
+        self.stale_items_table.setRowCount(0)
+
+    @staticmethod
+    def normalize_intelligence(intelligence):
+        if intelligence is None:
+            return {}
+
+        if isinstance(intelligence, dict):
+            return intelligence
+
+        if hasattr(intelligence, "__dict__"):
+            return vars(intelligence)
+
+        return {}
 
     @staticmethod
     def value_for(item, key):
@@ -208,6 +339,16 @@ class WatchlistPanel(QWidget):
     def format_value(value):
         if value is None:
             return ""
+
+        return str(value)
+
+    @staticmethod
+    def format_metric(value):
+        if value is None:
+            return "--"
+
+        if isinstance(value, float):
+            return f"{value:.1f}"
 
         return str(value)
 

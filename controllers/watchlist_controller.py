@@ -1,3 +1,4 @@
+from analysis.watchlist_intelligence import WatchlistIntelligenceAnalyzer
 from services.live_data_service import LiveDataService
 from services.watchlist_service import WatchlistService
 
@@ -34,6 +35,14 @@ class WatchlistController:
 
     def count_items(self, status=None):
         return self.watchlist_service.count_items(status=status)
+
+    def get_watchlist_intelligence(self):
+        result = self.watchlist_service.get_items()
+
+        if not result.get("success"):
+            return WatchlistIntelligenceAnalyzer().analyze([])
+
+        return WatchlistIntelligenceAnalyzer().analyze(result.get("item") or [])
 
     def refresh_watchlist(self, tickers):
         quotes = {}
