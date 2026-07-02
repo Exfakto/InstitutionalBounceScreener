@@ -5,8 +5,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
-    QHBoxLayout,
     QMainWindow,
+    QSplitter,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -129,14 +130,6 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.header_bar)
 
         ##########################################################
-        # Statistics
-        ##########################################################
-
-        self.kpi_strip = KpiStrip()
-
-        main_layout.addWidget(self.kpi_strip)
-
-        ##########################################################
         # Operations
         ##########################################################
 
@@ -156,22 +149,22 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.operations_toolbar)
 
         ##########################################################
-        # Main Workspace
+        # Statistics
         ##########################################################
 
-        workspace_layout = QHBoxLayout()
-        workspace_layout.setContentsMargins(0, 0, 0, 0)
-        workspace_layout.setSpacing(12)
+        self.kpi_strip = KpiStrip()
+
+        main_layout.addWidget(self.kpi_strip)
+
+        ##########################################################
+        # Main Workspace
+        ##########################################################
 
         self.candidates_table = CandidateTable()
         self.candidates_table.ticker_double_clicked.connect(self.open_stock_detail)
         self.candidates_table.selectionModel().selectionChanged.connect(
             self.update_open_detail_state
         )
-
-        left_workspace = QVBoxLayout()
-        left_workspace.setContentsMargins(0, 0, 0, 0)
-        left_workspace.setSpacing(12)
 
         self.price_chart = PriceChart()
         self.research_preview = ResearchPreview()
@@ -196,31 +189,64 @@ class MainWindow(QMainWindow):
         )
         self.trade_journal_panel.refresh_requested.connect(self.refresh_trade_journal)
         self.performance_dashboard = PerformanceDashboard()
-
-        left_workspace.addWidget(self.candidates_table, stretch=3)
-        left_workspace.addWidget(self.price_chart, stretch=2)
-
-        decision_workspace = QVBoxLayout()
-        decision_workspace.setContentsMargins(0, 0, 0, 0)
-        decision_workspace.setSpacing(12)
-        decision_workspace.addWidget(self.research_preview, stretch=3)
-        decision_workspace.addWidget(self.trade_card, stretch=2)
-        decision_workspace.addWidget(self.watchlist_panel, stretch=2)
-        decision_workspace.addWidget(self.trade_journal_panel, stretch=2)
-        decision_workspace.addWidget(self.performance_dashboard, stretch=2)
-
-        workspace_layout.addLayout(left_workspace, stretch=5)
-        workspace_layout.addLayout(decision_workspace, stretch=2)
-
-        main_layout.addLayout(workspace_layout, stretch=5)
-
-        ##########################################################
-        # Activity
-        ##########################################################
-
         self.activity_panel = ActivityPanel()
 
-        main_layout.addWidget(self.activity_panel, stretch=1)
+        self.workspace_splitter = QSplitter(Qt.Vertical)
+        self.workspace_splitter.setObjectName("MainWorkspaceSplitter")
+        self.workspace_splitter.setChildrenCollapsible(False)
+
+        self.center_splitter = QSplitter(Qt.Horizontal)
+        self.center_splitter.setObjectName("CenterWorkspaceSplitter")
+        self.center_splitter.setChildrenCollapsible(False)
+
+        self.price_chart.setMinimumSize(720, 360)
+        self.research_preview.setMinimumWidth(360)
+        self.trade_card.setMinimumWidth(360)
+
+        self.decision_panel = QWidget()
+        self.decision_panel.setObjectName("DecisionPanel")
+        decision_layout = QVBoxLayout(self.decision_panel)
+        decision_layout.setContentsMargins(0, 0, 0, 0)
+        decision_layout.setSpacing(10)
+        decision_layout.addWidget(self.research_preview, stretch=3)
+        decision_layout.addWidget(self.trade_card, stretch=2)
+
+        self.center_splitter.addWidget(self.price_chart)
+        self.center_splitter.addWidget(self.decision_panel)
+        self.center_splitter.setStretchFactor(0, 65)
+        self.center_splitter.setStretchFactor(1, 35)
+        self.center_splitter.setSizes([1040, 560])
+
+        self.bottom_splitter = QSplitter(Qt.Horizontal)
+        self.bottom_splitter.setObjectName("BottomWorkspaceSplitter")
+        self.bottom_splitter.setChildrenCollapsible(False)
+
+        self.bottom_left_tabs = QTabWidget()
+        self.bottom_left_tabs.setObjectName("BottomLeftTabs")
+        self.bottom_left_tabs.setMinimumSize(720, 220)
+        self.bottom_left_tabs.addTab(self.candidates_table, "Candidates")
+        self.bottom_left_tabs.addTab(self.watchlist_panel, "Watchlist")
+        self.bottom_left_tabs.addTab(self.performance_dashboard, "Portfolio")
+        self.bottom_left_tabs.addTab(self.trade_journal_panel, "Trade Journal")
+
+        self.bottom_right_tabs = QTabWidget()
+        self.bottom_right_tabs.setObjectName("BottomRightTabs")
+        self.bottom_right_tabs.setMinimumSize(360, 220)
+        self.bottom_right_tabs.addTab(self.activity_panel, "Activity")
+
+        self.bottom_splitter.addWidget(self.bottom_left_tabs)
+        self.bottom_splitter.addWidget(self.bottom_right_tabs)
+        self.bottom_splitter.setStretchFactor(0, 65)
+        self.bottom_splitter.setStretchFactor(1, 35)
+        self.bottom_splitter.setSizes([1040, 560])
+
+        self.workspace_splitter.addWidget(self.center_splitter)
+        self.workspace_splitter.addWidget(self.bottom_splitter)
+        self.workspace_splitter.setStretchFactor(0, 3)
+        self.workspace_splitter.setStretchFactor(1, 1)
+        self.workspace_splitter.setSizes([600, 260])
+
+        main_layout.addWidget(self.workspace_splitter, stretch=1)
         self.refresh_watchlist()
         self.refresh_trade_journal()
 
