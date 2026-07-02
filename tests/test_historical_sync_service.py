@@ -94,6 +94,7 @@ def test_sync_one_ticker_inserts_new_rows():
     summary = service.sync_ticker(" aapl ", start="2026-01-01", end="2026-01-31")
 
     assert summary["ticker"] == "AAPL"
+    assert summary["provider"] == "fake"
     assert summary["processed"] == 1
     assert summary["inserted"] == 1
     assert summary["updated"] == 0
@@ -172,6 +173,39 @@ def test_sync_skips_duplicate_unchanged_rows():
     assert summary["skipped"] == 1
 
 
+def test_force_update_updates_unchanged_rows():
+    live = FakeLiveDataService(
+        {
+            "AAPL": price_result(
+                [{"date": "2026-01-02", "open": 100, "high": 105, "low": 99, "close": 104, "volume": 1000}]
+            )
+        }
+    )
+    database = FakeDatabaseManager()
+    database.rows[("AAPL", "2026-01-02")] = {
+        "open": 100.0,
+        "high": 105.0,
+        "low": 99.0,
+        "close": 104.0,
+        "volume": 1000,
+    }
+    service = HistoricalSyncService(live, database)
+
+    summary = service.sync_ticker("AAPL", force_update=True)
+
+    assert summary["updated"] == 1
+    assert summary["skipped"] == 0
+
+
+def test_lookback_days_calculates_start_when_start_omitted():
+    live = FakeLiveDataService({"AAPL": price_result([])})
+    service = HistoricalSyncService(live, FakeDatabaseManager())
+
+    service.sync_ticker("AAPL", end="2026-01-31", lookback_days=30)
+
+    assert live.calls == [("AAPL", "2026-01-01", "2026-01-31")]
+
+
 def test_provider_failure_fails_safely():
     live = FakeLiveDataService(
         {
@@ -187,6 +221,7 @@ def test_provider_failure_fails_safely():
     summary = service.sync_ticker("AAPL")
 
     assert summary["failed"] == 1
+    assert summary["provider"] == "fake"
     assert summary["processed"] == 0
     assert "planned failure" in summary["warnings"]
     assert "provider failed" in summary["warnings"]
@@ -277,3 +312,21 @@ def test_summary_counts_mixed_rows():
     assert summary["skipped"] == 1
     assert summary["updated"] == 0
     assert summary["failed"] == 0
+
+
+def test_sync_tickers_aggregates_provider_source():
+    live = FakeLiveDataService(
+        {
+            "AAPL": price_result(
+                [{"date": "2026-01-02", "open": 1, "high": 2, "low": 1, "close": 2, "volume": 10}]
+            ),
+            "MSFT": price_result(
+                [{"date": "2026-01-03", "open": 3, "high": 4, "low": 3, "close": 4, "volume": 20}]
+            ),
+        }
+    )
+    service = HistoricalSyncService(live, FakeDatabaseManager())
+
+    summary = service.sync_tickers(["AAPL", "MSFT"])
+
+    assert summary["provider"] == "fake"

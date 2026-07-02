@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -30,6 +30,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start", help="Start date in YYYY-MM-DD format.")
     parser.add_argument("--end", help="End date in YYYY-MM-DD format.")
     parser.add_argument(
+        "--lookback-days",
+        type=int,
+        help="Calculate start date from end date or today when --start is omitted.",
+    )
+    parser.add_argument(
         "--provider",
         default=None,
         help="Provider override. Currently supports polygon.",
@@ -38,6 +43,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Show what would sync without provider calls or database writes.",
+    )
+    parser.add_argument(
+        "--force-update",
+        action="store_true",
+        help="Update existing rows even when values are unchanged.",
+    )
+    parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Print summary counts without detailed warnings.",
     )
     parser.add_argument("--limit", type=int, help="Limit number of tickers synced.")
 
@@ -53,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
         end=args.end,
         provider=args.provider,
         dry_run=args.dry_run,
+        force_update=args.force_update,
+        summary_only=args.summary_only,
+        lookback_days=args.lookback_days,
         limit=args.limit,
     )
 
@@ -64,6 +82,9 @@ def run(
     end: str | None = None,
     provider: str | None = None,
     dry_run: bool = False,
+    force_update: bool = False,
+    summary_only: bool = False,
+    lookback_days: int | None = None,
     limit: int | None = None,
     service_factory: Callable[[], HistoricalSyncService] | None = None,
     output=print,
@@ -92,11 +113,26 @@ def run(
         output("Invalid end date. Use YYYY-MM-DD.")
         return 2
 
+    if lookback_days is not None and lookback_days <= 0:
+        output("Lookback days must be greater than zero.")
+        return 2
+
+    if start_date is None and lookback_days is not None:
+        start_date = lookback_start_date(end_date, lookback_days)
+
     normalized_provider = normalize_provider(provider)
 
     if normalized_provider is None and provider is not None:
         output(f"Invalid provider: {provider}")
         return 2
+
+    if (
+        not dry_run
+        and normalized_provider == "polygon"
+        and not os.getenv("POLYGON_API_KEY")
+    ):
+        output("Polygon API key is not configured.")
+        return 1
 
     if dry_run:
         output(
@@ -105,6 +141,7 @@ def run(
                 start_date,
                 end_date,
                 normalized_provider,
+                force_update=force_update,
             )
         )
         return 0
@@ -120,15 +157,28 @@ def run(
             normalized_tickers[0],
             start=start_date,
             end=end_date,
+            force_update=force_update,
+            lookback_days=lookback_days,
         )
     else:
         summary = service.sync_tickers(
             normalized_tickers,
             start=start_date,
             end=end_date,
+            force_update=force_update,
+            lookback_days=lookback_days,
         )
 
-    output(format_summary(summary))
+    output(
+        format_summary(
+            summary,
+            provider=normalized_provider,
+            ticker_count=len(normalized_tickers),
+            start=start_date,
+            end=end_date,
+            summary_only=summary_only,
+        )
+    )
 
     return 1 if summary.get("failed", 0) else 0
 
@@ -180,6 +230,16 @@ def parse_date(value: str | None) -> str | None:
         return None
 
 
+def lookback_start_date(end: str | None, lookback_days: int) -> str:
+    end_date = (
+        datetime.strptime(end, "%Y-%m-%d").date()
+        if end is not None
+        else datetime.now().date()
+    )
+
+    return (end_date - timedelta(days=lookback_days)).isoformat()
+
+
 def normalize_ticker(value: str | None) -> str | None:
     normalized = str(value or "").strip().upper()
 
@@ -203,35 +263,47 @@ def format_dry_run(
     start: str | None,
     end: str | None,
     provider: str | None,
+    force_update: bool = False,
 ) -> str:
     return "\n".join(
         [
             "Historical Sync Dry Run",
             f"Provider: {provider or 'configured default'}",
+            f"Ticker count: {len(tickers)}",
             f"Tickers: {', '.join(tickers)}",
-            f"Start: {start or '--'}",
-            f"End: {end or '--'}",
+            f"Date range: {start or '--'} to {end or '--'}",
+            f"Force update: {str(force_update).lower()}",
             "Provider calls: no",
             "Database writes: no",
         ]
     )
 
 
-def format_summary(summary: dict) -> str:
+def format_summary(
+    summary: dict,
+    provider: str | None = None,
+    ticker_count: int | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    summary_only: bool = False,
+) -> str:
     warnings = summary.get("warnings") or []
 
     lines = [
         "Historical Sync Summary",
+        f"Provider: {summary.get('provider') or provider or 'configured default'}",
         f"Ticker: {summary.get('ticker') or '--'}",
+        f"Ticker count: {ticker_count if ticker_count is not None else 1}",
+        f"Date range: {start or '--'} to {end or '--'}",
         f"Processed: {summary.get('processed', 0)}",
         f"Inserted: {summary.get('inserted', 0)}",
         f"Updated: {summary.get('updated', 0)}",
         f"Skipped: {summary.get('skipped', 0)}",
         f"Failed: {summary.get('failed', 0)}",
-        f"Warnings: {len(warnings)}",
+        f"Warning count: {len(warnings)}",
     ]
 
-    if warnings:
+    if warnings and not summary_only:
         lines.append("Warning details:")
         lines.extend(f"- {sanitize_message(warning)}" for warning in warnings)
 

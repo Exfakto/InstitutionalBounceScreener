@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -32,10 +32,13 @@ class HistoricalSyncService:
         ticker: str | None,
         start: Any = None,
         end: Any = None,
+        force_update: bool = False,
+        lookback_days: int | None = None,
     ) -> dict[str, Any]:
         started_at = time.perf_counter()
         normalized_ticker = self.normalize_ticker(ticker)
         summary = self.summary(normalized_ticker)
+        start = self.resolve_start_date(start, end=end, lookback_days=lookback_days)
 
         if normalized_ticker is None:
             summary["failed"] = 1
@@ -50,10 +53,12 @@ class HistoricalSyncService:
 
         if not provider_result.success:
             summary["failed"] = 1
+            summary["provider"] = provider_result.source or None
             summary["warnings"].extend(provider_result.warnings or [])
             summary["warnings"].append(provider_result.message or "Provider failed.")
             return self.finish_summary(summary, started_at)
 
+        summary["provider"] = provider_result.source or None
         rows = self.price_rows(provider_result.data)
 
         if not rows:
@@ -69,7 +74,11 @@ class HistoricalSyncService:
                 summary["warnings"].append("Invalid price history row skipped.")
                 continue
 
-            action = self.store_price_row(normalized_ticker, normalized_row)
+            action = self.store_price_row(
+                normalized_ticker,
+                normalized_row,
+                force_update=force_update,
+            )
 
             if action == "inserted":
                 summary["inserted"] += 1
@@ -87,14 +96,23 @@ class HistoricalSyncService:
         tickers: list[str] | tuple[str, ...],
         start: Any = None,
         end: Any = None,
+        force_update: bool = False,
+        lookback_days: int | None = None,
     ) -> dict[str, Any]:
         started_at = time.perf_counter()
         summaries = [
-            self.sync_ticker(ticker, start=start, end=end)
+            self.sync_ticker(
+                ticker,
+                start=start,
+                end=end,
+                force_update=force_update,
+                lookback_days=lookback_days,
+            )
             for ticker in (tickers or [])
         ]
         aggregate = self.summary("MULTIPLE")
         aggregate["tickers"] = summaries
+        aggregate["provider"] = self.aggregate_provider(summaries)
 
         for item in summaries:
             aggregate["processed"] += item.get("processed", 0)
@@ -106,14 +124,19 @@ class HistoricalSyncService:
 
         return self.finish_summary(aggregate, started_at)
 
-    def store_price_row(self, ticker: str, row: dict[str, Any]) -> str:
+    def store_price_row(
+        self,
+        ticker: str,
+        row: dict[str, Any],
+        force_update: bool = False,
+    ) -> str:
         existing = self.existing_price_row(ticker, row["date"])
 
         if existing is None:
             self.insert_price_row(ticker, row)
             return "inserted"
 
-        if self.rows_match(existing, row):
+        if not force_update and self.rows_match(existing, row):
             return "skipped"
 
         self.update_price_row(ticker, row)
@@ -293,6 +316,33 @@ class HistoricalSyncService:
 
         return parsed.date().isoformat()
 
+    @classmethod
+    def resolve_start_date(
+        cls,
+        start: Any = None,
+        end: Any = None,
+        lookback_days: int | None = None,
+    ) -> Any:
+        if start is not None or lookback_days is None:
+            return start
+
+        try:
+            days = int(lookback_days)
+        except (TypeError, ValueError):
+            return start
+
+        if days <= 0:
+            return start
+
+        end_date_text = cls.normalize_date(end) if end is not None else None
+        end_date = (
+            datetime.strptime(end_date_text, "%Y-%m-%d").date()
+            if end_date_text is not None
+            else date.today()
+        )
+
+        return (end_date - timedelta(days=days)).isoformat()
+
     @staticmethod
     def float_value(value: Any) -> float | None:
         if value is None or pd.isna(value):
@@ -340,6 +390,7 @@ class HistoricalSyncService:
     def summary(ticker: str | None) -> dict[str, Any]:
         return {
             "ticker": ticker,
+            "provider": None,
             "processed": 0,
             "inserted": 0,
             "updated": 0,
@@ -357,3 +408,25 @@ class HistoricalSyncService:
         summary["elapsed_seconds"] = round(time.perf_counter() - started_at, 4)
 
         return summary
+
+    @staticmethod
+    def aggregate_provider(summaries: list[dict[str, Any]]) -> str | None:
+        providers = [
+            item.get("provider")
+            for item in summaries
+            if item.get("provider")
+        ]
+
+        unique = []
+
+        for provider in providers:
+            if provider not in unique:
+                unique.append(provider)
+
+        if not unique:
+            return None
+
+        if len(unique) == 1:
+            return unique[0]
+
+        return ", ".join(unique)
