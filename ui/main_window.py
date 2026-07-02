@@ -28,6 +28,7 @@ from controllers.trade_journal_controller import TradeJournalController
 from controllers.screener_preset_controller import ScreenerPresetController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
+from services.settings_service import SettingsService
 from services.workspace_state_service import WorkspaceStateService
 
 from ui.widgets.activity_panel import ActivityPanel
@@ -104,6 +105,7 @@ class MainWindow(QMainWindow):
         self.trade_journal_controller = TradeJournalController()
         self.screener_preset_controller = ScreenerPresetController()
         self.market_status_service = MarketStatusService()
+        self.settings_service = SettingsService()
         self.workspace_state_service = WorkspaceStateService()
         self.refresh_scheduler = RefreshScheduler()
         self.refresh_scheduler.register_callback(self.handle_live_refresh_result)
@@ -274,17 +276,29 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
-        self.selected_ticker_status = QLabel("Selected ticker: --")
+        self.market_status_status = QLabel("Market: --")
+        self.active_provider_status = QLabel("Provider: --")
+        self.database_status = QLabel("Database: --")
+        self.last_refresh_status = QLabel("Last refresh: --")
+        self.last_sync_status = QLabel("Last sync: --")
         self.candidate_count_status = QLabel("Candidate count: 0")
-        self.last_screen_time_status = QLabel("Last screen time: --")
+        self.selected_ticker_status = QLabel("Selected ticker: --")
         self.active_preset_status = QLabel("Active preset: --")
+        self.workspace_state_status = QLabel("Workspace: --")
+        self.last_screen_time_status = self.last_refresh_status
 
         for label in [
-            self.selected_ticker_status,
+            self.market_status_status,
+            self.active_provider_status,
+            self.database_status,
+            self.last_refresh_status,
+            self.last_sync_status,
             self.candidate_count_status,
-            self.last_screen_time_status,
+            self.selected_ticker_status,
             self.active_preset_status,
+            self.workspace_state_status,
         ]:
+            label.setObjectName("StatusBarLabel")
             status_bar.addPermanentWidget(label)
 
         self.update_screener_status()
@@ -358,6 +372,7 @@ class MainWindow(QMainWindow):
 
         state = self.workspace_state_service.load_state()
         self.apply_workspace_state(state)
+        self.update_screener_status(workspace_state="Loaded")
 
     # ----------------------------------------------------------
 
@@ -557,9 +572,11 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "workspace_state_service"):
             return None
 
-        return self.workspace_state_service.save_state(
+        saved = self.workspace_state_service.save_state(
             self.capture_workspace_state()
         )
+        self.update_screener_status(workspace_state="Saved")
+        return saved
 
     # ----------------------------------------------------------
 
@@ -722,6 +739,11 @@ class MainWindow(QMainWindow):
         candidate_count=None,
         last_screen_time=None,
         active_preset=None,
+        market_status=None,
+        active_provider=None,
+        database_status=None,
+        last_sync_time=None,
+        workspace_state=None,
     ):
 
         if not hasattr(self, "selected_ticker_status"):
@@ -739,14 +761,57 @@ class MainWindow(QMainWindow):
         if active_preset is None:
             active_preset = getattr(self.screener_preset_controller, "active_preset", None)
 
+        if market_status is None:
+            market_status = self.current_market_status_text()
+
+        if active_provider is None:
+            active_provider = self.current_provider_text()
+
+        if database_status is None:
+            database_status = getattr(self, "current_database_status", None)
+
+        if last_sync_time is None:
+            last_sync_time = getattr(self, "last_sync_at", None)
+
+        if workspace_state is None:
+            workspace_state = getattr(self, "workspace_state_indicator", None)
+
+        self.market_status_status.setText(f"Market: {market_status or '--'}")
+        self.active_provider_status.setText(f"Provider: {active_provider or '--'}")
+        self.database_status.setText(f"Database: {database_status or '--'}")
+        self.last_refresh_status.setText(
+            f"Last refresh: {last_screen_time or '--'}"
+        )
+        self.last_sync_status.setText(f"Last sync: {last_sync_time or '--'}")
         self.selected_ticker_status.setText(
             f"Selected ticker: {selected_ticker or '--'}"
         )
         self.candidate_count_status.setText(f"Candidate count: {candidate_count}")
-        self.last_screen_time_status.setText(
-            f"Last screen time: {last_screen_time or '--'}"
-        )
         self.active_preset_status.setText(f"Active preset: {active_preset or '--'}")
+        self.workspace_state_status.setText(f"Workspace: {workspace_state or '--'}")
+
+    # ----------------------------------------------------------
+
+    def current_market_status_text(self):
+
+        try:
+            return self.market_status_service.get_status().status
+        except Exception:
+            return None
+
+    # ----------------------------------------------------------
+
+    def current_provider_text(self):
+
+        try:
+            provider_status = self.settings_service.provider_status()
+        except Exception:
+            return None
+
+        if not isinstance(provider_status, dict):
+            return None
+
+        return provider_status.get("current_provider")
 
     # ----------------------------------------------------------
 
