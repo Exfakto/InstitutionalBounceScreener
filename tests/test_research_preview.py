@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication, QLabel
 from analysis.candidate_score import CandidateScore
 from analysis.institutional_checklist import InstitutionalChecklistEvaluator
 from analysis.opportunity_rating import OpportunityRatingCalculator
+from analysis.research_report import ResearchReportGenerator
 from analysis.score_result import ScoreResult
 from analysis.trade_thesis import TradeThesisGenerator
 from ui.widgets.research_preview import ResearchPreview
@@ -32,6 +33,10 @@ def opportunity_for(metrics):
 
 def thesis_for(metrics):
     return TradeThesisGenerator().generate(metrics)
+
+
+def report_for(metrics):
+    return ResearchReportGenerator().generate(metrics)
 
 
 def checklist_metrics():
@@ -60,6 +65,7 @@ def make_candidate(
     opportunity=None,
     checklist=None,
     thesis=None,
+    report=None,
     fundamentals=None,
 ):
     metrics = checklist_metrics()
@@ -87,6 +93,12 @@ def make_candidate(
     elif thesis is None:
         thesis = thesis_for(metrics)
 
+    if thesis is not None:
+        metrics["trade_thesis"] = thesis
+
+    if report is None:
+        report = None
+
     return CandidateScore(
         ticker="AAPL",
         composite_score=ScoreResult("composite_score", overall),
@@ -107,6 +119,7 @@ def make_candidate(
         opportunity_rating=opportunity,
         institutional_checklist=checklist,
         trade_thesis=thesis,
+        research_report=report,
         metrics=fundamentals or {},
         warnings=warnings or [],
         timestamp=datetime(2026, 6, 30, tzinfo=timezone.utc),
@@ -122,6 +135,7 @@ def test_research_preview_empty_state(app):
     assert preview.warning_label.text() == "No warnings"
     assert preview.thesis_title_label.text() == "Trade thesis unavailable."
     assert preview.thesis_label.text() == "No trade thesis available."
+    assert preview.report_labels["title"].text() == "Research report unavailable."
 
 
 def test_research_preview_clear_resets_every_section(app):
@@ -141,6 +155,8 @@ def test_research_preview_clear_resets_every_section(app):
     assert preview.warning_label.text() == "No warnings"
     assert preview.thesis_title_label.text() == "Trade thesis unavailable."
     assert preview.thesis_label.text() == "No trade thesis available."
+    assert preview.report_labels["title"].text() == "Research report unavailable."
+    assert preview.report_labels["executive_summary"].text() == "--"
     assert preview.letter_grade_label.text() == "--"
     assert preview.confidence_label.text() == "--"
     assert preview.decision_label.text() == "Decision unavailable."
@@ -466,6 +482,70 @@ def test_research_preview_displays_unavailable_thesis(app):
     assert preview.thesis_label.text() == "No trade thesis available."
 
 
+def test_research_preview_displays_research_report(app):
+    preview = ResearchPreview()
+    metrics = checklist_metrics()
+    metrics["ticker"] = "AAPL"
+    opportunity = opportunity_for(metrics)
+    metrics["opportunity_rating"] = opportunity
+    metrics["opportunity_rating_score"] = opportunity.rating_score
+    checklist = checklist_for(metrics)
+    metrics["institutional_checklist"] = checklist
+    thesis = thesis_for(metrics)
+    metrics["trade_thesis"] = thesis
+    metrics["warnings"] = ["Review liquidity before entry."]
+    report = report_for(metrics)
+
+    preview.set_candidate(
+        make_candidate(
+            opportunity=opportunity,
+            checklist=checklist,
+            thesis=thesis,
+            report=report,
+            warnings=["Review liquidity before entry."],
+        )
+    )
+
+    assert preview.report_labels["title"].text() == report.title
+    assert preview.report_labels["executive_summary"].text() == report.executive_summary
+    assert preview.report_labels["setup_quality"].text() == report.setup_quality
+    assert preview.report_labels["technical_analysis"].text() == report.technical_analysis
+    assert preview.report_labels["fundamental_analysis"].text() == report.fundamental_analysis
+    assert preview.report_labels["institutional_analysis"].text() == report.institutional_analysis
+    assert preview.report_labels["trade_plan"].text() == report.trade_plan
+    assert preview.report_labels["risk_summary"].text() == report.risk_summary
+    assert preview.report_labels["conclusion"].text() == report.conclusion
+    assert preview.report_labels["confidence"].text() == report.confidence
+    assert "Review liquidity before entry." in preview.warning_label.text()
+
+
+def test_research_preview_displays_missing_report_state(app):
+    preview = ResearchPreview()
+
+    preview.set_candidate(make_candidate())
+
+    assert preview.report_labels["title"].text() == "Research report unavailable."
+    assert preview.report_labels["executive_summary"].text() == "--"
+
+
+def test_research_preview_displays_partial_report_safely(app):
+    preview = ResearchPreview()
+    partial_report = {
+        "title": "AAPL Research Report",
+        "executive_summary": "AAPL has partial report data.",
+        "confidence": "Moderate",
+        "warnings": ["Report warning."],
+    }
+
+    preview.set_candidate(make_candidate(report=partial_report))
+
+    assert preview.report_labels["title"].text() == "AAPL Research Report"
+    assert preview.report_labels["executive_summary"].text() == "AAPL has partial report data."
+    assert preview.report_labels["setup_quality"].text() == "--"
+    assert preview.report_labels["confidence"].text() == "Moderate"
+    assert preview.report_labels["warnings"].text() == "Report warning."
+
+
 def test_research_preview_repeated_updates_do_not_duplicate_widgets(app):
     preview = ResearchPreview()
     initial_label_count = len(preview.findChildren(QLabel))
@@ -474,9 +554,16 @@ def test_research_preview_repeated_updates_do_not_duplicate_widgets(app):
     initial_technical_labels = len(preview.technical_labels)
     initial_institutional_labels = len(preview.institutional_labels)
     initial_risk_labels = len(preview.risk_labels)
+    initial_report_labels = len(preview.report_labels)
 
     preview.set_candidate(make_candidate(overall=88.5))
-    preview.set_candidate(make_candidate(overall=72.0, scores=[]))
+    preview.set_candidate(
+        make_candidate(
+            overall=72.0,
+            scores=[],
+            report={"title": "AAPL Research Report"},
+        )
+    )
     preview.set_candidate(None)
 
     assert len(preview.checklist_rows) == initial_checklist_rows
@@ -484,6 +571,7 @@ def test_research_preview_repeated_updates_do_not_duplicate_widgets(app):
     assert len(preview.technical_labels) == initial_technical_labels
     assert len(preview.institutional_labels) == initial_institutional_labels
     assert len(preview.risk_labels) == initial_risk_labels
+    assert len(preview.report_labels) == initial_report_labels
     assert len(preview.findChildren(QLabel)) == initial_label_count
     assert preview.empty_state_label.isHidden() is False
 

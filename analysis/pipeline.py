@@ -10,6 +10,7 @@ from dataclasses import replace
 
 from analysis.institutional_checklist import InstitutionalChecklistEvaluator
 from analysis.opportunity_rating import OpportunityRatingCalculator
+from analysis.research_report import ResearchReportGenerator
 from analysis.trade_thesis import TradeThesisGenerator
 from config.logging_config import logger
 from services.scoring_service import ScoringService
@@ -25,6 +26,7 @@ class AnalysisPipeline:
         self.opportunity_calculator = OpportunityRatingCalculator()
         self.checklist_evaluator = InstitutionalChecklistEvaluator()
         self.trade_thesis_generator = TradeThesisGenerator()
+        self.research_report_generator = ResearchReportGenerator()
 
     def run(self):
         """
@@ -92,12 +94,15 @@ class AnalysisPipeline:
         metrics["ticker"] = candidate.ticker
         metrics["warnings"] = list(candidate.warnings)
         thesis = self.trade_thesis_generator.generate(metrics)
+        metrics["trade_thesis"] = thesis
+        report = self.research_report_generator.generate(metrics)
 
         return replace(
             candidate,
             opportunity_rating=opportunity,
             institutional_checklist=checklist,
             trade_thesis=thesis,
+            research_report=report,
         )
 
     @staticmethod

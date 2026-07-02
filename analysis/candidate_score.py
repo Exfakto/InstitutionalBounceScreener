@@ -14,6 +14,7 @@ from analysis.opportunity_rating import OpportunityRatingResult
 from analysis.score_result import ScoreResult
 
 if TYPE_CHECKING:
+    from analysis.research_report import ResearchReportResult
     from analysis.trade_thesis import TradeThesisResult
 
 
@@ -32,6 +33,7 @@ class CandidateScore:
     opportunity_rating: OpportunityRatingResult | None = None
     institutional_checklist: InstitutionalChecklistResult | None = None
     trade_thesis: "TradeThesisResult | None" = None
+    research_report: "ResearchReportResult | None" = None
     metrics: dict = field(default_factory=dict)
     missing_components: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)

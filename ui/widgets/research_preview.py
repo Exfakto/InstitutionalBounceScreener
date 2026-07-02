@@ -538,6 +538,27 @@ class ResearchPreview(QWidget):
         self.risks_label.setWordWrap(True)
         thesis_layout.addWidget(self.risks_label)
 
+        report_section = self.create_section("Research Report")
+        report_layout = report_section.layout()
+        report_layout.setContentsMargins(10, 10, 10, 10)
+        report_layout.setSpacing(5)
+
+        self.report_labels = {}
+        for key, label in [
+            ("title", "Title"),
+            ("executive_summary", "Executive Summary"),
+            ("setup_quality", "Setup Quality"),
+            ("technical_analysis", "Technical Analysis"),
+            ("fundamental_analysis", "Fundamental Analysis"),
+            ("institutional_analysis", "Institutional Analysis"),
+            ("trade_plan", "Trade Plan"),
+            ("risk_summary", "Risk Summary"),
+            ("conclusion", "Conclusion"),
+            ("confidence", "Confidence"),
+            ("warnings", "Report Warnings"),
+        ]:
+            self.report_labels[key] = self.create_report_row(report_layout, label)
+
         self.warning_title_label = QLabel("Warnings")
         self.warning_title_label.setObjectName("ResearchPreviewSectionTitle")
         self.warning_label = QLabel("No warnings")
@@ -563,6 +584,7 @@ class ResearchPreview(QWidget):
         dashboard_layout.addWidget(decision_section)
         dashboard_layout.addWidget(checklist_section)
         dashboard_layout.addWidget(thesis_section)
+        dashboard_layout.addWidget(report_section)
         dashboard_layout.addWidget(self.warning_title_label)
         dashboard_layout.addWidget(self.warning_label)
         dashboard_layout.addWidget(self.timestamp_label)
@@ -613,6 +635,7 @@ class ResearchPreview(QWidget):
         self.set_fundamentals(None)
         self.set_checklist_unavailable()
         self.set_trade_thesis(None)
+        self.set_research_report(None)
         self.warning_label.setText("No warnings")
 
     def set_candidate(self, candidate_score):
@@ -627,6 +650,7 @@ class ResearchPreview(QWidget):
         opportunity = candidate_score.opportunity_rating
         checklist = candidate_score.institutional_checklist
         thesis = candidate_score.trade_thesis
+        report = getattr(candidate_score, "research_report", None)
         metrics = self.workspace_metrics_for_candidate(candidate_score)
 
         self.empty_state_label.hide()
@@ -670,12 +694,14 @@ class ResearchPreview(QWidget):
         self.set_decision(self.decision_for_candidate(candidate_score))
         self.set_checklist(checklist)
         self.set_trade_thesis(thesis)
+        self.set_research_report(report)
         self.warning_label.setText(
             self.format_warnings(
                 candidate_score,
                 self.opportunity_warning_messages(opportunity)
                 + self.checklist_warning_messages(checklist)
-                + self.thesis_warning_messages(thesis),
+                + self.thesis_warning_messages(thesis)
+                + self.report_warning_messages(report),
             )
         )
 
@@ -719,6 +745,34 @@ class ResearchPreview(QWidget):
             self.format_list("Strengths", thesis.strengths)
         )
         self.risks_label.setText(self.format_list("Risks", thesis.risks))
+
+    def set_research_report(self, report):
+        """
+        Display a prepared deterministic research report.
+        """
+
+        if report is None:
+            self.report_labels["title"].setText("Research report unavailable.")
+            for key, label in self.report_labels.items():
+                if key != "title":
+                    label.setText("--")
+            return
+
+        for key, label in self.report_labels.items():
+            value = self.report_value(report, key)
+
+            if key == "warnings":
+                warnings = self.as_list(value)
+                label.setText("; ".join(str(warning) for warning in warnings) if warnings else "--")
+            else:
+                label.setText(str(value).strip() if value else "--")
+
+    @staticmethod
+    def report_value(report, key):
+        if isinstance(report, dict):
+            return report.get(key)
+
+        return getattr(report, key, None)
 
     def set_fundamentals(self, fundamentals):
         """
@@ -1245,6 +1299,30 @@ class ResearchPreview(QWidget):
 
         return f"{title}: " + "; ".join(values)
 
+    @classmethod
+    def report_warning_messages(cls, report):
+        if report is None:
+            return []
+
+        return [
+            str(warning)
+            for warning in cls.as_list(cls.report_value(report, "warnings"))
+            if warning
+        ]
+
+    @staticmethod
+    def as_list(value):
+        if value is None:
+            return []
+
+        if isinstance(value, list):
+            return value
+
+        if isinstance(value, tuple):
+            return list(value)
+
+        return [value]
+
     @staticmethod
     def checklist_display_label(name):
         labels = {
@@ -1349,6 +1427,26 @@ class ResearchPreview(QWidget):
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         row_layout.addWidget(name_label, stretch=1)
+        row_layout.addWidget(value_label)
+        parent_layout.addWidget(row)
+
+        return value_label
+
+    @staticmethod
+    def create_report_row(parent_layout, label):
+        row = QWidget()
+        row_layout = QVBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(3)
+
+        name_label = QLabel(label)
+        name_label.setObjectName("ResearchPreviewFieldLabel")
+        value_label = QLabel("--")
+        value_label.setObjectName("ResearchPreviewFieldValue")
+        value_label.setWordWrap(True)
+        value_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        row_layout.addWidget(name_label)
         row_layout.addWidget(value_label)
         parent_layout.addWidget(row)
 
