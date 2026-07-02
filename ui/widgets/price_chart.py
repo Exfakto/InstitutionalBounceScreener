@@ -52,19 +52,19 @@ class PriceChart(QWidget):
     NO_PRICE_MESSAGE = "No price history available."
     BACKEND_UNAVAILABLE_MESSAGE = "Chart rendering backend is unavailable."
     READOUT_EMPTY_MESSAGE = "No price selected."
-    COLOR_BACKGROUND = "#1E1E1E"
-    COLOR_PLOT_BACKGROUND = "#2A2A2A"
-    COLOR_TEXT = "#F2F2F2"
-    COLOR_MUTED_TEXT = "#B0B0B0"
-    COLOR_GRID = "#4A4A4A"
-    COLOR_CLOSE = "#4A90E2"
-    COLOR_SMA20 = "#3FB950"
-    COLOR_SMA50 = "#D29922"
-    COLOR_SMA200 = "#F85149"
-    COLOR_SUPPORT_VALIDATED = "#3FB950"
-    COLOR_SUPPORT_NORMAL = "#8B949E"
-    COLOR_CANDLE_UP = "#3FB950"
-    COLOR_CANDLE_DOWN = "#F85149"
+    COLOR_BACKGROUND = "#15181C"
+    COLOR_PLOT_BACKGROUND = "#1E242B"
+    COLOR_TEXT = "#F4F7FA"
+    COLOR_MUTED_TEXT = "#A8B3C1"
+    COLOR_GRID = "#3D4652"
+    COLOR_CLOSE = "#4F8FDB"
+    COLOR_SMA20 = "#41B883"
+    COLOR_SMA50 = "#D6A23A"
+    COLOR_SMA200 = "#E05A5A"
+    COLOR_SUPPORT_VALIDATED = "#41B883"
+    COLOR_SUPPORT_NORMAL = "#778391"
+    COLOR_CANDLE_UP = "#41B883"
+    COLOR_CANDLE_DOWN = "#E05A5A"
     SERIES_DEFINITIONS = [
         ("close", "Close", COLOR_CLOSE, 2),
         ("sma20", "SMA20", COLOR_SMA20, 1),
@@ -88,7 +88,7 @@ class PriceChart(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
         self.summary_label = QLabel("")
         self.summary_label.setObjectName("PriceChartSummary")
@@ -98,7 +98,7 @@ class PriceChart(QWidget):
         layout.addWidget(self.summary_label)
         self.controls_layout = QHBoxLayout()
         self.controls_layout.setContentsMargins(0, 0, 0, 0)
-        self.controls_layout.setSpacing(6)
+        self.controls_layout.setSpacing(8)
 
         self.reset_button = self.create_control_button("Reset", self.reset_view)
         self.zoom_in_button = self.create_control_button("Zoom +", self.zoom_in)
@@ -474,7 +474,7 @@ class PriceChart(QWidget):
     def create_control_button(text, callback):
         button = QPushButton(text)
         button.setObjectName(f"PriceChart{text.replace(' ', '').replace('+', 'In').replace('-', 'Out')}")
-        button.setFixedHeight(26)
+        button.setFixedHeight(28)
         button.clicked.connect(callback)
 
         return button

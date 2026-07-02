@@ -38,12 +38,12 @@ class WatchlistPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
         self.group = QGroupBox("Watchlist")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(10, 14, 10, 10)
-        group_layout.setSpacing(8)
+        group_layout.setContentsMargins(12, 16, 12, 12)
+        group_layout.setSpacing(10)
 
         self.table = QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
@@ -53,13 +53,13 @@ class WatchlistPanel(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(30)
+        self.table.verticalHeader().setDefaultSectionSize(32)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
 
         button_layout = QHBoxLayout()
         button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(6)
+        button_layout.setSpacing(8)
 
         self.add_button = QPushButton("Add Selected Candidate")
         self.remove_button = QPushButton("Remove Selected")

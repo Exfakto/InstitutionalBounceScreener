@@ -283,17 +283,24 @@ class ResearchPreview(QWidget):
     """
 
     SUMMARY_FIELDS = [
-        ("overall", "Overall Intelligence Score"),
+        ("overall", "Large Score"),
         ("opportunity", "Opportunity Score"),
         ("checklist", "Checklist Completion"),
+    ]
+    TECHNICAL_FIELDS = [
+        ("support_strength", "Support Strength", ("support_score", "strength_score")),
+        ("bounce_probability", "Bounce Probability", ("bounce_success_rate", "bounce_score")),
+        ("relative_strength", "Relative Strength", ("relative_strength_score",)),
+        ("volume_intelligence", "Volume Intelligence", ("volume_score",)),
+        ("trend", "Trend", ("trend_score",)),
     ]
     FUNDAMENTAL_FIELDS = [
         ("revenue_growth_ttm", "Revenue Growth", "percent"),
         ("eps_growth_ttm", "EPS Growth", "percent"),
         ("roe", "ROE", "percent"),
         ("gross_margin", "Gross Margin", "percent"),
-        ("free_cash_flow", "Free Cash Flow", "currency"),
-        ("debt_to_equity", "Debt / Equity", "number"),
+        ("debt_to_equity", "Debt", "number"),
+        ("free_cash_flow", "Cash Flow", "currency"),
         ("current_ratio", "Current Ratio", "number"),
         ("market_cap", "Market Cap", "currency"),
     ]
@@ -302,6 +309,36 @@ class ResearchPreview(QWidget):
         "eps_growth_ttm": ("eps_growth_ttm", "eps_growth"),
     }
     SCORE_FIELDS = LegacyResearchPreview.SCORE_FIELDS
+    INSTITUTIONAL_FIELDS = [
+        (
+            "institutional_ownership",
+            "Institutional Ownership",
+            ("institutional_ownership_pct", "institutional_score"),
+        ),
+        (
+            "recent_buying",
+            "Recent Buying",
+            ("net_institutional_buying", "institutional_momentum_score"),
+        ),
+        (
+            "thirteen_f_trend",
+            "13F Trend",
+            ("institutional_ownership_change_qoq", "institutional_momentum_score"),
+        ),
+        (
+            "insider_activity",
+            "Insider Activity",
+            ("insider_buying_flag", "insider_selling_flag"),
+        ),
+    ]
+    RISK_FIELDS = [
+        ("entry", "Entry", ("entry", "recommended_entry", "entry_price")),
+        ("stop", "Stop", ("stop", "recommended_stop", "stop_price")),
+        ("target", "Target", ("target_1", "target", "target_price")),
+        ("atr", "ATR", ("atr", "atr_pct", "atr14")),
+        ("risk_reward", "Risk/Reward", ("risk_reward", "best_rr", "rr_1")),
+        ("position_size", "Position Size", ("position_size", "shares")),
+    ]
     CHECKLIST_ITEMS = [
         ("near_support", "Near Support", "Near validated support"),
         (
@@ -341,8 +378,8 @@ class ResearchPreview(QWidget):
         self.group = QGroupBox("Research Preview 2.0")
         self.group.setObjectName("ResearchPreviewCard")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(12, 14, 12, 12)
-        group_layout.setSpacing(8)
+        group_layout.setContentsMargins(14, 18, 14, 14)
+        group_layout.setSpacing(10)
 
         self.empty_state_label = QLabel("Select a candidate to begin research.")
         self.empty_state_label.setAlignment(Qt.AlignCenter)
@@ -353,12 +390,12 @@ class ResearchPreview(QWidget):
         self.dashboard_frame.setObjectName("ResearchPreviewDashboard")
         dashboard_layout = QVBoxLayout(self.dashboard_frame)
         dashboard_layout.setContentsMargins(0, 0, 0, 0)
-        dashboard_layout.setSpacing(8)
+        dashboard_layout.setSpacing(10)
 
         header_section = self.create_section()
         header_layout = header_section.layout()
-        header_layout.setContentsMargins(8, 8, 8, 8)
-        header_layout.setSpacing(3)
+        header_layout.setContentsMargins(10, 10, 10, 10)
+        header_layout.setSpacing(4)
 
         self.ticker_label = QLabel("")
         self.ticker_label.setObjectName("ResearchPreviewTicker")
@@ -380,24 +417,35 @@ class ResearchPreview(QWidget):
         header_layout.addWidget(self.company_label)
         header_layout.addWidget(self.rating_label)
 
-        summary_section = self.create_section("Score Summary")
+        summary_section = self.create_section("Overall Rating")
         summary_layout = summary_section.layout()
-        summary_layout.setContentsMargins(8, 8, 8, 8)
-        summary_layout.setSpacing(5)
+        summary_layout.setContentsMargins(10, 10, 10, 10)
+        summary_layout.setSpacing(6)
 
         self.summary_labels = {}
         for key, label in self.SUMMARY_FIELDS:
             self.summary_labels[key] = self.create_value_row(summary_layout, label)
 
         self.overall_score_label = self.summary_labels["overall"]
+        self.letter_grade_label = self.create_value_row(summary_layout, "Large Letter Grade")
+        self.confidence_label = self.create_value_row(summary_layout, "Confidence")
         self.score_labels = {}
         for key, label in self.SCORE_FIELDS:
             self.score_labels[key] = self.create_value_row(summary_layout, label)
 
+        technical_section = self.create_section("Technical")
+        technical_layout = technical_section.layout()
+        technical_layout.setContentsMargins(10, 10, 10, 10)
+        technical_layout.setSpacing(6)
+
+        self.technical_labels = {}
+        for key, label, _fields in self.TECHNICAL_FIELDS:
+            self.technical_labels[key] = self.create_value_row(technical_layout, label)
+
         fundamentals_section = self.create_section("Fundamentals")
         fundamentals_layout = fundamentals_section.layout()
-        fundamentals_layout.setContentsMargins(8, 8, 8, 8)
-        fundamentals_layout.setSpacing(5)
+        fundamentals_layout.setContentsMargins(10, 10, 10, 10)
+        fundamentals_layout.setSpacing(6)
 
         self.fundamental_labels = {}
         for key, label, _value_type in self.FUNDAMENTAL_FIELDS:
@@ -411,10 +459,43 @@ class ResearchPreview(QWidget):
         self.fundamentals_unavailable_label.setWordWrap(True)
         fundamentals_layout.addWidget(self.fundamentals_unavailable_label)
 
+        institutional_section = self.create_section("Institutional")
+        institutional_layout = institutional_section.layout()
+        institutional_layout.setContentsMargins(10, 10, 10, 10)
+        institutional_layout.setSpacing(6)
+
+        self.institutional_labels = {}
+        for key, label, _fields in self.INSTITUTIONAL_FIELDS:
+            self.institutional_labels[key] = self.create_value_row(
+                institutional_layout,
+                label,
+            )
+
+        risk_section = self.create_section("Risk")
+        risk_layout = risk_section.layout()
+        risk_layout.setContentsMargins(10, 10, 10, 10)
+        risk_layout.setSpacing(6)
+
+        self.risk_labels = {}
+        for key, label, _fields in self.RISK_FIELDS:
+            self.risk_labels[key] = self.create_value_row(risk_layout, label)
+
+        decision_section = self.create_section("Decision")
+        decision_layout = decision_section.layout()
+        decision_layout.setContentsMargins(10, 10, 10, 10)
+        decision_layout.setSpacing(6)
+
+        self.decision_label = QLabel("Decision unavailable.")
+        self.decision_label.setObjectName("ResearchPreviewSignal")
+        self.decision_label.setAlignment(Qt.AlignCenter)
+        self.decision_label.setWordWrap(True)
+        self.decision_label.setProperty("decision", "missing")
+        decision_layout.addWidget(self.decision_label)
+
         checklist_section = self.create_section("Institutional Checklist")
         checklist_layout = checklist_section.layout()
-        checklist_layout.setContentsMargins(8, 8, 8, 8)
-        checklist_layout.setSpacing(4)
+        checklist_layout.setContentsMargins(10, 10, 10, 10)
+        checklist_layout.setSpacing(5)
 
         self.checklist_rows = {}
         self.checklist_name_labels = {}
@@ -433,8 +514,8 @@ class ResearchPreview(QWidget):
 
         thesis_section = self.create_section("Trade Thesis")
         thesis_layout = thesis_section.layout()
-        thesis_layout.setContentsMargins(8, 8, 8, 8)
-        thesis_layout.setSpacing(4)
+        thesis_layout.setContentsMargins(10, 10, 10, 10)
+        thesis_layout.setSpacing(5)
 
         self.thesis_title_label = QLabel("Trade thesis unavailable.")
         self.thesis_title_label.setObjectName("ResearchPreviewFieldValue")
@@ -475,7 +556,11 @@ class ResearchPreview(QWidget):
 
         dashboard_layout.addWidget(header_section)
         dashboard_layout.addWidget(summary_section)
+        dashboard_layout.addWidget(technical_section)
         dashboard_layout.addWidget(fundamentals_section)
+        dashboard_layout.addWidget(institutional_section)
+        dashboard_layout.addWidget(risk_section)
+        dashboard_layout.addWidget(decision_section)
         dashboard_layout.addWidget(checklist_section)
         dashboard_layout.addWidget(thesis_section)
         dashboard_layout.addWidget(self.warning_title_label)
@@ -513,8 +598,17 @@ class ResearchPreview(QWidget):
 
         for label in self.summary_labels.values():
             label.setText("-")
+        self.letter_grade_label.setText("--")
+        self.confidence_label.setText("--")
         for label in self.score_labels.values():
             label.setText("-")
+        for label in self.technical_labels.values():
+            label.setText("--")
+        for label in self.institutional_labels.values():
+            label.setText("--")
+        for label in self.risk_labels.values():
+            label.setText("--")
+        self.set_decision(None)
 
         self.set_fundamentals(None)
         self.set_checklist_unavailable()
@@ -533,6 +627,7 @@ class ResearchPreview(QWidget):
         opportunity = candidate_score.opportunity_rating
         checklist = candidate_score.institutional_checklist
         thesis = candidate_score.trade_thesis
+        metrics = self.workspace_metrics_for_candidate(candidate_score)
 
         self.empty_state_label.hide()
         self.dashboard_frame.show()
@@ -558,13 +653,21 @@ class ResearchPreview(QWidget):
         self.summary_labels["checklist"].setText(
             self.format_checklist_summary(checklist)
         )
+        self.letter_grade_label.setText(
+            self.letter_grade_for_score(candidate_score.primary_score_value)
+        )
+        self.confidence_label.setText(self.confidence_for_candidate(candidate_score))
         self.timestamp_label.setText(f"Analysis Time: {candidate_score.timestamp}")
 
         score_map = candidate_score.score_map
         for key, _label in self.SCORE_FIELDS:
             self.score_labels[key].setText(self.format_score(score_map.get(key)))
 
+        self.set_technical(metrics)
         self.set_fundamentals(self.fundamentals_for_candidate(candidate_score))
+        self.set_institutional(metrics)
+        self.set_risk(metrics, candidate_score)
+        self.set_decision(self.decision_for_candidate(candidate_score))
         self.set_checklist(checklist)
         self.set_trade_thesis(thesis)
         self.warning_label.setText(
@@ -636,6 +739,91 @@ class ResearchPreview(QWidget):
 
         self.fundamentals_unavailable_label.setVisible(not has_any_value)
 
+    def set_technical(self, metrics):
+        for key, _label, fields in self.TECHNICAL_FIELDS:
+            value = self.first_metric(metrics, fields)
+            value_type = "percent" if key == "bounce_probability" else "score"
+            self.technical_labels[key].setText(
+                self.format_workspace_value(value, value_type=value_type)
+            )
+
+    def set_institutional(self, metrics):
+        for key, _label, fields in self.INSTITUTIONAL_FIELDS:
+            value = self.first_metric(metrics, fields)
+
+            if key == "insider_activity":
+                value = self.insider_activity_text(metrics)
+                value_type = "text"
+            elif key == "institutional_ownership":
+                value_type = "percent"
+            elif key == "recent_buying":
+                value_type = "currency"
+            else:
+                value_type = "number"
+
+            self.institutional_labels[key].setText(
+                self.format_workspace_value(value, value_type=value_type)
+            )
+
+    def set_risk(self, metrics, candidate_score):
+        trade_card = self.trade_card_for_candidate(candidate_score) or {}
+        merged = dict(metrics)
+
+        if isinstance(trade_card, dict):
+            merged.update(trade_card)
+        elif trade_card is not None:
+            for _key, _label, fields in self.RISK_FIELDS:
+                for field in fields:
+                    value = getattr(trade_card, field, None)
+                    if value is not None:
+                        merged[field] = value
+
+        for key, _label, fields in self.RISK_FIELDS:
+            value = self.first_metric(merged, fields)
+
+            if key in {"entry", "stop", "target", "atr"}:
+                value_type = "price"
+            elif key == "risk_reward":
+                value_type = "ratio"
+            else:
+                value_type = "number"
+
+            self.risk_labels[key].setText(
+                self.format_workspace_value(value, value_type=value_type)
+            )
+
+    def set_decision(self, decision):
+        if decision is None:
+            text = "Decision unavailable."
+            state = "missing"
+        else:
+            text, state = decision
+
+        self.decision_label.setText(text)
+        self.decision_label.setProperty("decision", state)
+        self.decision_label.setStyleSheet(self.decision_badge_style(state))
+        self.decision_label.style().unpolish(self.decision_label)
+        self.decision_label.style().polish(self.decision_label)
+
+    @staticmethod
+    def decision_badge_style(state):
+        colors = {
+            "green": ("#41B883", "#142A22"),
+            "yellow": ("#D6A23A", "#2C2414"),
+            "red": ("#E05A5A", "#2D1719"),
+            "missing": ("#778391", "#1E242B"),
+        }
+        foreground, background = colors.get(state, colors["missing"])
+
+        return (
+            f"color: {foreground};"
+            f"background-color: {background};"
+            f"border: 1px solid {foreground};"
+            "border-radius: 5px;"
+            "padding: 6px 10px;"
+            "font-weight: 700;"
+        )
+
     @classmethod
     def fundamentals_for_candidate(cls, candidate_score):
         if candidate_score is None:
@@ -656,6 +844,42 @@ class ResearchPreview(QWidget):
         }
 
     @classmethod
+    def workspace_metrics_for_candidate(cls, candidate_score):
+        if candidate_score is None:
+            return {}
+
+        metrics = {}
+
+        if isinstance(candidate_score, dict):
+            metrics.update(candidate_score.get("metrics") or {})
+            metrics.update(candidate_score)
+        else:
+            metrics.update(getattr(candidate_score, "metrics", None) or {})
+
+            score_map = getattr(candidate_score, "score_map", {}) or {}
+            for name, score in score_map.items():
+                metrics[name] = cls.score_value(score)
+
+            metrics.update(
+                getattr(candidate_score, "composite_intelligence_component_scores", None)
+                or {}
+            )
+
+            composite_score = getattr(candidate_score, "composite_score", None)
+            if composite_score is not None:
+                metrics["composite_score"] = cls.score_value(composite_score)
+
+            institutional_bounce_score = getattr(
+                candidate_score,
+                "institutional_bounce_score",
+                None,
+            )
+            if institutional_bounce_score is not None:
+                metrics["institutional_bounce_score"] = institutional_bounce_score
+
+        return metrics
+
+    @classmethod
     def fundamental_metric_names(cls):
         names = set()
 
@@ -674,6 +898,39 @@ class ResearchPreview(QWidget):
                 return value
 
         return None
+
+    @staticmethod
+    def first_metric(metrics, fields):
+        for field in fields:
+            value = metrics.get(field)
+
+            if value is not None and value != "":
+                return value
+
+        return None
+
+    @staticmethod
+    def score_value(score):
+        if hasattr(score, "value"):
+            return score.value
+
+        return score
+
+    @staticmethod
+    def insider_activity_text(metrics):
+        buying = metrics.get("insider_buying_flag")
+        selling = metrics.get("insider_selling_flag")
+
+        if buying in {True, 1, "1", "true", "True"}:
+            return "Buying"
+
+        if selling in {True, 1, "1", "true", "True"}:
+            return "Selling"
+
+        if buying is None and selling is None:
+            return None
+
+        return "Neutral"
 
     def set_placeholder_checklist(self):
         """
@@ -860,6 +1117,105 @@ class ResearchPreview(QWidget):
             return f"${numeric_value:,.0f}"
 
         return f"{numeric_value:.2f}"
+
+    @classmethod
+    def format_workspace_value(cls, value, value_type="score"):
+        if value is None or value == "":
+            return "--"
+
+        if value_type == "text":
+            return str(value)
+
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+
+        if value_type == "percent":
+            return f"{numeric_value:.1f}%"
+
+        if value_type == "currency":
+            abs_value = abs(numeric_value)
+
+            if abs_value >= 1_000_000_000_000:
+                return f"${numeric_value / 1_000_000_000_000:.2f}T"
+
+            if abs_value >= 1_000_000_000:
+                return f"${numeric_value / 1_000_000_000:.2f}B"
+
+            if abs_value >= 1_000_000:
+                return f"${numeric_value / 1_000_000:.2f}M"
+
+            return f"${numeric_value:,.0f}"
+
+        if value_type == "price":
+            return f"${numeric_value:.2f}"
+
+        if value_type == "ratio":
+            return f"{numeric_value:.2f}:1"
+
+        return f"{numeric_value:.1f}"
+
+    @staticmethod
+    def letter_grade_for_score(score):
+        try:
+            value = float(score)
+        except (TypeError, ValueError):
+            return "--"
+
+        if value >= 90:
+            return "A"
+
+        if value >= 80:
+            return "B"
+
+        if value >= 70:
+            return "C"
+
+        if value >= 60:
+            return "D"
+
+        return "F"
+
+    @classmethod
+    def confidence_for_candidate(cls, candidate_score):
+        thesis = getattr(candidate_score, "trade_thesis", None)
+        confidence = getattr(thesis, "confidence", None)
+
+        if confidence:
+            return str(confidence)
+
+        checklist = getattr(candidate_score, "institutional_checklist", None)
+        if checklist is not None:
+            return checklist.overall_label
+
+        opportunity = getattr(candidate_score, "opportunity_rating", None)
+        if opportunity is not None:
+            return opportunity.rating_label
+
+        return "--"
+
+    @classmethod
+    def decision_for_candidate(cls, candidate_score):
+        opportunity = getattr(candidate_score, "opportunity_rating", None)
+        score = (
+            opportunity.rating_score
+            if opportunity is not None
+            else getattr(candidate_score, "primary_score_value", None)
+        )
+
+        try:
+            value = float(score)
+        except (TypeError, ValueError):
+            return None
+
+        if value >= 80:
+            return ("High Conviction", "green")
+
+        if value >= 70:
+            return ("Watch", "yellow")
+
+        return ("Avoid", "red")
 
     @classmethod
     def format_checklist_summary(cls, checklist):

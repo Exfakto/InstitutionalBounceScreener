@@ -41,13 +41,13 @@ class TradeCard(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
         self.group = QGroupBox("Trade Card")
         self.group.setObjectName("ResearchPreviewCard")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(14, 16, 14, 14)
-        group_layout.setSpacing(10)
+        group_layout.setContentsMargins(14, 18, 14, 14)
+        group_layout.setSpacing(11)
 
         self.empty_state_label = QLabel("No trade card available.")
         self.empty_state_label.setAlignment(Qt.AlignCenter)
@@ -58,7 +58,7 @@ class TradeCard(QWidget):
         self.dashboard_frame.setObjectName("ResearchPreviewDashboard")
         dashboard_layout = QVBoxLayout(self.dashboard_frame)
         dashboard_layout.setContentsMargins(0, 0, 0, 0)
-        dashboard_layout.setSpacing(8)
+        dashboard_layout.setSpacing(10)
 
         self.ticker_label = QLabel("")
         self.ticker_label.setObjectName("ResearchPreviewTicker")
@@ -195,8 +195,8 @@ class TradeCard(QWidget):
         section = QFrame()
         section.setObjectName("ResearchPreviewSection")
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(7)
         return section, layout
 
     @classmethod

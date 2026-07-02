@@ -3,16 +3,20 @@ class Theme:
     Central application theme.
     """
 
-    BACKGROUND = "#1E1E1E"
-    SECONDARY = "#2A2A2A"
-    SURFACE = "#323232"
-    BORDER = "#4A4A4A"
-    PRIMARY = "#4A90E2"
-    SUCCESS = "#3FB950"
-    WARNING = "#D29922"
-    ERROR = "#F85149"
-    TEXT = "#F2F2F2"
-    MUTED_TEXT = "#B0B0B0"
+    BACKGROUND = "#15181C"
+    SECONDARY = "#1E242B"
+    SURFACE = "#262D35"
+    ELEVATED = "#2F3842"
+    BORDER = "#3D4652"
+    SOFT_BORDER = "#2B333D"
+    PRIMARY = "#4F8FDB"
+    PRIMARY_SOFT = "#203B58"
+    SUCCESS = "#41B883"
+    WARNING = "#D6A23A"
+    ERROR = "#E05A5A"
+    TEXT = "#F4F7FA"
+    MUTED_TEXT = "#A8B3C1"
+    SUBTLE_TEXT = "#778391"
 
     @classmethod
     def load_stylesheet(cls):
@@ -43,89 +47,92 @@ class Theme:
         }}
 
         QLabel:disabled {{
-            color: {cls.MUTED_TEXT};
+            color: {cls.SUBTLE_TEXT};
         }}
 
         QPushButton {{
             background-color: {cls.SURFACE};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
-            padding: 7px 11px;
-            min-height: 24px;
+            border-radius: 5px;
+            padding: 8px 12px;
+            min-height: 26px;
+            font-weight: 600;
         }}
 
         QPushButton:hover {{
             border-color: {cls.PRIMARY};
-            background-color: {cls.SECONDARY};
+            background-color: {cls.ELEVATED};
         }}
 
         QPushButton:pressed {{
-            background-color: {cls.PRIMARY};
+            background-color: {cls.PRIMARY_SOFT};
             color: {cls.TEXT};
         }}
 
         QPushButton:disabled {{
             background-color: {cls.SECONDARY};
-            color: {cls.MUTED_TEXT};
-            border-color: {cls.SURFACE};
+            color: {cls.SUBTLE_TEXT};
+            border-color: {cls.SOFT_BORDER};
         }}
 
         QTableWidget {{
             background-color: {cls.SECONDARY};
             alternate-background-color: {cls.SURFACE};
             color: {cls.TEXT};
-            gridline-color: {cls.BORDER};
+            gridline-color: {cls.SOFT_BORDER};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
-            selection-background-color: {cls.PRIMARY};
+            border-radius: 6px;
+            selection-background-color: {cls.PRIMARY_SOFT};
             selection-color: {cls.TEXT};
             outline: none;
         }}
 
         QTableWidget::item {{
-            padding: 6px;
+            padding: 7px 8px;
             border: none;
         }}
 
         QTableWidget::item:selected {{
-            background-color: {cls.PRIMARY};
+            background-color: {cls.PRIMARY_SOFT};
             color: {cls.TEXT};
         }}
 
         QHeaderView {{
-            background-color: {cls.SURFACE};
+            background-color: {cls.ELEVATED};
             color: {cls.TEXT};
         }}
 
         QHeaderView::section {{
-            background-color: {cls.SURFACE};
+            background-color: {cls.ELEVATED};
             color: {cls.TEXT};
-            border: 1px solid {cls.BORDER};
-            padding: 7px;
-            font-weight: 600;
+            border: none;
+            border-right: 1px solid {cls.SOFT_BORDER};
+            border-bottom: 1px solid {cls.BORDER};
+            padding: 8px;
+            font-weight: 700;
         }}
 
         QProgressBar {{
             background-color: {cls.SECONDARY};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
+            border-radius: 5px;
             text-align: center;
             min-height: 18px;
         }}
 
         QProgressBar::chunk {{
             background-color: {cls.PRIMARY};
-            border-radius: 3px;
+            border-radius: 4px;
         }}
 
         QTextEdit {{
             background-color: {cls.SECONDARY};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
-            padding: 6px;
+            border-radius: 6px;
+            padding: 8px;
             selection-background-color: {cls.PRIMARY};
             font-family: "Consolas", "Segoe UI", monospace;
             font-size: 9pt;
@@ -135,8 +142,8 @@ class Theme:
             background-color: {cls.SECONDARY};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
-            padding: 6px;
+            border-radius: 5px;
+            padding: 7px;
             selection-background-color: {cls.PRIMARY};
         }}
 
@@ -145,38 +152,39 @@ class Theme:
         }}
 
         QGroupBox {{
-            background-color: {cls.BACKGROUND};
+            background-color: {cls.SECONDARY};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
-            margin-top: 12px;
-            padding-top: 12px;
-            font-weight: 600;
+            border-radius: 6px;
+            margin-top: 14px;
+            padding-top: 14px;
+            font-weight: 700;
         }}
 
         QGroupBox::title {{
             subcontrol-origin: margin;
             subcontrol-position: top left;
-            left: 8px;
-            padding: 0 4px;
+            left: 10px;
+            padding: 0 6px;
             color: {cls.MUTED_TEXT};
+            background-color: {cls.SECONDARY};
         }}
 
         QFrame {{
             background-color: {cls.SURFACE};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
+            border-radius: 6px;
         }}
 
         QFrame#HeaderBar {{
             background-color: {cls.SURFACE};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
+            border-radius: 7px;
         }}
 
         QLabel#HeaderTitle {{
             color: {cls.TEXT};
-            font-size: 15pt;
+            font-size: 16pt;
             font-weight: 700;
         }}
 
@@ -193,8 +201,8 @@ class Theme:
             font-size: 8pt;
             font-weight: 700;
             text-transform: uppercase;
-            padding-left: 2px;
-            padding-right: 2px;
+            padding-left: 4px;
+            padding-right: 4px;
         }}
 
         QFrame#ToolbarSeparator {{
@@ -202,8 +210,8 @@ class Theme:
             border: none;
             min-width: 1px;
             max-width: 1px;
-            margin-left: 4px;
-            margin-right: 4px;
+            margin-left: 6px;
+            margin-right: 6px;
         }}
 
         QFrame#ResearchPreviewSeparator {{
@@ -222,18 +230,18 @@ class Theme:
         QFrame#ResearchPreviewSection {{
             background-color: {cls.SECONDARY};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
+            border-radius: 6px;
         }}
 
         QFrame#KpiCard {{
             background-color: {cls.SURFACE};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
+            border-radius: 7px;
         }}
 
         QLabel#ResearchPreviewTicker {{
             color: {cls.TEXT};
-            font-size: 16pt;
+            font-size: 17pt;
             font-weight: 700;
         }}
 
@@ -249,10 +257,10 @@ class Theme:
 
         QLabel#ResearchPreviewSignal {{
             color: {cls.TEXT};
-            background-color: {cls.SECONDARY};
+            background-color: {cls.PRIMARY_SOFT};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
-            padding: 4px 8px;
+            border-radius: 5px;
+            padding: 5px 9px;
             font-weight: 700;
         }}
 
@@ -260,8 +268,8 @@ class Theme:
             color: {cls.TEXT};
             background-color: {cls.SURFACE};
             border: 1px solid {cls.BORDER};
-            border-radius: 3px;
-            padding: 2px 5px;
+            border-radius: 4px;
+            padding: 3px 6px;
             font-size: 8pt;
             font-weight: 700;
         }}
@@ -285,13 +293,13 @@ class Theme:
             color: {cls.MUTED_TEXT};
             background-color: {cls.BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 4px;
-            padding: 7px;
+            border-radius: 6px;
+            padding: 9px;
         }}
 
         QLabel#ResearchPreviewOverall {{
             color: {cls.PRIMARY};
-            font-size: 28pt;
+            font-size: 27pt;
             font-weight: 700;
         }}
 
@@ -302,8 +310,69 @@ class Theme:
 
         QGroupBox#ResearchPreviewCard,
         QGroupBox#ActivityLogGroup {{
-            background-color: {cls.BACKGROUND};
+            background-color: {cls.SECONDARY};
             border-color: {cls.BORDER};
+        }}
+
+        QTabWidget::pane {{
+            background-color: {cls.SECONDARY};
+            border: 1px solid {cls.BORDER};
+            border-radius: 6px;
+            top: -1px;
+        }}
+
+        QTabBar::tab {{
+            background-color: {cls.BACKGROUND};
+            color: {cls.MUTED_TEXT};
+            border: 1px solid {cls.SOFT_BORDER};
+            border-bottom: none;
+            padding: 8px 13px;
+            margin-right: 3px;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            font-weight: 600;
+        }}
+
+        QTabBar::tab:selected {{
+            background-color: {cls.SECONDARY};
+            color: {cls.TEXT};
+            border-color: {cls.BORDER};
+        }}
+
+        QTabBar::tab:hover {{
+            color: {cls.TEXT};
+            background-color: {cls.SURFACE};
+        }}
+
+        QSplitter::handle {{
+            background-color: {cls.BACKGROUND};
+        }}
+
+        QSplitter::handle:horizontal {{
+            width: 8px;
+        }}
+
+        QSplitter::handle:vertical {{
+            height: 8px;
+        }}
+
+        QLabel#PriceChartSummary {{
+            color: {cls.MUTED_TEXT};
+            background-color: {cls.SECONDARY};
+            border: 1px solid {cls.BORDER};
+            border-radius: 6px;
+            padding: 12px;
+            font-weight: 600;
+        }}
+
+        QLabel#PriceChartReadout {{
+            color: {cls.MUTED_TEXT};
+            background-color: {cls.SECONDARY};
+            border: 1px solid {cls.SOFT_BORDER};
+            border-radius: 5px;
+            padding: 7px 9px;
+            font-family: "Consolas", "Segoe UI", monospace;
+            font-size: 9pt;
         }}
 
         QScrollBar:vertical {{
