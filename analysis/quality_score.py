@@ -1,5 +1,5 @@
 """
-Placeholder fundamental quality scoring for v1.1.
+Fundamental quality scoring.
 """
 
 from __future__ import annotations
@@ -17,24 +17,22 @@ class QualityScore(BaseScore):
 
     def calculate(self, metrics):
         """
-        Return a v1.1 placeholder heuristic ScoreResult.
+        Return a bounded heuristic ScoreResult from local fundamental metrics.
         """
 
         score = 0.0
         warnings = []
 
-        # v1.1 placeholder heuristic: reward growth, profitability,
-        # cash generation, modest leverage, and basic liquidity.
         score += self._positive_metric_score(
             metrics,
-            "revenue_growth_ttm",
+            ("revenue_growth_ttm", "revenue_growth"),
             15,
             20,
             warnings,
         )
         score += self._positive_metric_score(
             metrics,
-            "eps_growth_ttm",
+            ("eps_growth_ttm", "eps_growth"),
             15,
             20,
             warnings,
@@ -76,10 +74,18 @@ class QualityScore(BaseScore):
 
     @staticmethod
     def _number(metrics, key, warnings):
-        value = metrics.get(key)
+        keys = key if isinstance(key, tuple) else (key,)
+        value = None
+
+        for candidate_key in keys:
+            candidate_value = metrics.get(candidate_key)
+
+            if candidate_value is not None and candidate_value != "":
+                value = candidate_value
+                break
 
         if value is None or value == "":
-            warnings.append(f"Missing {key}")
+            warnings.append(f"Missing {keys[0]}")
             return 0.0
 
         return float(value)

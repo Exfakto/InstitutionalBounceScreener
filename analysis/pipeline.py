@@ -106,6 +106,7 @@ class AnalysisPipeline:
             score.name: score.value
             for score in candidate.scores
         }
+        metrics.update(getattr(candidate, "metrics", {}) or {})
         metrics.update(candidate.composite_intelligence_component_scores)
         metrics["composite_score"] = candidate.composite_score.value
 

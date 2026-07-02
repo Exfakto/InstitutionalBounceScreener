@@ -32,6 +32,7 @@ class CandidateScore:
     opportunity_rating: OpportunityRatingResult | None = None
     institutional_checklist: InstitutionalChecklistResult | None = None
     trade_thesis: "TradeThesisResult | None" = None
+    metrics: dict = field(default_factory=dict)
     missing_components: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     timestamp: datetime = field(

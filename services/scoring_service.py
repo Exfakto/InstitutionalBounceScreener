@@ -57,6 +57,7 @@ class ScoringService:
             ticker=ticker,
             scores=scores,
             composite_score=composite_score,
+            metrics=dict(context),
         )
 
         return self.add_composite_intelligence(candidate, score_context)
@@ -87,6 +88,7 @@ class ScoringService:
             institutional_bounce_score=result.institutional_bounce_score,
             composite_intelligence=result,
             composite_intelligence_component_scores=result.component_scores,
+            metrics=dict(candidate.metrics),
             missing_components=result.missing_components,
             warnings=result.warnings,
             timestamp=candidate.timestamp,
@@ -195,6 +197,7 @@ class ScoringService:
         }
 
         self.merge_row(context, self.db.get_fundamentals(ticker))
+        self.normalize_fundamental_context(context)
         self.merge_row(context, self.db.get_institutional_metrics(ticker))
         self.merge_latest_price(context, self.db.get_price_history(ticker))
         self.merge_row(context, self.first_row(self.db.get_support_levels(ticker)))
@@ -241,6 +244,23 @@ class ScoringService:
             for key in keys
             if key in context and context[key] is not None
         }
+
+    @staticmethod
+    def normalize_fundamental_context(context):
+        """
+        Populate stable scoring aliases from locally synchronized fundamentals.
+        """
+
+        aliases = {
+            "revenue_growth": "revenue_growth_ttm",
+            "eps_growth": "eps_growth_ttm",
+        }
+
+        for source, target in aliases.items():
+            if context.get(target) is None and context.get(source) is not None:
+                context[target] = context[source]
+            elif context.get(source) is None and context.get(target) is not None:
+                context[source] = context[target]
 
     def close(self):
         if getattr(self, "_owns_composite_intelligence_service", False):

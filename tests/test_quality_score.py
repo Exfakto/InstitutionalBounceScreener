@@ -39,6 +39,23 @@ class QualityScoreTest(unittest.TestCase):
         self.assertLessEqual(result.value, 100.0)
         self.assertTrue(result.details["warnings"])
 
+    def test_live_fundamental_aliases_are_scored(self):
+        metrics = {
+            "revenue_growth": 25,
+            "eps_growth": 30,
+            "roe": 30,
+            "gross_margin": 70,
+            "free_cash_flow": 1000000,
+            "debt_to_equity": 0.2,
+            "current_ratio": 2,
+        }
+
+        result = QualityScore().calculate(metrics)
+
+        self.assertGreater(result.value, 90)
+        self.assertNotIn("Missing revenue_growth_ttm", result.details["warnings"])
+        self.assertNotIn("Missing eps_growth_ttm", result.details["warnings"])
+
     def test_apply_adds_quality_score_without_mutating_input(self):
         metrics = {"revenue_growth_ttm": 10}
 

@@ -23,6 +23,10 @@ class FakeScoringDatabase:
     def get_fundamentals(self, ticker):
         return {
             "ticker": ticker,
+            "company_name": "Apple Inc.",
+            "sector": "Technology",
+            "industry": "Consumer Electronics",
+            "market_cap": 3000000000000,
             "revenue_growth_ttm": 20,
             "eps_growth_ttm": 20,
             "roe": 25,
@@ -159,6 +163,10 @@ class ScoringServiceTest(unittest.TestCase):
         self.assertIn("support_score", candidate.score_map)
         self.assertIn("bounce_score", candidate.score_map)
         self.assertEqual(candidate.composite_score.name, "composite_score")
+        self.assertEqual(candidate.metrics["company_name"], "Apple Inc.")
+        self.assertEqual(candidate.metrics["market_cap"], 3000000000000)
+        self.assertEqual(candidate.metrics["revenue_growth"], 20)
+        self.assertEqual(candidate.metrics["eps_growth"], 20)
 
     def test_score_candidate_includes_gen2_output_when_available(self):
         service = self.build_service(FakeScoringDatabase())
@@ -177,6 +185,26 @@ class ScoringServiceTest(unittest.TestCase):
             candidate.warnings,
             ["Missing components reduced confidence"],
         )
+        self.assertEqual(candidate.metrics["sector"], "Technology")
+
+    def test_score_candidate_uses_live_alias_fundamentals(self):
+        class AliasFundamentalsDatabase(FakeScoringDatabase):
+
+            def get_fundamentals(self, ticker):
+                row = dict(super().get_fundamentals(ticker))
+                row.pop("revenue_growth_ttm")
+                row.pop("eps_growth_ttm")
+                row["revenue_growth"] = 25
+                row["eps_growth"] = 30
+                return row
+
+        service = self.build_service(AliasFundamentalsDatabase())
+
+        candidate = service.score_candidate("AAPL")
+
+        self.assertEqual(candidate.metrics["revenue_growth_ttm"], 25)
+        self.assertEqual(candidate.metrics["eps_growth_ttm"], 30)
+        self.assertGreater(candidate.score_map["quality_score"].value, 90)
 
     def test_score_candidate_falls_back_when_gen2_unavailable(self):
         service = self.build_service(FakeScoringDatabase())

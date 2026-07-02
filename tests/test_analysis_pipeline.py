@@ -34,6 +34,17 @@ class FakeScoringService:
                 value=self.scores[ticker],
             ),
             institutional_bounce_score=self.gen2_scores.get(ticker),
+            metrics={
+                "company_name": f"{ticker} Corp",
+                "market_cap": 1000000000,
+                "revenue_growth_ttm": 12,
+                "eps_growth_ttm": 10,
+                "roe": 20,
+                "gross_margin": 45,
+                "free_cash_flow": 1000000,
+                "debt_to_equity": 0.5,
+                "current_ratio": 1.8,
+            },
         )
 
     def close(self):
@@ -122,6 +133,7 @@ class AnalysisPipelineTest(unittest.TestCase):
         self.assertEqual(candidate.institutional_checklist.total_checks, 10)
         self.assertIsNotNone(candidate.trade_thesis)
         self.assertIn("AAA", candidate.trade_thesis.title)
+        self.assertEqual(candidate.metrics["company_name"], "AAA Corp")
         self.assertEqual(
             [
                 check.name
@@ -129,6 +141,15 @@ class AnalysisPipelineTest(unittest.TestCase):
             ][0],
             "Near validated support",
         )
+
+    def test_metrics_for_candidate_includes_live_fundamentals(self):
+        candidate = FakeScoringService({"AAA": 85.0}).score_candidate("AAA")
+
+        metrics = AnalysisPipeline.metrics_for_candidate(candidate)
+
+        self.assertEqual(metrics["company_name"], "AAA Corp")
+        self.assertEqual(metrics["market_cap"], 1000000000)
+        self.assertEqual(metrics["revenue_growth_ttm"], 12)
 
     def test_run_skips_failed_tickers(self):
         service = FakeScoringService(
