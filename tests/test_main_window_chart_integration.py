@@ -1,4 +1,33 @@
+from PySide6.QtWidgets import QApplication, QSplitter, QTabWidget
+
 from ui.main_window import MainWindow
+
+
+def test_main_window_uses_professional_splitter_layout():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    try:
+        assert isinstance(window.workspace_splitter, QSplitter)
+        assert isinstance(window.center_splitter, QSplitter)
+        assert isinstance(window.bottom_splitter, QSplitter)
+        assert isinstance(window.bottom_left_tabs, QTabWidget)
+        assert isinstance(window.bottom_right_tabs, QTabWidget)
+
+        assert window.workspace_splitter.count() == 2
+        assert window.center_splitter.count() == 2
+        assert window.bottom_splitter.count() == 2
+
+        assert window.center_splitter.widget(0) is window.price_chart
+        assert window.center_splitter.widget(1) is window.decision_panel
+
+        assert window.bottom_left_tabs.tabText(0) == "Candidates"
+        assert window.bottom_left_tabs.tabText(1) == "Watchlist"
+        assert window.bottom_left_tabs.tabText(2) == "Portfolio"
+        assert window.bottom_left_tabs.tabText(3) == "Trade Journal"
+        assert window.bottom_right_tabs.tabText(0) == "Activity"
+    finally:
+        window.close()
 
 
 class FakeTradeCard:
