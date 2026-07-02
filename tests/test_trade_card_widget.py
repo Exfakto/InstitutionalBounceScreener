@@ -54,6 +54,7 @@ def test_trade_card_empty_state(app):
     assert widget.rating_label.text() == "Opportunity rating unavailable."
     assert widget.warning_label.text() == "No warnings"
     assert widget.thesis_label.text() == "No trade thesis available."
+    assert widget.setup_badge_label.text() == "Missing Data"
 
 
 def test_trade_card_populated_card(app):
@@ -67,6 +68,7 @@ def test_trade_card_populated_card(app):
     assert widget.company_label.text() == "Amazon.com, Inc."
     assert widget.rating_label.text() == "★★★★★ Elite Bounce"
     assert widget.status_label.text() == "Strong Buy"
+    assert widget.setup_badge_label.text() == "Strong Buy"
     assert widget.trade_plan_labels["entry"].text() == "$181.25"
     assert widget.trade_plan_labels["stop"].text() == "$174.50"
     assert widget.trade_plan_labels["target_1"].text() == "$190.00"
@@ -76,6 +78,7 @@ def test_trade_card_populated_card(app):
     assert widget.risk_labels["position_size"].text() == "120 shares"
     assert widget.risk_labels["confidence"].text() == "High"
     assert "institutional support" in widget.thesis_label.text()
+    assert "Entry $181.25" in widget.current_summary
 
 
 def test_trade_card_accepts_object_input(app):
@@ -116,6 +119,7 @@ def test_trade_card_missing_optional_fields(app):
     assert widget.company_label.text() == "-"
     assert widget.rating_label.text() == "Opportunity rating unavailable."
     assert widget.status_label.text() == "-"
+    assert widget.setup_badge_label.text() == "Missing Data"
     assert widget.trade_plan_labels["entry"].text() == "-"
     assert widget.risk_labels["confidence"].text() == "-"
     assert widget.thesis_label.text() == "No trade thesis available."
@@ -133,6 +137,7 @@ def test_trade_card_repeated_updates_do_not_duplicate_widgets(app):
     assert len(widget.findChildren(QLabel)) == initial_label_count
     assert widget.ticker_label.text() == "META"
     assert widget.warning_label.text() == "No warnings"
+    assert widget.is_compact is False
 
 
 def test_trade_card_clear_resets_sections(app):
@@ -160,3 +165,60 @@ def test_trade_card_warnings_display(app):
 
     assert "- Stop is wide" in widget.warning_label.text()
     assert "- Target capped" in widget.warning_label.text()
+
+
+def test_trade_card_partial_trade_data(app):
+    widget = TradeCard()
+
+    widget.set_trade_card(
+        {
+            "ticker": "NVDA",
+            "entry": 120.0,
+            "risk_reward": 2.25,
+        }
+    )
+
+    assert widget.ticker_label.text() == "NVDA"
+    assert widget.trade_plan_labels["entry"].text() == "$120.00"
+    assert widget.trade_plan_labels["stop"].text() == "-"
+    assert widget.risk_labels["risk_reward"].text() == "2.25:1"
+    assert widget.setup_badge_label.text() == "Favorable Risk/Reward"
+
+
+def test_trade_card_badge_display_states(app):
+    widget = TradeCard()
+
+    widget.set_trade_card(make_trade_card(overall_status="Watch"))
+    assert widget.setup_badge_label.text() == "Watch"
+
+    widget.set_trade_card(make_trade_card(overall_status="Avoid"))
+    assert widget.setup_badge_label.text() == "Avoid"
+
+    widget.set_trade_card(make_trade_card(overall_status="High Conviction"))
+    assert widget.setup_badge_label.text() == "High Conviction"
+
+
+def test_trade_card_copy_summary(app):
+    widget = TradeCard()
+    widget.set_trade_card(make_trade_card())
+
+    copied = widget.copy_summary()
+
+    assert copied == widget.current_summary
+    assert QApplication.clipboard().text() == widget.current_summary
+    assert "AMZN trade plan" in copied
+
+
+def test_trade_card_compact_expanded_toggle(app):
+    widget = TradeCard()
+    widget.set_trade_card(make_trade_card())
+
+    widget.toggle_compact()
+
+    assert widget.is_compact is True
+    assert widget.compact_toggle_button.text() == "Expanded"
+
+    widget.toggle_compact()
+
+    assert widget.is_compact is False
+    assert widget.compact_toggle_button.text() == "Compact"
