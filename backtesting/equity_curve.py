@@ -22,6 +22,14 @@ class EquityCurve:
     recovery_periods: list[int] = field(default_factory=list)
     rolling_equity_highs: list[float] = field(default_factory=list)
 
+    def performance_analysis(self, initial_equity: float = 100_000.0):
+        from backtesting.performance_analysis import PerformanceAnalysis
+
+        return PerformanceAnalysis.from_equity_curve(
+            self,
+            initial_equity=initial_equity,
+        )
+
     @classmethod
     def from_trades(
         cls,

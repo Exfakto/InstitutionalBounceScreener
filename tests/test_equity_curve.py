@@ -89,6 +89,19 @@ def test_equity_curve_output_is_deterministic():
     assert EquityCurve.from_trades(trades) == EquityCurve.from_trades(trades)
 
 
+def test_equity_curve_can_create_performance_analysis():
+    curve = EquityCurve.from_trades(
+        [
+            trade("AAPL", "2026-01-01", "2026-01-02", 100.0, 110.0),
+        ]
+    )
+
+    analysis = curve.performance_analysis()
+
+    assert analysis.summary["total_return"] == curve.cumulative_return
+    assert analysis.monthly_returns == {"2026-01": pytest.approx(0.01)}
+
+
 def test_equity_curve_rejects_invalid_inputs():
     with pytest.raises(ValueError, match="initial_equity"):
         EquityCurve.from_trades([], initial_equity=0)
