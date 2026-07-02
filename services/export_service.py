@@ -14,6 +14,7 @@ class ExportService:
 
     SUPPORTED_FORMATS = {"csv", "json"}
     RESEARCH_REPORT_FORMATS = {"json", "txt", "markdown"}
+    WATCHLIST_INTELLIGENCE_FORMATS = {"json", "txt", "markdown"}
 
     def export_watchlist(
         self,
@@ -144,6 +145,74 @@ class ExportService:
                 path=str(destination),
                 export_format=normalized_format,
             )
+
+    def export_watchlist_intelligence(
+        self,
+        intelligence: Any,
+        destination_path: str | Path,
+        format: str = "json",
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        normalized_format = self._normalize_format(format)
+
+        if normalized_format not in self.WATCHLIST_INTELLIGENCE_FORMATS:
+            return self._result(
+                False,
+                f"Unsupported export format: {format}.",
+                export_format=normalized_format,
+            )
+
+        destination = self._destination_path(destination_path, normalized_format)
+
+        if destination is None:
+            return self._result(False, "Destination path is required.")
+
+        if destination.exists() and not overwrite:
+            return self._result(
+                False,
+                "Destination file already exists.",
+                path=str(destination),
+                export_format=normalized_format,
+            )
+
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            normalized_intelligence = self._normalize_data(intelligence)
+
+            if normalized_format == "json":
+                self._write_json(normalized_intelligence, destination)
+            elif normalized_format == "txt":
+                self._write_text_watchlist_intelligence(
+                    normalized_intelligence,
+                    destination,
+                )
+            else:
+                self._write_markdown_watchlist_intelligence(
+                    normalized_intelligence,
+                    destination,
+                )
+
+            return self._result(
+                True,
+                "Watchlist Intelligence exported.",
+                path=str(destination),
+                export_format=normalized_format,
+                count=self._count_records(normalized_intelligence),
+            )
+        except OSError as exc:
+            return self._result(
+                False,
+                f"Export failed: {exc}",
+                path=str(destination),
+                export_format=normalized_format,
+            )
+        except (TypeError, ValueError) as exc:
+            return self._result(
+                False,
+                f"Export failed: {exc}",
+                path=str(destination),
+                export_format=normalized_format,
+            )
         except (TypeError, ValueError) as exc:
             return self._result(
                 False,
@@ -243,6 +312,20 @@ class ExportService:
         destination.write_text(cls._markdown_report(data), encoding="utf-8")
 
     @classmethod
+    def _write_text_watchlist_intelligence(cls, data: Any, destination: Path) -> None:
+        destination.write_text(
+            cls._text_watchlist_intelligence(data),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def _write_markdown_watchlist_intelligence(cls, data: Any, destination: Path) -> None:
+        destination.write_text(
+            cls._markdown_watchlist_intelligence(data),
+            encoding="utf-8",
+        )
+
+    @classmethod
     def _text_report(cls, data: Any) -> str:
         report = data if isinstance(data, dict) else {"report": data}
         title = report.get("title") or "Research Report"
@@ -295,6 +378,131 @@ class ExportService:
         if isinstance(value, dict):
             return json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False)
 
+        return str(value)
+
+    @classmethod
+    def _text_watchlist_intelligence(cls, data: Any) -> str:
+        intelligence = data if isinstance(data, dict) else {"intelligence": data}
+        sections = [str(intelligence.get("title") or "Watchlist Intelligence")]
+
+        generated_at = intelligence.get("generated_at")
+        if generated_at:
+            sections.append(f"Generated\n{generated_at}")
+
+        summary = intelligence.get("summary")
+        if summary:
+            sections.append(f"Summary\n{summary}")
+
+        sections.append(
+            "Metrics\n"
+            + cls._plain_metric_lines(intelligence)
+        )
+        sections.extend(cls._plain_list_sections(intelligence))
+
+        return "\n\n".join(section for section in sections if section).rstrip() + "\n"
+
+    @classmethod
+    def _markdown_watchlist_intelligence(cls, data: Any) -> str:
+        intelligence = data if isinstance(data, dict) else {"intelligence": data}
+        sections = [f"# {intelligence.get('title') or 'Watchlist Intelligence'}"]
+
+        generated_at = intelligence.get("generated_at")
+        if generated_at:
+            sections.append(f"## Generated\n\n{generated_at}")
+
+        summary = intelligence.get("summary")
+        if summary:
+            sections.append(f"## Summary\n\n{summary}")
+
+        sections.append(
+            "## Metrics\n\n"
+            + cls._markdown_metric_lines(intelligence)
+        )
+        sections.extend(cls._markdown_list_sections(intelligence))
+
+        return "\n\n".join(section for section in sections if section).rstrip() + "\n"
+
+    @staticmethod
+    def _watchlist_intelligence_metrics() -> list[tuple[str, str]]:
+        return [
+            ("total_items", "Total items"),
+            ("ready_count", "Ready count"),
+            ("watching_count", "Watching count"),
+            ("rejected_count", "Rejected count"),
+            ("high_conviction_count", "High conviction count"),
+            ("average_opportunity_score", "Average opportunity score"),
+            ("warning_count", "Warning count"),
+        ]
+
+    @classmethod
+    def _plain_metric_lines(cls, data: dict[str, Any]) -> str:
+        return "\n".join(
+            f"{label}: {cls._display_value(data.get(key))}"
+            for key, label in cls._watchlist_intelligence_metrics()
+        )
+
+    @classmethod
+    def _markdown_metric_lines(cls, data: dict[str, Any]) -> str:
+        return "\n".join(
+            f"- **{label}:** {cls._display_value(data.get(key))}"
+            for key, label in cls._watchlist_intelligence_metrics()
+        )
+
+    @classmethod
+    def _plain_list_sections(cls, data: dict[str, Any]) -> list[str]:
+        return [
+            cls._plain_list_section(data, "top_candidates", "Top Candidates"),
+            cls._plain_list_section(data, "weak_candidates", "Weak Candidates"),
+            cls._plain_list_section(data, "stale_items", "Stale Items"),
+            cls._plain_list_section(data, "warnings", "Warnings"),
+        ]
+
+    @classmethod
+    def _markdown_list_sections(cls, data: dict[str, Any]) -> list[str]:
+        return [
+            cls._markdown_list_section(data, "top_candidates", "Top Candidates"),
+            cls._markdown_list_section(data, "weak_candidates", "Weak Candidates"),
+            cls._markdown_list_section(data, "stale_items", "Stale Items"),
+            cls._markdown_list_section(data, "warnings", "Warnings"),
+        ]
+
+    @classmethod
+    def _plain_list_section(cls, data: dict[str, Any], key: str, heading: str) -> str:
+        return f"{heading}\n{cls._format_watchlist_list(data.get(key))}"
+
+    @classmethod
+    def _markdown_list_section(cls, data: dict[str, Any], key: str, heading: str) -> str:
+        return f"## {heading}\n\n{cls._format_watchlist_list(data.get(key))}"
+
+    @classmethod
+    def _format_watchlist_list(cls, value: Any) -> str:
+        items = value if isinstance(value, list) else []
+        if not items:
+            return "--"
+
+        lines = []
+        for item in items:
+            if isinstance(item, dict):
+                ticker = item.get("ticker") or "Unknown"
+                details = []
+                for key in [
+                    "company_name",
+                    "status",
+                    "opportunity_score",
+                    "updated_at",
+                ]:
+                    if item.get(key) is not None:
+                        details.append(str(item[key]))
+                suffix = f" - {', '.join(details)}" if details else ""
+                lines.append(f"- {ticker}{suffix}")
+            else:
+                lines.append(f"- {item}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _display_value(value: Any) -> str:
+        if value in (None, []):
+            return "--"
         return str(value)
 
     @classmethod

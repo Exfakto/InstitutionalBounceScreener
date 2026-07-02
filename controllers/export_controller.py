@@ -97,3 +97,17 @@ class ExportController:
             format,
             overwrite,
         )
+
+    def export_watchlist_intelligence(
+        self,
+        intelligence: Any,
+        destination_path: str | Path,
+        format: str = "json",
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        return self.export_service.export_watchlist_intelligence(
+            intelligence,
+            destination_path,
+            format,
+            overwrite,
+        )

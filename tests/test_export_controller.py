@@ -29,6 +29,10 @@ class FakeExportService:
         self.calls.append(("research_report", args))
         return {"success": True}
 
+    def export_watchlist_intelligence(self, *args):
+        self.calls.append(("watchlist_intelligence", args))
+        return {"success": True}
+
 
 def test_export_controller_delegates_watchlist():
     service = FakeExportService()
@@ -84,4 +88,28 @@ def test_export_controller_delegates_research_report():
 
     assert service.calls == [
         ("research_report", ({"title": "Report"}, "research.md", "markdown", True))
+    ]
+
+
+def test_export_controller_delegates_watchlist_intelligence():
+    service = FakeExportService()
+    controller = ExportController(export_service=service)
+
+    controller.export_watchlist_intelligence(
+        {"summary": "Watchlist intelligence"},
+        "watchlist-intelligence.md",
+        "markdown",
+        True,
+    )
+
+    assert service.calls == [
+        (
+            "watchlist_intelligence",
+            (
+                {"summary": "Watchlist intelligence"},
+                "watchlist-intelligence.md",
+                "markdown",
+                True,
+            ),
+        )
     ]

@@ -31,17 +31,20 @@ class ExportDialog(QDialog):
         "Strategy Analytics",
         "Research Preview",
         "Research Report",
+        "Watchlist Intelligence",
     ]
     EXPORT_FORMATS = ["CSV", "JSON"]
-    RESEARCH_REPORT_FORMATS = ["JSON", "TXT", "Markdown"]
+    DOCUMENT_FORMATS = ["JSON", "TXT", "Markdown"]
 
     def __init__(
         self,
         parent: QWidget | None = None,
         research_report_available: bool = True,
+        watchlist_intelligence_available: bool = True,
     ) -> None:
         super().__init__(parent)
         self.research_report_available = research_report_available
+        self.watchlist_intelligence_available = watchlist_intelligence_available
         self._updating_formats = False
 
         self.setWindowTitle("Export Center")
@@ -116,11 +119,7 @@ class ExportDialog(QDialog):
     def update_object_state(self) -> None:
         object_name = self.object_combo.currentText()
         selected_format = self.format_combo.currentText()
-        formats = (
-            self.RESEARCH_REPORT_FORMATS
-            if object_name == "Research Report"
-            else self.EXPORT_FORMATS
-        )
+        formats = self.formats_for_object(object_name)
 
         self._updating_formats = True
         self.format_combo.clear()
@@ -129,15 +128,9 @@ class ExportDialog(QDialog):
             self.format_combo.setCurrentText(selected_format)
         self._updating_formats = False
 
-        unavailable = (
-            object_name == "Research Report"
-            and not self.research_report_available
-        )
-        self.availability_label.setText(
-            "Research report is unavailable for the current selection."
-            if unavailable
-            else ""
-        )
+        unavailable_message = self.unavailable_message(object_name)
+        unavailable = bool(unavailable_message)
+        self.availability_label.setText(unavailable_message)
         save_button = self.button_box.button(QDialogButtonBox.StandardButton.Save)
         if save_button is not None:
             save_button.setEnabled(not unavailable)
@@ -147,6 +140,25 @@ class ExportDialog(QDialog):
     def set_research_report_available(self, available: bool) -> None:
         self.research_report_available = available
         self.update_object_state()
+
+    def set_watchlist_intelligence_available(self, available: bool) -> None:
+        self.watchlist_intelligence_available = available
+        self.update_object_state()
+
+    def formats_for_object(self, object_name: str) -> list[str]:
+        if object_name in {"Research Report", "Watchlist Intelligence"}:
+            return self.DOCUMENT_FORMATS
+        return self.EXPORT_FORMATS
+
+    def unavailable_message(self, object_name: str) -> str:
+        if object_name == "Research Report" and not self.research_report_available:
+            return "Research report is unavailable for the current selection."
+        if (
+            object_name == "Watchlist Intelligence"
+            and not self.watchlist_intelligence_available
+        ):
+            return "No watchlist intelligence available."
+        return ""
 
     def browse_destination_folder(self) -> None:
         selected_directory = QFileDialog.getExistingDirectory(

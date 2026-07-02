@@ -1,6 +1,7 @@
 import json
 
 from analysis.research_report import ResearchReportResult
+from analysis.watchlist_intelligence import WatchlistIntelligenceResult
 from services.export_service import ExportService
 
 
@@ -226,3 +227,203 @@ def test_export_service_research_report_partial_report(tmp_path):
     assert "# Partial Report" in text
     assert "## Confidence" in text
     assert "Revenue Growth" not in text
+
+
+def sample_watchlist_intelligence():
+    return WatchlistIntelligenceResult(
+        total_items=3,
+        ready_count=1,
+        watching_count=1,
+        rejected_count=1,
+        high_conviction_count=1,
+        average_opportunity_score=78.5,
+        top_candidates=[
+            {
+                "ticker": "AAPL",
+                "company_name": "Apple Inc.",
+                "status": "Ready",
+                "opportunity_score": 91.0,
+            }
+        ],
+        weak_candidates=[
+            {
+                "ticker": "TSLA",
+                "status": "Rejected",
+                "opportunity_score": 42.0,
+            }
+        ],
+        stale_items=[
+            {
+                "ticker": "MSFT",
+                "status": "Watching",
+                "updated_at": "2026-06-20",
+            }
+        ],
+        warning_count=1,
+        summary="Watchlist contains 3 item(s); 1 ready; 1 watching.",
+        warnings=["TSLA: Support quality is weak."],
+    )
+
+
+def test_export_service_watchlist_intelligence_json(tmp_path):
+    service = ExportService()
+    destination = tmp_path / "intelligence.json"
+
+    result = service.export_watchlist_intelligence(
+        sample_watchlist_intelligence(),
+        destination,
+        "json",
+    )
+
+    exported = json.loads(destination.read_text(encoding="utf-8"))
+    assert result["success"] is True
+    assert exported["total_items"] == 3
+    assert exported["ready_count"] == 1
+    assert exported["top_candidates"][0]["ticker"] == "AAPL"
+    assert exported["warnings"] == ["TSLA: Support quality is weak."]
+
+
+def test_export_service_watchlist_intelligence_txt(tmp_path):
+    service = ExportService()
+    destination = tmp_path / "intelligence.txt"
+
+    result = service.export_watchlist_intelligence(
+        sample_watchlist_intelligence(),
+        destination,
+        "txt",
+    )
+
+    text = destination.read_text(encoding="utf-8")
+    assert result["success"] is True
+    assert text.startswith("Watchlist Intelligence")
+    assert "Summary" in text
+    assert "Total items: 3" in text
+    assert "Top Candidates" in text
+    assert "AAPL" in text
+    assert "# " not in text
+
+
+def test_export_service_watchlist_intelligence_markdown(tmp_path):
+    service = ExportService()
+    destination = tmp_path / "intelligence"
+
+    result = service.export_watchlist_intelligence(
+        sample_watchlist_intelligence(),
+        destination,
+        "markdown",
+    )
+
+    markdown_path = tmp_path / "intelligence.md"
+    text = markdown_path.read_text(encoding="utf-8")
+    assert result["success"] is True
+    assert result["path"] == str(markdown_path)
+    assert text.startswith("# Watchlist Intelligence")
+    assert "## Metrics" in text
+    assert "- **Average opportunity score:** 78.5" in text
+    assert "## Stale Items" in text
+
+
+def test_export_service_watchlist_intelligence_overwrite_protection(tmp_path):
+    service = ExportService()
+    destination = tmp_path / "intelligence.md"
+    destination.write_text("existing", encoding="utf-8")
+
+    result = service.export_watchlist_intelligence(
+        sample_watchlist_intelligence(),
+        destination,
+        "markdown",
+    )
+
+    assert result["success"] is False
+    assert destination.read_text(encoding="utf-8") == "existing"
+
+
+def test_export_service_watchlist_intelligence_allows_overwrite(tmp_path):
+    service = ExportService()
+    destination = tmp_path / "intelligence.txt"
+    destination.write_text("existing", encoding="utf-8")
+
+    result = service.export_watchlist_intelligence(
+        sample_watchlist_intelligence(),
+        destination,
+        "txt",
+        overwrite=True,
+    )
+
+    assert result["success"] is True
+    assert "Watchlist Intelligence" in destination.read_text(encoding="utf-8")
+
+
+def test_export_service_watchlist_intelligence_invalid_destination():
+    service = ExportService()
+
+    result = service.export_watchlist_intelligence(
+        sample_watchlist_intelligence(),
+        "",
+        "json",
+    )
+
+    assert result["success"] is False
+    assert "Destination path is required" in result["message"]
+
+
+def test_export_service_watchlist_intelligence_empty(tmp_path):
+    service = ExportService()
+    destination = tmp_path / "empty.md"
+    intelligence = WatchlistIntelligenceResult(
+        total_items=0,
+        ready_count=0,
+        watching_count=0,
+        rejected_count=0,
+        high_conviction_count=0,
+        average_opportunity_score=None,
+        summary="Watchlist is empty; no opportunity or health metrics are available.",
+    )
+
+    result = service.export_watchlist_intelligence(
+        intelligence,
+        destination,
+        "markdown",
+    )
+
+    text = destination.read_text(encoding="utf-8")
+    assert result["success"] is True
+    assert "Watchlist is empty" in text
+    assert "- **Average opportunity score:** --" in text
+    assert "## Top Candidates" in text
+
+
+def test_export_service_watchlist_intelligence_partial(tmp_path):
+    service = ExportService()
+    destination = tmp_path / "partial.txt"
+
+    result = service.export_watchlist_intelligence(
+        {"summary": "Partial watchlist intelligence.", "total_items": 1},
+        destination,
+        "txt",
+    )
+
+    text = destination.read_text(encoding="utf-8")
+    assert result["success"] is True
+    assert "Partial watchlist intelligence." in text
+    assert "Total items: 1" in text
+    assert "Ready count: --" in text
+
+
+def test_export_service_watchlist_intelligence_no_provider_database_calls(
+    tmp_path,
+    monkeypatch,
+):
+    def fail_call(*args, **kwargs):
+        raise AssertionError("provider/database call was not expected")
+
+    monkeypatch.setattr("providers.provider_manager.ProviderManager", fail_call)
+    monkeypatch.setattr("database.manager.DatabaseManager", fail_call)
+
+    result = ExportService().export_watchlist_intelligence(
+        sample_watchlist_intelligence(),
+        tmp_path / "intelligence.json",
+        "json",
+    )
+
+    assert result["success"] is True

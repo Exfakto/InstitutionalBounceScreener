@@ -22,6 +22,7 @@ def test_export_dialog_initialization(app):
     assert dialog.object_combo.currentText() == "Watchlist"
     assert dialog.format_combo.currentText() == "CSV"
     assert dialog.object_combo.findText("Research Report") >= 0
+    assert dialog.object_combo.findText("Watchlist Intelligence") >= 0
     assert dialog.destination_folder_input.text() == "exports"
     assert dialog.filename_input.text() == "export"
 
@@ -88,3 +89,33 @@ def test_export_dialog_research_report_unavailable_state(app):
     save_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Save)
     assert save_button.isEnabled() is False
     assert "unavailable" in dialog.availability_label.text()
+
+
+def test_export_dialog_watchlist_intelligence_formats(app):
+    dialog = ExportDialog()
+
+    dialog.object_combo.setCurrentText("Watchlist Intelligence")
+
+    formats = [
+        dialog.format_combo.itemText(index)
+        for index in range(dialog.format_combo.count())
+    ]
+    assert formats == ["JSON", "TXT", "Markdown"]
+    assert dialog.format_combo.currentText() == "JSON"
+
+    dialog.format_combo.setCurrentText("Markdown")
+
+    options = dialog.export_options()
+    assert options["object_name"] == "Watchlist Intelligence"
+    assert options["format"] == "markdown"
+    assert options["destination_path"].endswith("export.md")
+
+
+def test_export_dialog_watchlist_intelligence_unavailable_state(app):
+    dialog = ExportDialog(watchlist_intelligence_available=False)
+
+    dialog.object_combo.setCurrentText("Watchlist Intelligence")
+
+    save_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Save)
+    assert save_button.isEnabled() is False
+    assert dialog.availability_label.text() == "No watchlist intelligence available."
