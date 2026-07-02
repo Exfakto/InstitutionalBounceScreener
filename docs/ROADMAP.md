@@ -101,6 +101,7 @@ Completed:
 Completed:
 
 - Provider-backed infrastructure stabilized.
+- Premium provider setup documentation and safe local smoke-test workflow.
 - Live data service and refresh scheduling kept independent from provider and analysis code.
 - Local-first SQLite workflows preserved.
 - Release readiness validated through full tests and compile checks.

@@ -77,6 +77,8 @@ Planned:
 
 Premium provider foundations exist for Polygon.io, Financial Modeling Prep, SEC EDGAR, and Finnhub where implemented in source. Paid provider calls require API keys and tests use mocked responses.
 
+Provider setup, PowerShell environment variables, and safe smoke-test commands are documented in `docs/PROVIDER_SETUP.md`.
+
 ## Testing
 
 The test suite uses `pytest` and covers pure analytics, persistence, service workflows, controller coordination, provider behavior, and stable UI widgets. Before completing code changes, run the full test suite and compile check.
