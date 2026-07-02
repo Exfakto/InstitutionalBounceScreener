@@ -61,14 +61,34 @@ def test_fully_populated_candidate_report():
     assert report.title == "AAPL Institutional Bounce Research Report - Apple Inc."
     assert "AAPL (Apple Inc.)" in report.executive_summary
     assert "Elite Bounce" in report.executive_summary
+    assert len(report.executive_summary.split("\n\n")) == 4
     assert "quality score 90" in report.setup_quality
-    assert "support strength 91" in report.technical_analysis
-    assert "revenue growth 12.5%" in report.fundamental_analysis
-    assert "free cash flow $95.00B" in report.fundamental_analysis
-    assert "institutional ownership 72.5" in report.institutional_analysis
-    assert "entry zone Ideal Entry" in report.trade_plan
-    assert "risk/reward 2.4" in report.risk_summary
-    assert report.confidence in {"Very High", "High", "Moderate", "Low", "Very Low"}
+    assert "Support: 91, a positive contributor" in report.technical_analysis
+    assert "Bounce Quality: 80, a positive contributor" in report.technical_analysis
+    assert "Trend: 76, a constructive" in report.technical_analysis
+    assert "Relative Strength: 82, a positive contributor" in report.technical_analysis
+    assert "Volume: 78, a constructive" in report.technical_analysis
+    assert "Revenue Growth: 12.5%" in report.fundamental_analysis
+    assert "EPS Growth: 10.2%" in report.fundamental_analysis
+    assert "ROE: 24.7%" in report.fundamental_analysis
+    assert "Margins: 46.2%" in report.fundamental_analysis
+    assert "Cash Flow: $95.00B" in report.fundamental_analysis
+    assert "Debt: 1.2" in report.fundamental_analysis
+    assert "Current Ratio: 0.9" in report.fundamental_analysis
+    assert "Market Cap: $3.00T" in report.fundamental_analysis
+    assert "Institutional Score: 76" in report.institutional_analysis
+    assert "Ownership: 72.5%" in report.institutional_analysis
+    assert "Accumulation: 80" in report.institutional_analysis
+    assert "13F: $250.00M" in report.institutional_analysis
+    assert "Checklist:" in report.institutional_analysis
+    assert "Entry: Ideal Entry" in report.trade_plan
+    assert "Stop: Technical" in report.trade_plan
+    assert "Target: High" in report.trade_plan
+    assert "Risk/Reward: 2.4" in report.trade_plan
+    assert "Position Size: 150" in report.trade_plan
+    assert "Risk/reward: 2.4" in report.risk_summary
+    assert report.conclusion.startswith("AAPL conclusion: High Conviction.")
+    assert report.confidence in {"Very High", "High", "Moderate", "Low"}
     assert "Review liquidity before entry." in report.warnings
     assert "guaranteed" not in report.conclusion.lower()
     assert "risk-free" not in report.conclusion.lower()
@@ -109,7 +129,7 @@ def test_candidate_score_input_report():
 
     assert "AAPL" in report.title
     assert "Apple Inc." in report.title
-    assert "revenue growth 12.5%" in report.fundamental_analysis
+    assert "Revenue Growth: 12.5%" in report.fundamental_analysis
     assert "Candidate warning." in report.warnings
 
 
@@ -141,6 +161,7 @@ def test_missing_trade_plan_degrades_gracefully():
     report = ResearchReportGenerator().generate(metrics)
 
     assert report.trade_plan == "Trade plan data is unavailable."
+    assert "Missing data: trade plan" in report.risk_summary
 
 
 def test_weak_candidate_report():
@@ -157,9 +178,49 @@ def test_weak_candidate_report():
     report = ResearchReportGenerator().generate(metrics)
 
     assert "overall setup score of 42" in report.executive_summary
-    assert report.confidence in {"Very Low", "Low"}
+    assert report.confidence == "Low"
     assert "Support quality is weak." in report.warnings
-    assert "WEAK presents" in report.conclusion
+    assert report.conclusion.startswith("WEAK conclusion: Avoid.")
+
+
+def test_average_candidate_report():
+    metrics = {
+        "ticker": "AVG",
+        "overall_score": 64.0,
+        "support_score": 62.0,
+        "bounce_score": 58.0,
+        "trend_score": 61.0,
+        "relative_strength_score": 57.0,
+        "volume_score": 55.0,
+        "institutional_score": 60.0,
+        "opportunity_rating": {"rating_score": 62.0, "rating_label": "Weak Setup"},
+        "institutional_checklist": {"overall_percentage": 60.0, "overall_label": "Weak"},
+    }
+
+    report = ResearchReportGenerator().generate(metrics)
+
+    assert "AVG" in report.executive_summary
+    assert "mixed contributor" in report.technical_analysis
+    assert report.conclusion.startswith("AVG conclusion: Watch List.")
+    assert report.confidence in {"Moderate", "Low"}
+
+
+def test_missing_technicals_degrades_gracefully():
+    metrics = full_metrics()
+    for key in [
+        "technical_score",
+        "support_score",
+        "bounce_score",
+        "trend_score",
+        "relative_strength_score",
+        "volume_score",
+    ]:
+        metrics.pop(key, None)
+
+    report = ResearchReportGenerator().generate(metrics)
+
+    assert report.technical_analysis == "Technical analysis data is unavailable."
+    assert "Missing data: technical assessment" in report.risk_summary
 
 
 def test_warning_propagation_from_decision_objects():
@@ -187,7 +248,7 @@ def test_empty_input():
 
     assert report.title == "Candidate Institutional Bounce Research Report"
     assert "limited available data" in report.executive_summary
-    assert report.confidence == "Very Low"
+    assert report.confidence == "Low"
     assert report.warnings == []
 
 
@@ -210,3 +271,4 @@ def test_no_invented_values():
     assert "Apple" not in combined
     assert "12.5" not in combined
     assert "$95.00B" not in combined
+    assert "Revenue Growth" not in combined

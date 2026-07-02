@@ -26,7 +26,7 @@ class ResearchReportResult:
     risk_summary: str
     warnings: list[str] = field(default_factory=list)
     conclusion: str = ""
-    confidence: str = "Very Low"
+    confidence: str = "Low"
 
 
 class ResearchReportGenerator:
@@ -81,7 +81,7 @@ class ResearchReportGenerator:
         confidence: str,
     ) -> str:
         display_name = f"{ticker} ({company_name})" if company_name else ticker
-        parts = []
+        paragraphs = []
         rating_label = self.opportunity_label(opportunity)
         rating_score = self.opportunity_score(opportunity)
         overall_score = self.first_number(
@@ -92,23 +92,48 @@ class ResearchReportGenerator:
             "composite_score",
         )
 
+        opening = []
         if rating_label:
-            parts.append(f"{display_name} is classified as {rating_label}")
+            opening.append(f"{display_name} is classified as {rating_label}")
         elif overall_score is not None:
-            parts.append(
+            opening.append(
                 f"{display_name} has an overall setup score of {self.format_number(overall_score)}"
             )
         else:
-            parts.append(
+            opening.append(
                 f"{display_name} has limited available data for a complete setup review"
             )
 
         if rating_score is not None:
-            parts.append(f"Opportunity score is {self.format_number(rating_score)}")
+            opening.append(f"the opportunity score is {self.format_number(rating_score)}")
 
-        parts.append(f"Report confidence is {confidence}.")
+        paragraphs.append(". ".join(part.rstrip(".") for part in opening) + ".")
 
-        return ". ".join(part.rstrip(".") for part in parts) + "."
+        strengths = self.strongest_factors(metrics, opportunity)
+        if strengths:
+            paragraphs.append(
+                "The strongest positive factors are "
+                f"{self.join_phrases(strengths[:3])}, which improves the quality of the institutional bounce setup."
+            )
+        else:
+            paragraphs.append(
+                "The positive factor set is limited by the available inputs, so conviction depends on confirmed score evidence rather than assumed support."
+            )
+
+        risks = self.primary_risks(metrics, opportunity)
+        if risks:
+            paragraphs.append(
+                "Primary risks are "
+                f"{self.join_phrases(risks[:3])}, which should be weighed before sizing or timing any trade plan."
+            )
+        else:
+            paragraphs.append(
+                "Primary risk evidence is limited in the supplied analysis; no missing value is treated as favorable."
+            )
+
+        paragraphs.append(f"Report confidence is {confidence} based on available analysis completeness.")
+
+        return "\n\n".join(paragraphs[:4])
 
     def setup_quality(self, metrics: dict[str, Any], opportunity: Any, checklist: Any) -> str:
         parts = []
@@ -143,75 +168,89 @@ class ResearchReportGenerator:
     def technical_analysis(self, metrics: dict[str, Any]) -> str:
         parts = []
         for key, label in [
-            ("technical_score", "technical score"),
-            ("support_score", "support strength"),
-            ("bounce_score", "bounce validation"),
-            ("relative_strength_score", "relative strength"),
-            ("volume_score", "volume intelligence"),
-            ("trend_score", "trend"),
+            ("support_score", "Support"),
+            ("bounce_score", "Bounce Quality"),
+            ("trend_score", "Trend"),
+            ("relative_strength_score", "Relative Strength"),
+            ("volume_score", "Volume"),
         ]:
             value = self.first_number(metrics, key)
             if value is not None:
-                parts.append(f"{label} {self.format_number(value)}")
+                parts.append(f"{label}: {self.score_assessment(value)}")
+
+        value = self.first_number(metrics, "technical_score")
+        if value is not None:
+            parts.insert(0, f"Technical score: {self.score_assessment(value)}")
 
         return self.sentence_or_unavailable(parts, "Technical analysis data is unavailable.")
 
     def fundamental_analysis(self, metrics: dict[str, Any]) -> str:
         parts = []
-        for keys, label, suffix in [
-            (("revenue_growth", "revenue_growth_ttm"), "revenue growth", "%"),
-            (("eps_growth", "eps_growth_ttm"), "EPS growth", "%"),
-            (("roe",), "ROE", "%"),
-            (("gross_margin",), "gross margin", "%"),
-            (("free_cash_flow",), "free cash flow", ""),
-            (("debt_to_equity",), "debt/equity", ""),
-            (("current_ratio",), "current ratio", ""),
-            (("market_cap",), "market cap", ""),
+        for keys, label, suffix, kind in [
+            (("revenue_growth", "revenue_growth_ttm"), "Revenue Growth", "%", "growth"),
+            (("eps_growth", "eps_growth_ttm"), "EPS Growth", "%", "growth"),
+            (("roe",), "ROE", "%", "profitability"),
+            (("gross_margin", "operating_margin", "net_margin"), "Margins", "%", "profitability"),
+            (("free_cash_flow", "operating_cash_flow"), "Cash Flow", "", "currency"),
+            (("debt_to_equity",), "Debt", "", "debt"),
+            (("current_ratio",), "Current Ratio", "", "liquidity"),
+            (("market_cap",), "Market Cap", "", "currency"),
         ]:
             value = self.first_number(metrics, *keys)
             if value is not None:
                 formatted = (
                     self.format_currency(value)
-                    if label in {"free cash flow", "market cap"}
+                    if kind == "currency"
                     else f"{self.format_number(value)}{suffix}"
                 )
-                parts.append(f"{label} {formatted}")
+                parts.append(f"{label}: {formatted} - {self.fundamental_assessment(kind, value)}")
 
         return self.sentence_or_unavailable(parts, "Fundamental analysis data is unavailable.")
 
     def institutional_analysis(self, metrics: dict[str, Any], checklist: Any) -> str:
         parts = []
-        for key, label in [
-            ("institutional_score", "institutional score"),
-            ("institutional_momentum_score", "institutional momentum"),
-            ("institutional_ownership_pct", "institutional ownership"),
-            ("institutional_ownership_change_qoq", "ownership change"),
-            ("net_institutional_buying", "net institutional buying"),
+        for keys, label, kind in [
+            (("institutional_score",), "Institutional Score", "score"),
+            (("institutional_ownership_pct",), "Ownership", "percent"),
+            (("institutional_momentum_score", "accumulation_score"), "Accumulation", "score"),
+            (("thirteen_f_net_change", "13f_net_change", "net_institutional_buying"), "13F", "currency"),
+            (("insider_activity_score", "insider_net_buying"), "Insider Activity", "score"),
         ]:
-            value = self.first_number(metrics, key)
+            value = self.first_number(metrics, *keys)
             if value is not None:
-                formatted = self.format_currency(value) if key == "net_institutional_buying" else self.format_number(value)
-                parts.append(f"{label} {formatted}")
+                if kind == "currency":
+                    formatted = self.format_currency(value)
+                elif kind == "percent":
+                    formatted = f"{self.format_number(value)}%"
+                else:
+                    formatted = self.format_number(value)
+                parts.append(f"{label}: {formatted} - {self.institutional_assessment(kind, value)}")
 
         if isinstance(checklist, InstitutionalChecklistResult):
             parts.append(
-                f"{checklist.passed_count} of {checklist.total_checks} checklist items passed"
+                f"Checklist: {checklist.passed_count} of {checklist.total_checks} items passed ({checklist.overall_label})"
             )
+        elif isinstance(checklist, dict):
+            checklist_pct = self.dict_value(checklist, "overall_percentage")
+            checklist_label = self.dict_value(checklist, "overall_label")
+            if checklist_pct is not None:
+                label = f" ({checklist_label})" if checklist_label else ""
+                parts.append(f"Checklist: {self.format_number(checklist_pct)}%{label}")
 
         return self.sentence_or_unavailable(parts, "Institutional analysis data is unavailable.")
 
     def trade_plan(self, metrics: dict[str, Any]) -> str:
         parts = []
         for key, label in [
-            ("entry_zone", "entry zone"),
-            ("stop_loss", "stop loss"),
-            ("target_projection", "target projection"),
-            ("risk_reward", "risk/reward"),
-            ("position_size", "position size"),
+            ("entry_zone", "Entry"),
+            ("stop_loss", "Stop"),
+            ("target_projection", "Target"),
+            ("risk_reward", "Risk/Reward"),
+            ("position_size", "Position Size"),
         ]:
             value = metrics.get(key)
             if value is not None:
-                parts.append(f"{label} {self.format_value(value)}")
+                parts.append(f"{label}: {self.format_value(value)}")
 
         return self.sentence_or_unavailable(parts, "Trade plan data is unavailable.")
 
@@ -219,13 +258,16 @@ class ResearchReportGenerator:
         parts = []
         earnings = self.first_number(metrics, "earnings_risk_score")
         risk_reward = metrics.get("risk_reward")
+        missing = self.missing_analysis(metrics)
 
         if earnings is not None:
-            parts.append(f"earnings risk score {self.format_number(earnings)}")
+            parts.append(f"Upcoming earnings risk score: {self.format_number(earnings)} - {self.earnings_risk_assessment(earnings)}")
         if risk_reward is not None:
-            parts.append(f"risk/reward {self.format_value(risk_reward)}")
+            parts.append(f"Risk/reward: {self.format_value(risk_reward)}")
         if warnings:
-            parts.append(f"{len(warnings)} warning item(s) require review")
+            parts.append(f"Warnings: {self.join_phrases(warnings[:4])}")
+        if missing:
+            parts.append(f"Missing data: {self.join_phrases(missing)}")
 
         return self.sentence_or_unavailable(parts, "Risk data is unavailable.")
 
@@ -237,18 +279,10 @@ class ResearchReportGenerator:
         confidence: str,
         warnings: list[str],
     ) -> str:
-        label = self.opportunity_label(opportunity)
-        setup_text = f"{label} setup" if label else "setup"
-        checklist_text = ""
-
-        if isinstance(checklist, InstitutionalChecklistResult):
-            checklist_text = f" with a {checklist.overall_label} checklist"
-
-        warning_text = " Warnings should be reviewed before action." if warnings else ""
-
+        category = self.conclusion_category(opportunity, checklist, confidence, warnings)
         return (
-            f"{ticker} presents a {setup_text}{checklist_text}. "
-            f"Overall confidence is {confidence}.{warning_text}"
+            f"{ticker} conclusion: {category}. "
+            "The category is derived from available scores and completeness only, and does not imply an investment guarantee."
         )
 
     def confidence(
@@ -282,19 +316,18 @@ class ResearchReportGenerator:
         ]
 
         if not values:
-            return "Very Low"
+            return "Low"
 
         average = sum(values) / len(values)
+        completeness = self.analysis_completeness(metrics)
 
-        if average >= 90:
+        if average >= 85 and completeness >= 0.75:
             return "Very High"
-        if average >= 80:
+        if average >= 75 and completeness >= 0.55:
             return "High"
-        if average >= 65:
+        if average >= 55 and completeness >= 0.35:
             return "Moderate"
-        if average >= 45:
-            return "Low"
-        return "Very Low"
+        return "Low"
 
     def warning_messages(
         self,
@@ -348,6 +381,196 @@ class ResearchReportGenerator:
             return unavailable
 
         return "; ".join(parts) + "."
+
+    def score_assessment(self, value: float) -> str:
+        formatted = self.format_number(value)
+        if value >= 80:
+            return f"{formatted}, a positive contributor"
+        if value >= 60:
+            return f"{formatted}, a constructive but not dominant contributor"
+        if value >= 45:
+            return f"{formatted}, a mixed contributor"
+        return f"{formatted}, a negative contributor"
+
+    def fundamental_assessment(self, kind: str, value: float) -> str:
+        if kind == "growth":
+            if value >= 10:
+                return "growth supports the setup"
+            if value >= 0:
+                return "growth is positive but moderate"
+            return "growth is a fundamental weakness"
+        if kind == "profitability":
+            if value >= 20:
+                return "profitability is strong"
+            if value >= 10:
+                return "profitability is acceptable"
+            return "profitability is limited"
+        if kind == "debt":
+            if value <= 0.75:
+                return "leverage appears contained"
+            if value <= 1.5:
+                return "leverage is manageable but should be monitored"
+            return "leverage is a balance-sheet risk"
+        if kind == "liquidity":
+            if value >= 1.5:
+                return "liquidity is solid"
+            if value >= 1.0:
+                return "liquidity is adequate"
+            return "liquidity is a constraint"
+        if kind == "currency":
+            if value > 0:
+                return "available scale is supportive"
+            if value < 0:
+                return "negative value is a weakness"
+        return "metric is available for context"
+
+    def institutional_assessment(self, kind: str, value: float) -> str:
+        if kind == "percent":
+            if value >= 65:
+                return "ownership sponsorship is strong"
+            if value >= 35:
+                return "ownership sponsorship is moderate"
+            return "ownership sponsorship is limited"
+        if kind == "currency":
+            if value > 0:
+                return "filing activity indicates net accumulation"
+            if value < 0:
+                return "filing activity indicates net distribution"
+            return "filing activity is neutral"
+        return self.score_assessment(value)
+
+    @staticmethod
+    def earnings_risk_assessment(value: float) -> str:
+        if value <= 35:
+            return "near-term earnings risk is low"
+        if value <= 65:
+            return "near-term earnings risk is elevated"
+        return "near-term earnings risk is high"
+
+    def strongest_factors(self, metrics: dict[str, Any], opportunity: Any) -> list[str]:
+        factors = []
+        if isinstance(opportunity, OpportunityRatingResult):
+            factors.extend(opportunity.strengths)
+
+        for key, label in [
+            ("support_score", "support quality"),
+            ("bounce_score", "bounce validation"),
+            ("trend_score", "trend alignment"),
+            ("relative_strength_score", "relative strength"),
+            ("volume_score", "volume confirmation"),
+            ("institutional_score", "institutional sponsorship"),
+            ("institutional_momentum_score", "institutional accumulation"),
+        ]:
+            value = self.first_number(metrics, key)
+            if value is not None and value >= 75:
+                factors.append(f"{label} at {self.format_number(value)}")
+
+        return self.unique_strings(factors)
+
+    def primary_risks(self, metrics: dict[str, Any], opportunity: Any) -> list[str]:
+        risks = []
+        if isinstance(opportunity, OpportunityRatingResult):
+            risks.extend(opportunity.weaknesses)
+
+        for key, label in [
+            ("support_score", "weak support evidence"),
+            ("bounce_score", "weak bounce validation"),
+            ("trend_score", "weak trend alignment"),
+            ("relative_strength_score", "weak relative strength"),
+            ("volume_score", "weak volume confirmation"),
+        ]:
+            value = self.first_number(metrics, key)
+            if value is not None and value < 50:
+                risks.append(f"{label} at {self.format_number(value)}")
+
+        earnings = self.first_number(metrics, "earnings_risk_score")
+        if earnings is not None and earnings >= 65:
+            risks.append(f"elevated earnings risk at {self.format_number(earnings)}")
+
+        return self.unique_strings(risks)
+
+    def conclusion_category(
+        self,
+        opportunity: Any,
+        checklist: Any,
+        confidence: str,
+        warnings: list[str],
+    ) -> str:
+        score = self.opportunity_score(opportunity)
+        checklist_percentage = (
+            checklist.overall_percentage
+            if isinstance(checklist, InstitutionalChecklistResult)
+            else self.dict_value(checklist, "overall_percentage")
+        )
+        values = [value for value in [score, checklist_percentage] if value is not None]
+        average = sum(values) / len(values) if values else 0.0
+        warning_penalty = min(12.0, len(warnings) * 2.0)
+        adjusted = average - warning_penalty
+
+        if adjusted >= 85 and confidence in {"Very High", "High"}:
+            return "High Conviction"
+        if adjusted >= 70 and confidence in {"Very High", "High", "Moderate"}:
+            return "Constructive"
+        if adjusted >= 55:
+            return "Watch List"
+        if adjusted >= 40:
+            return "Speculative"
+        return "Avoid"
+
+    def analysis_completeness(self, metrics: dict[str, Any]) -> float:
+        expected = [
+            "support_score",
+            "bounce_score",
+            "trend_score",
+            "relative_strength_score",
+            "volume_score",
+            "revenue_growth",
+            "eps_growth",
+            "roe",
+            "gross_margin",
+            "free_cash_flow",
+            "institutional_score",
+            "institutional_ownership_pct",
+            "institutional_momentum_score",
+            "entry_zone",
+            "stop_loss",
+            "target_projection",
+            "risk_reward",
+            "position_size",
+        ]
+        available = sum(1 for key in expected if metrics.get(key) is not None)
+        return available / len(expected)
+
+    def missing_analysis(self, metrics: dict[str, Any]) -> list[str]:
+        groups = [
+            ("technical assessment", ["support_score", "bounce_score", "trend_score", "relative_strength_score", "volume_score"]),
+            ("fundamental assessment", ["revenue_growth", "eps_growth", "roe", "gross_margin", "free_cash_flow", "debt_to_equity", "current_ratio", "market_cap"]),
+            ("institutional assessment", ["institutional_score", "institutional_ownership_pct", "institutional_momentum_score"]),
+            ("trade plan", ["entry_zone", "stop_loss", "target_projection", "risk_reward", "position_size"]),
+        ]
+        missing = []
+        for label, keys in groups:
+            if not any(metrics.get(key) is not None for key in keys):
+                missing.append(label)
+        return missing
+
+    @staticmethod
+    def join_phrases(values: list[Any]) -> str:
+        phrases = [str(value) for value in values if value]
+        if not phrases:
+            return ""
+        if len(phrases) == 1:
+            return phrases[0]
+        return f"{', '.join(phrases[:-1])}, and {phrases[-1]}"
+
+    @staticmethod
+    def unique_strings(values: list[Any]) -> list[str]:
+        unique = []
+        for value in values:
+            text = str(value)
+            if text and text not in unique:
+                unique.append(text)
+        return unique
 
     def first_number(self, metrics: dict[str, Any], *keys: str) -> float | None:
         for key in keys:
