@@ -54,7 +54,7 @@ Responsibilities:
 - Own service instances.
 - Coordinate workflows without direct SQL or analytics formulas.
 
-Current controller areas include market data, indicators, support detection, bounce validation, scoring, chart data, watchlist, and trade journal workflows.
+Current controller areas include market data, indicators, support detection, bounce validation, scoring, chart data, watchlist, and trade journal workflows. Watchlist live quote refresh is coordinated by the controller and displayed by the widget without persistence writes.
 
 ## Service Layer
 
@@ -67,9 +67,9 @@ Responsibilities:
 - Call pure calculators when workflow orchestration is needed.
 - Return structured results to controllers.
 
-Service areas include market workflows, indicator calculation, support detection, bounce validation, scoring context assembly, composite intelligence, chart data, watchlist persistence, trade journal persistence, live provider data access, and scheduled refresh orchestration.
+Service areas include market workflows, indicator calculation, support detection, bounce validation, scoring context assembly, composite intelligence, chart data, watchlist persistence, trade journal persistence, live provider data access, market status, and scheduled refresh orchestration.
 
-`LiveDataService` is the service boundary for provider-backed reads. `RefreshScheduler` periodically refreshes registered tickers through `LiveDataService` and reports results through callbacks without importing UI code.
+`LiveDataService` is the service boundary for provider-backed reads. `RefreshScheduler` periodically refreshes registered tickers through `LiveDataService` and reports results through callbacks without importing UI code. `MarketStatusService` determines market session state locally using a small built-in holiday calendar.
 
 ## Provider Layer
 
@@ -79,7 +79,7 @@ Responsibilities:
 
 - Define data-provider interfaces.
 - Normalize provider results into `ProviderResult`.
-- Route calls through `ProviderManager`.
+- Route calls and failover through `ProviderManager`.
 - Cache successful provider responses through `CacheManager`.
 - Load active-provider settings through `ProviderConfig`.
 
@@ -87,8 +87,9 @@ Current providers:
 
 - `LocalProvider` reads local database-backed data where available.
 - `PolygonProvider` supports daily OHLCV price history when configured with `POLYGON_API_KEY`.
+- `FMPProvider`, `SECEdgarProvider`, and `FinnhubProvider` provide foundational premium/reference data integrations where implemented.
 
-Providers must not perform scoring, analysis calculations, UI work, controller coordination, database writes, or secret storage. Polygon endpoints beyond price history remain not-yet-implemented until added in source.
+Providers must not perform scoring, analysis calculations, UI work, controller coordination, database writes, or secret storage. Unsupported provider endpoints return safe not-yet-implemented `ProviderResult` failures.
 
 ## Database Layer
 
@@ -157,6 +158,8 @@ Pure calculators must not read SQLite, call services, or import UI code.
 4. Services persist through `DatabaseManager`.
 5. Panels refresh from supplied rows.
 
+Live watchlist quote updates are non-persistent. `MainWindow` asks the watchlist panel for visible tickers, calls `WatchlistController.refresh_watchlist()`, and updates existing rows in place. Failed quote refreshes leave previous cell values intact.
+
 ### Performance Analytics
 
 Portfolio and strategy analytics are pure analysis engines. The current dashboard widget is read-only and expects precomputed statistics. It does not query the database or run analytics itself.
@@ -166,9 +169,16 @@ Portfolio and strategy analytics are pure analysis engines. The current dashboar
 1. A service calls `LiveDataService`.
 2. `LiveDataService` validates and normalizes the ticker.
 3. `ProviderManager` checks `CacheManager`.
-4. On cache miss, the active provider retrieves data.
+4. On cache miss, providers are attempted in configured priority order.
 5. Successful `ProviderResult` values are cached and returned.
-6. Failed provider results pass through safely and are not cached.
+6. Failed provider results are skipped for failover and are not cached.
+
+### Live Refresh
+
+1. `MarketStatusService` determines the market session.
+2. `MainWindow` sets the `RefreshScheduler` interval or stops it when refresh is inappropriate.
+3. Scheduler callbacks update refresh status and visible watchlist quotes.
+4. Header status labels display market status, auto-refresh status, interval, last refresh, and next refresh.
 
 ## Testing Philosophy
 

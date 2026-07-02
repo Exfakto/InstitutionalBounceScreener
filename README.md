@@ -8,9 +8,9 @@ Institutional Bounce Screener combines market data, technical indicators, suppor
 
 The project is designed as a professional research tool, not an execution platform. It uses SQLite as the local persistent store and keeps analytics engines testable outside the GUI.
 
-## Current Platform
+## v3.0 Beta Platform
 
-Completed platform areas include:
+Institutional Bounce Screener is ready for a local-first desktop beta. Completed platform areas include:
 
 - Professional dashboard shell with dark institutional styling.
 - Candidate ranking using Gen 2 Institutional Bounce Intelligence with legacy score fallback.
@@ -23,8 +23,9 @@ Completed platform areas include:
 - Paper trade journal persistence, service, controller, and UI panel.
 - Portfolio statistics and strategy analytics engines.
 - Read-only performance dashboard widget for precomputed analytics.
-- Provider abstraction with local and optional Polygon.io price-history providers.
-- Provider configuration, in-memory provider caching, live data service, and automatic refresh scheduler.
+- Provider abstraction with local and optional premium-provider foundations.
+- Configurable provider manager, failover, in-memory provider caching, live data service, and refresh scheduler.
+- Market-status-aware live refresh infrastructure and watchlist quote updates.
 
 ## Architecture
 
@@ -64,17 +65,18 @@ Completed:
 - v2.7 Portfolio Intelligence
 - v2.8 Stabilization / Performance / Validation
 - v2.9 Data Provider Abstraction
+- v3.0 Beta Infrastructure
 
 Current focus:
 
-- v3.0 Beta
+- v3.0 Beta finalization and release readiness
 
 Planned:
 
-- Post-beta packaging, validation, and operational hardening
+- Post-beta packaging, validation, operational hardening, and deferred feature work
 
-Polygon.io price history is available as an optional configured provider. Additional premium data endpoints and providers remain planned unless implemented in source.
+Premium provider foundations exist for Polygon.io, Financial Modeling Prep, SEC EDGAR, and Finnhub where implemented in source. Paid provider calls require API keys and tests use mocked responses.
 
 ## Testing
 
-The test suite uses `pytest` and covers pure analytics, persistence, service workflows, controller coordination, and stable UI widgets. Before completing code changes, run the full test suite and compile check.
+The test suite uses `pytest` and covers pure analytics, persistence, service workflows, controller coordination, provider behavior, and stable UI widgets. Before completing code changes, run the full test suite and compile check.

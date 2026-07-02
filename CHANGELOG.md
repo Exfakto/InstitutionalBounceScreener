@@ -1,14 +1,33 @@
 # Changelog
 
+## v3.0.0-beta - Beta Finalization
+
+### Status
+
+- Local-first desktop beta finalized for validation and smoke testing.
+- Release checklist and known limitations documented.
+- Provider abstraction, failover, cache, live data service, market status service, and refresh scheduler are documented as beta infrastructure.
+- Watchlist, trade journal, trade planning, decision dashboard, chart workspace, and portfolio intelligence are documented as completed beta platform areas.
+
+### Notes
+
+- Paid provider calls require user-supplied environment variables.
+- Tests use mocked provider responses and do not require paid subscriptions.
+- No real trading execution is included.
+
 ## v3.0 - Beta Infrastructure
 
 ### Added
 
 - Provider configuration for selecting active data providers without code changes.
 - Optional Polygon.io price-history provider using `POLYGON_API_KEY`.
+- Foundational Financial Modeling Prep, SEC EDGAR, and Finnhub providers where implemented in source.
+- Multi-provider failover in `ProviderManager`.
 - In-memory provider cache manager with endpoint-specific TTLs.
 - Live data service for routing provider data into service workflows.
 - Automatic refresh scheduler for periodic ticker refreshes through `LiveDataService`.
+- Market-status service and dashboard refresh-status indicators.
+- Live watchlist quote refresh for visible watchlist rows.
 
 ### Stabilized
 

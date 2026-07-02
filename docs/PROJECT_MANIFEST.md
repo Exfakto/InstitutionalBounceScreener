@@ -8,10 +8,10 @@ The app combines market data, technical indicators, support-zone detection, boun
 
 ## Current Status
 
-- Current active track: v3.0 Beta stabilization.
-- Completed through: v2.9 Data Provider Abstraction and v3.0 Beta infrastructure.
+- Current active track: v3.0.0-beta release readiness.
+- Completed through: v3.0 Beta infrastructure and dashboard refresh integration.
 - Current architecture: local-first SQLite, layered GUI/controller/service/provider/database workflow, and pure analysis engines.
-- Optional Polygon.io price history exists behind provider configuration. Additional premium provider endpoints remain planned unless implemented in source.
+- Optional premium provider foundations exist behind provider configuration and environment variables. Additional provider endpoint expansion remains deferred unless implemented in source.
 
 ## Repository Structure
 
@@ -40,7 +40,7 @@ The app combines market data, technical indicators, support-zone detection, boun
 
 ### UI
 
-`ui/main_window.py` composes the desktop workspace and wires widget signals to controllers. Reusable widgets include candidate ranking, KPI summary, operations toolbar, activity panel, chart workspace, research preview, trade card, watchlist panel, trade journal panel, and performance dashboard.
+`ui/main_window.py` composes the desktop workspace and wires widget signals to controllers and services. Reusable widgets include candidate ranking, KPI summary, operations toolbar, activity panel, chart workspace, research preview, trade card, watchlist panel, trade journal panel, performance dashboard, and header refresh status.
 
 ### Controllers
 
@@ -48,11 +48,11 @@ Controllers expose GUI-safe workflows and delegate to services. Implemented cont
 
 ### Services
 
-Services own workflow orchestration for market data, indicators, support detection, bounce validation, scoring context, composite intelligence, chart data, watchlist persistence, trade journal persistence, live provider data access, and scheduled refresh.
+Services own workflow orchestration for market data, indicators, support detection, bounce validation, scoring context, composite intelligence, chart data, watchlist persistence, trade journal persistence, live provider data access, market status, and scheduled refresh.
 
 ### Providers
 
-Providers expose a consistent read-only data access boundary through `ProviderResult`. `ProviderManager` selects the active provider, `ProviderConfig` loads safe configuration defaults, and `CacheManager` stores successful responses in memory. `LocalProvider` remains the default. `PolygonProvider` currently supports daily OHLCV price history only.
+Providers expose a consistent read-only data access boundary through `ProviderResult`. `ProviderManager` selects and fails over between providers, `ProviderConfig` loads safe configuration defaults, and `CacheManager` stores successful responses in memory. `LocalProvider` remains the default. Polygon.io, Financial Modeling Prep, SEC EDGAR, and Finnhub integrations are available where implemented and require no secrets in source.
 
 ### Database
 
@@ -74,21 +74,22 @@ The analysis layer includes score providers, composite scoring, composite intell
 - v2.7 Portfolio Intelligence.
 - v2.8 Stabilization / Performance / Validation.
 - v2.9 Data Provider Abstraction.
+- v3.0 Beta Infrastructure.
 
 ## Current Focus
 
-v3.0 Beta Stabilization:
+v3.0.0-beta Finalization:
 
 - Keep architecture boundaries stable.
-- Validate provider-backed workflows without changing analysis or UI behavior.
-- Keep configuration, cache, live data, and refresh scheduling production-ready.
-- Maintain documentation and tests with each release-oriented change.
+- Validate provider-backed workflows without changing scoring or persistence schemas.
+- Keep configuration, cache, live data, market status, and refresh scheduling production-ready for beta.
+- Maintain release checklist, known limitations, documentation, and tests.
 
 ## Planned
 
 - Post-beta packaging and release validation.
 - Additional provider endpoints where explicitly implemented.
-- Premium provider integrations beyond current Polygon price history remain future planned work.
+- Alerts, richer automation, provider normalization hardening, and packaging remain deferred.
 
 ## Dependencies
 

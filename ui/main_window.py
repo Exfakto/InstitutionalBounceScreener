@@ -679,6 +679,27 @@ class MainWindow(QMainWindow):
     def handle_live_refresh_result(self, ticker, result):
 
         self.mark_refresh_completed()
+        self.refresh_visible_watchlist_quotes()
+
+    # ----------------------------------------------------------
+
+    def refresh_visible_watchlist_quotes(self):
+
+        if not hasattr(self, "watchlist_panel"):
+            return
+
+        market_status = self.market_status_service.get_status()
+
+        if market_status.status not in {"Open", "Pre-market", "After-hours"}:
+            return
+
+        tickers = self.watchlist_panel.visible_tickers()
+
+        if not tickers:
+            return
+
+        result = self.watchlist_controller.refresh_watchlist(tickers)
+        self.watchlist_panel.update_quotes(result.get("quotes") or {})
 
     # ----------------------------------------------------------
 

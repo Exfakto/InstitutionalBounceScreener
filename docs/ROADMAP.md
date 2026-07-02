@@ -98,32 +98,35 @@ Completed:
 
 ### v3.0 Beta
 
-Goals:
-
-- Stabilize provider-backed infrastructure.
-- Keep live data service and refresh scheduling independent from UI code.
-- Preserve local-first SQLite workflows.
-- Validate release readiness through full tests and compile checks.
-
 Completed:
 
+- Provider-backed infrastructure stabilized.
+- Live data service and refresh scheduling kept independent from provider and analysis code.
+- Local-first SQLite workflows preserved.
+- Release readiness validated through full tests and compile checks.
 - Provider cache manager.
 - Live data service.
 - Automatic refresh scheduler.
-- Release stabilization documentation pass.
+- Market status service.
+- Refresh status indicator.
+- Live watchlist quote updates.
+- Multi-provider failover.
+- Release checklist and known limitations.
 
 ## Next Planned Work
 
-### Post-Beta Release Readiness
+### Post-Beta Work
 
 Planned:
 
 - Packaging and installer review.
 - Broader workflow validation.
 - Operational setup documentation.
-- Known limitations and operational documentation.
+- Provider endpoint expansion and normalization hardening.
+- Alerting and richer live-dashboard workflows.
+- Performance tuning for larger local datasets.
 
-Additional premium data integrations are planned only when explicitly implemented in source.
+Future features remain deferred until explicitly implemented in source.
 
 ## Ongoing Principles
 

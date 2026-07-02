@@ -135,3 +135,23 @@ Reason:
 - Keeps secrets out of source and configuration files.
 - Avoids implying unsupported provider endpoints are production-ready.
 - Allows live price-history validation without changing scoring formulas, persistence, or UI behavior.
+
+## 2026-07-02 - Live Refresh Remains Non-Persistent
+
+Live dashboard refresh, market-status display, and watchlist quote updates are runtime UI/controller-service workflows. They do not write refreshed quote values to SQLite.
+
+Reason:
+
+- Preserves the local-first persistence model and avoids schema churn during beta.
+- Keeps live provider behavior separate from durable watchlist and journal records.
+- Failed refreshes can leave existing UI row values intact without corrupting stored data.
+
+## 2026-07-02 - Beta Provider Calls Require Explicit User Configuration
+
+Premium provider integrations are available only where implemented and require user-supplied environment variables or provider configuration. Tests rely on mocked responses.
+
+Reason:
+
+- Prevents secrets from entering source control.
+- Keeps CI and local tests deterministic and offline.
+- Makes provider normalization safe to evolve after beta feedback.

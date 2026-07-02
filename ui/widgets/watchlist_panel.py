@@ -17,7 +17,17 @@ class WatchlistPanel(QWidget):
     Passive watchlist table with simple user actions.
     """
 
-    COLUMNS = ["Ticker", "Company", "Status", "Notes", "Added"]
+    COLUMNS = [
+        "Ticker",
+        "Company",
+        "Status",
+        "Notes",
+        "Last",
+        "Change",
+        "% Change",
+        "Last Updated",
+        "Added",
+    ]
 
     add_selected_candidate_requested = Signal()
     remove_selected_requested = Signal()
@@ -84,6 +94,10 @@ class WatchlistPanel(QWidget):
                 self.value_for(item, "company_name"),
                 self.value_for(item, "status"),
                 self.value_for(item, "notes"),
+                self.value_for(item, "last_price"),
+                self.value_for(item, "daily_change"),
+                self.value_for(item, "percent_change"),
+                self.value_for(item, "last_updated"),
                 self.value_for(item, "added_at"),
             ]
 
@@ -95,6 +109,67 @@ class WatchlistPanel(QWidget):
 
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setStretchLastSection(True)
+
+    def visible_tickers(self):
+        tickers = []
+
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+
+            if item is None:
+                continue
+
+            ticker = item.text().strip().upper()
+
+            if ticker:
+                tickers.append(ticker)
+
+        return tickers
+
+    def update_quote(self, ticker, quote):
+        row = self.row_for_ticker(ticker)
+
+        if row is None:
+            return False
+
+        if not quote or not quote.get("success"):
+            return False
+
+        values = {
+            4: self.format_price(quote.get("last_price")),
+            5: self.format_price(quote.get("daily_change"), signed=True),
+            6: self.format_percent(quote.get("percent_change")),
+            7: self.format_value(quote.get("timestamp")),
+        }
+
+        for column, value in values.items():
+            table_item = self.table.item(row, column)
+
+            if table_item is None:
+                table_item = QTableWidgetItem()
+                self.table.setItem(row, column, table_item)
+
+            table_item.setText(value)
+
+        return True
+
+    def update_quotes(self, quotes):
+        for ticker, quote in (quotes or {}).items():
+            self.update_quote(ticker, quote)
+
+    def row_for_ticker(self, ticker):
+        normalized_ticker = str(ticker or "").strip().upper()
+
+        if not normalized_ticker:
+            return None
+
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+
+            if item is not None and item.text().strip().upper() == normalized_ticker:
+                return row
+
+        return None
 
     def selected_item_id(self):
         """
@@ -135,3 +210,29 @@ class WatchlistPanel(QWidget):
             return ""
 
         return str(value)
+
+    @staticmethod
+    def format_price(value, signed=False):
+        if value is None:
+            return ""
+
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+
+        prefix = "+" if signed and number > 0 else ""
+        return f"{prefix}{number:.2f}"
+
+    @staticmethod
+    def format_percent(value):
+        if value is None:
+            return ""
+
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+
+        prefix = "+" if number > 0 else ""
+        return f"{prefix}{number:.2f}%"
