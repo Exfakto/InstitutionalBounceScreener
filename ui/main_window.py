@@ -1,6 +1,8 @@
 import sys
 from datetime import datetime, timedelta
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -32,6 +34,9 @@ from ui.widgets.watchlist_panel import WatchlistPanel
 from ui.widgets.trade_journal_panel import TradeJournalPanel
 from ui.widgets.performance_dashboard import PerformanceDashboard
 from ui.stock_detail_window import StockDetailWindow
+from ui.export_dialog import ExportDialog
+from ui.settings_dialog import SettingsDialog
+from ui.about_dialog import AboutDialog
 
 
 class MainWindow(QMainWindow):
@@ -42,6 +47,41 @@ class MainWindow(QMainWindow):
         "After-hours": 900,
         "Closed": 1800,
     }
+
+    SHORTCUT_ACTIONS = (
+        ("run_screener_action", "Run Screener", "Ctrl+R", "run_screener"),
+        ("update_universe_action", "Update Universe", "Ctrl+U", "update_universe"),
+        ("download_prices_action", "Download Prices", "Ctrl+D", "download_prices"),
+        (
+            "calculate_indicators_action",
+            "Calculate Indicators",
+            "Ctrl+I",
+            "calculate_indicators",
+        ),
+        ("detect_support_action", "Detect Support", "Ctrl+S", "detect_support"),
+        (
+            "validate_bounces_action",
+            "Validate Bounces",
+            "Ctrl+B",
+            "validate_bounces",
+        ),
+        (
+            "open_detail_action",
+            "Open Selected Stock Detail",
+            "Ctrl+O",
+            "open_selected_stock_detail",
+        ),
+        (
+            "add_watchlist_action",
+            "Add Selected Candidate to Watchlist",
+            "Ctrl+W",
+            "add_selected_candidate_to_watchlist",
+        ),
+        ("export_center_action", "Open Export Center", "Ctrl+E", "open_export_dialog"),
+        ("settings_action", "Open Settings", "Ctrl+,", "open_settings_dialog"),
+        ("about_action", "Open About & Diagnostics", "F1", "open_about_dialog"),
+        ("clear_selection_action", "Clear Selection", "Escape", "clear_current_selection"),
+    )
 
     def __init__(self):
         super().__init__()
@@ -65,6 +105,7 @@ class MainWindow(QMainWindow):
         self.resize(1600, 900)
 
         self.build_ui()
+        self.register_shortcuts()
 
         self.refresh_statistics()
         self.configure_live_refresh()
@@ -190,6 +231,80 @@ class MainWindow(QMainWindow):
         self.activity_panel.append_log(text)
 
         QApplication.processEvents()
+
+    # ----------------------------------------------------------
+
+    def register_shortcuts(self):
+
+        if hasattr(self, "shortcut_actions"):
+            return
+
+        self.shortcut_actions = {}
+
+        for attribute_name, text, shortcut, handler_name in self.SHORTCUT_ACTIONS:
+            action = QAction(text, self)
+            action.setShortcut(QKeySequence(shortcut))
+            action.setShortcutContext(Qt.ApplicationShortcut)
+            action.triggered.connect(
+                lambda checked=False, name=handler_name: self.invoke_shortcut(name)
+            )
+            self.addAction(action)
+            self.shortcut_actions[attribute_name] = action
+            setattr(self, attribute_name, action)
+
+    # ----------------------------------------------------------
+
+    def invoke_shortcut(self, handler_name):
+
+        handler = getattr(self, handler_name, None)
+
+        if callable(handler):
+            handler()
+
+    # ----------------------------------------------------------
+
+    def open_export_dialog(self):
+
+        self.export_dialog = ExportDialog(self)
+        self.export_dialog.exec()
+
+    # ----------------------------------------------------------
+
+    def open_settings_dialog(self):
+
+        self.settings_dialog = SettingsDialog(parent=self)
+        self.settings_dialog.exec()
+
+    # ----------------------------------------------------------
+
+    def open_about_dialog(self):
+
+        self.about_dialog = AboutDialog(parent=self)
+        self.about_dialog.exec()
+
+    # ----------------------------------------------------------
+
+    def clear_current_selection(self):
+
+        active_modal = QApplication.activeModalWidget()
+
+        if active_modal is not None and active_modal is not self:
+            reject = getattr(active_modal, "reject", None)
+
+            if callable(reject):
+                reject()
+            else:
+                active_modal.close()
+
+            return
+
+        if hasattr(self, "candidates_table"):
+            clear_selection = getattr(self.candidates_table, "clearSelection", None)
+
+            if callable(clear_selection):
+                clear_selection()
+
+        self.update_open_detail_state()
 
     # ----------------------------------------------------------
 
