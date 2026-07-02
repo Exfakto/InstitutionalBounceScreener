@@ -15,6 +15,12 @@ class BacktestTrade:
     exit_date: date | datetime | str
     entry_price: float
     exit_price: float
+    stop_price: float | None = None
+    target_price: float | None = None
+    exit_reason: str = "unspecified"
+    opportunity_score: float | None = None
+    confidence: str | None = None
+    warnings: list[str] | None = None
     shares: float = 1.0
     metadata: dict | None = None
 
@@ -27,6 +33,12 @@ class BacktestTrade:
 
         if self.exit_price < 0:
             raise ValueError("BacktestTrade exit_price cannot be negative.")
+
+        if self.stop_price is not None and self.stop_price < 0:
+            raise ValueError("BacktestTrade stop_price cannot be negative.")
+
+        if self.target_price is not None and self.target_price < 0:
+            raise ValueError("BacktestTrade target_price cannot be negative.")
 
         if self.shares <= 0:
             raise ValueError("BacktestTrade shares must be positive.")
@@ -78,6 +90,7 @@ class BacktestStatistics:
     average_loss: float = 0.0
     expectancy: float = 0.0
     average_hold_days: float = 0.0
+    profit_factor: float = 0.0
     max_drawdown: float = 0.0
     largest_winner: float = 0.0
     largest_loser: float = 0.0
