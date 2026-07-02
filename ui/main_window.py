@@ -50,6 +50,8 @@ from ui.about_dialog import AboutDialog
 
 class MainWindow(QMainWindow):
 
+    DEFAULT_WORKSPACE_LAYOUT = "Default"
+
     LIVE_REFRESH_INTERVALS = {
         "Open": 300,
         "Pre-market": 600,
@@ -112,6 +114,7 @@ class MainWindow(QMainWindow):
         self.last_refresh_at = None
         self.next_refresh_at = None
         self.candidates_by_ticker = {}
+        self.active_workspace_layout = self.DEFAULT_WORKSPACE_LAYOUT
 
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1600, 900)
@@ -343,6 +346,18 @@ class MainWindow(QMainWindow):
 
     def apply_default_dock_layout(self):
 
+        self.active_workspace_layout = "Default"
+        self.set_docks_floating(False)
+        self.show_workspace_docks(
+            {
+                "chart": True,
+                "research": True,
+                "trade_card": True,
+                "watchlist": True,
+                "activity": True,
+                "portfolio": True,
+            }
+        )
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
         self.splitDockWidget(self.chart_dock, self.research_dock, Qt.Vertical)
         self.splitDockWidget(self.research_dock, self.trade_card_dock, Qt.Vertical)
@@ -365,6 +380,132 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def apply_default_layout(self):
+
+        self.apply_default_dock_layout()
+        self.screener_workspace_splitter.setSizes([300, 1100])
+        self.update_screener_status(workspace_state="Default layout")
+
+    # ----------------------------------------------------------
+
+    def apply_research_layout(self):
+
+        self.active_workspace_layout = "Research"
+        self.set_docks_floating(False)
+        self.show_workspace_docks(
+            {
+                "chart": True,
+                "research": True,
+                "trade_card": False,
+                "watchlist": True,
+                "activity": True,
+                "portfolio": False,
+            }
+        )
+        self.addDockWidget(Qt.RightDockWidgetArea, self.research_dock)
+        self.splitDockWidget(self.research_dock, self.chart_dock, Qt.Vertical)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.watchlist_dock)
+        self.splitDockWidget(self.watchlist_dock, self.activity_dock, Qt.Horizontal)
+        self.research_dock.raise_()
+        self.screener_workspace_splitter.setSizes([240, 1160])
+        self.resizeDocks(
+            [self.research_dock, self.chart_dock],
+            [520, 300],
+            Qt.Vertical,
+        )
+        self.resizeDocks(
+            [self.watchlist_dock, self.activity_dock],
+            [340, 900],
+            Qt.Horizontal,
+        )
+        self.update_screener_status(workspace_state="Research layout")
+
+    # ----------------------------------------------------------
+
+    def apply_trading_layout(self):
+
+        self.active_workspace_layout = "Trading"
+        self.set_docks_floating(False)
+        self.show_workspace_docks(
+            {
+                "chart": True,
+                "research": True,
+                "trade_card": True,
+                "watchlist": True,
+                "activity": False,
+                "portfolio": True,
+            }
+        )
+        self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
+        self.splitDockWidget(self.chart_dock, self.research_dock, Qt.Horizontal)
+        self.splitDockWidget(self.research_dock, self.trade_card_dock, Qt.Vertical)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.watchlist_dock)
+        self.tabifyDockWidget(self.watchlist_dock, self.portfolio_dock)
+        self.chart_dock.raise_()
+        self.screener_workspace_splitter.setSizes([260, 1140])
+        self.resizeDocks(
+            [self.chart_dock, self.research_dock],
+            [760, 420],
+            Qt.Horizontal,
+        )
+        self.resizeDocks(
+            [self.research_dock, self.trade_card_dock],
+            [360, 260],
+            Qt.Vertical,
+        )
+        self.update_screener_status(workspace_state="Trading layout")
+
+    # ----------------------------------------------------------
+
+    def apply_compact_layout(self):
+
+        self.active_workspace_layout = "Compact"
+        self.set_docks_floating(False)
+        self.show_workspace_docks(
+            {
+                "chart": True,
+                "research": True,
+                "trade_card": False,
+                "watchlist": False,
+                "activity": False,
+                "portfolio": False,
+            }
+        )
+        self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
+        self.tabifyDockWidget(self.chart_dock, self.research_dock)
+        self.chart_dock.raise_()
+        self.screener_workspace_splitter.setSizes([210, 990])
+        self.resizeDocks([self.chart_dock], [360], Qt.Horizontal)
+        self.update_screener_status(workspace_state="Compact layout")
+
+    # ----------------------------------------------------------
+
+    def reset_workspace(self):
+
+        self.apply_default_layout()
+        state = self.capture_workspace_state()
+        state["dock_state"] = None
+        return self.workspace_state_service.save_state(state)
+
+    # ----------------------------------------------------------
+
+    def show_workspace_docks(self, visibility):
+
+        for name, dock in getattr(self, "workspace_docks", {}).items():
+            if visibility.get(name, True):
+                dock.show()
+            else:
+                dock.hide()
+
+    # ----------------------------------------------------------
+
+    def set_docks_floating(self, floating):
+
+        for dock in getattr(self, "workspace_docks", {}).values():
+            dock.setFloating(floating)
+
+    # ----------------------------------------------------------
+
     def restore_workspace_state(self):
 
         if not hasattr(self, "workspace_state_service"):
@@ -383,14 +524,32 @@ class MainWindow(QMainWindow):
 
         window_state = state.get("window") or {}
         self.restore_window_geometry(window_state)
+        active_layout = state.get("active_layout")
+        if active_layout in {"Default", "Research", "Trading", "Compact"}:
+            self.apply_named_layout(active_layout)
         self.restore_splitter_state(state.get("splitters") or {})
         self.restore_dock_state(state.get("dock_state"))
+        self.restore_dock_metadata(state)
         self.restore_tab_state(state)
 
         active_preset = state.get("active_screener_preset")
         if active_preset:
             self.screener_preset_controller.active_preset = active_preset
             self.update_screener_status(active_preset=active_preset)
+
+    # ----------------------------------------------------------
+
+    def apply_named_layout(self, layout_name):
+
+        handlers = {
+            "Default": self.apply_default_layout,
+            "Research": self.apply_research_layout,
+            "Trading": self.apply_trading_layout,
+            "Compact": self.apply_compact_layout,
+        }
+        handler = handlers.get(layout_name)
+        if handler is not None:
+            handler()
 
     # ----------------------------------------------------------
 
@@ -465,6 +624,20 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def restore_dock_metadata(self, state):
+
+        visibility = state.get("dock_visibility") or {}
+        floating = state.get("dock_floating") or {}
+
+        for name, dock in getattr(self, "workspace_docks", {}).items():
+            if name in visibility:
+                dock.setVisible(bool(visibility[name]))
+
+            if name in floating:
+                dock.setFloating(bool(floating[name]))
+
+    # ----------------------------------------------------------
+
     def restore_tab_state(self, state):
 
         active_dock = state.get("active_workspace")
@@ -512,7 +685,14 @@ class MainWindow(QMainWindow):
                 "maximized": self.isMaximized(),
             },
             "splitters": self.capture_splitter_state(),
+            "active_layout": getattr(
+                self,
+                "active_workspace_layout",
+                self.DEFAULT_WORKSPACE_LAYOUT,
+            ),
             "dock_state": bytes(self.saveState()).hex(),
+            "dock_visibility": self.capture_dock_visibility(),
+            "dock_floating": self.capture_dock_floating(),
             "selected_ticker": selected_ticker,
             "active_tab": active_tab,
             "active_workspace": active_workspace,
@@ -521,6 +701,24 @@ class MainWindow(QMainWindow):
                 "active_preset",
                 None,
             ),
+        }
+
+    # ----------------------------------------------------------
+
+    def capture_dock_visibility(self):
+
+        return {
+            name: dock.isVisible()
+            for name, dock in getattr(self, "workspace_docks", {}).items()
+        }
+
+    # ----------------------------------------------------------
+
+    def capture_dock_floating(self):
+
+        return {
+            name: dock.isFloating()
+            for name, dock in getattr(self, "workspace_docks", {}).items()
         }
 
     # ----------------------------------------------------------

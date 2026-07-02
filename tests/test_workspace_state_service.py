@@ -11,6 +11,9 @@ def test_workspace_state_missing_file_uses_defaults(tmp_path):
     assert state["window"]["size"] == [1600, 900]
     assert state["window"]["maximized"] is False
     assert state["splitters"] == {}
+    assert state["active_layout"] == "Default"
+    assert state["dock_visibility"] == {}
+    assert state["dock_floating"] == {}
 
 
 def test_workspace_state_malformed_file_uses_defaults(tmp_path):
@@ -37,6 +40,15 @@ def test_workspace_state_save_load_round_trip(tmp_path):
             "splitters": {
                 "workspace_splitter": [500, 250],
             },
+            "active_layout": "Trading",
+            "dock_visibility": {
+                "chart": True,
+                "activity": False,
+            },
+            "dock_floating": {
+                "chart": False,
+                "research": True,
+            },
             "selected_ticker": "AAPL",
             "active_tab": 2,
             "active_workspace": "Watchlist",
@@ -48,6 +60,9 @@ def test_workspace_state_save_load_round_trip(tmp_path):
     assert saved == loaded
     assert loaded["window"]["size"] == [1200, 800]
     assert loaded["splitters"]["workspace_splitter"] == [500, 250]
+    assert loaded["active_layout"] == "Trading"
+    assert loaded["dock_visibility"]["activity"] is False
+    assert loaded["dock_floating"]["research"] is True
     assert loaded["selected_ticker"] == "AAPL"
     assert loaded["active_screener_preset"] == "Momentum"
 

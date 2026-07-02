@@ -380,3 +380,121 @@ def test_main_window_dock_widgets_can_be_restored(patched_window):
     window.chart_dock.setFloating(False)
 
     assert window.chart_dock.isFloating() is False
+
+
+def test_main_window_default_layout_sets_expected_docks(patched_window):
+    window = patched_window
+
+    window.apply_default_layout()
+
+    assert window.active_workspace_layout == "Default"
+    assert window.chart_dock.isHidden() is False
+    assert window.research_dock.isHidden() is False
+    assert window.trade_card_dock.isHidden() is False
+    assert window.watchlist_dock.isHidden() is False
+    assert window.activity_dock.isHidden() is False
+    assert window.portfolio_dock.isHidden() is False
+    assert window.screener_workspace_splitter.sizes()[0] > 0
+
+
+def test_main_window_research_layout_prioritizes_research_panel(patched_window):
+    window = patched_window
+
+    window.apply_research_layout()
+
+    assert window.active_workspace_layout == "Research"
+    assert window.research_dock.isHidden() is False
+    assert window.chart_dock.isHidden() is False
+    assert window.watchlist_dock.isHidden() is False
+    assert window.trade_card_dock.isHidden() is True
+    assert window.portfolio_dock.isHidden() is True
+    assert window.screener_workspace_splitter.sizes()[0] <= 260
+
+
+def test_main_window_trading_layout_prioritizes_chart_and_trade_card(patched_window):
+    window = patched_window
+
+    window.apply_trading_layout()
+
+    assert window.active_workspace_layout == "Trading"
+    assert window.chart_dock.isHidden() is False
+    assert window.trade_card_dock.isHidden() is False
+    assert window.research_dock.isHidden() is False
+    assert window.activity_dock.isHidden() is True
+    assert window.portfolio_dock.isHidden() is False
+
+
+def test_main_window_compact_layout_reduces_dock_footprint(patched_window):
+    window = patched_window
+
+    window.apply_compact_layout()
+
+    assert window.active_workspace_layout == "Compact"
+    assert window.chart_dock.isHidden() is False
+    assert window.research_dock.isHidden() is False
+    assert window.trade_card_dock.isHidden() is True
+    assert window.watchlist_dock.isHidden() is True
+    assert window.activity_dock.isHidden() is True
+    assert window.portfolio_dock.isHidden() is True
+
+
+def test_main_window_capture_workspace_state_includes_layout_metadata(patched_window):
+    window = patched_window
+
+    window.apply_compact_layout()
+    window.research_dock.setFloating(True)
+    state = window.capture_workspace_state()
+
+    assert state["active_layout"] == "Compact"
+    assert state["dock_visibility"]["watchlist"] is False
+    assert state["dock_floating"]["research"] is True
+    assert state["dock_state"]
+
+
+def test_main_window_reset_workspace_restores_default_and_clears_custom_arrangement(patched_window):
+    window = patched_window
+    window.screener_preset_controller.active_preset = "Momentum"
+    window.apply_compact_layout()
+
+    saved = window.reset_workspace()
+
+    assert window.active_workspace_layout == "Default"
+    assert window.trade_card_dock.isHidden() is False
+    assert saved["active_layout"] == "Default"
+    assert saved["dock_state"] is None
+    assert saved["active_screener_preset"] == "Momentum"
+
+
+def test_main_window_restores_named_layout_and_dock_metadata(monkeypatch, app):
+    monkeypatch.setattr(main_window_module, "MarketController", FakeMarketController)
+    monkeypatch.setattr(main_window_module, "IndicatorController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "SupportController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "BounceController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "ScoringController", FakeScoringController)
+    monkeypatch.setattr(main_window_module, "ChartController", FakeChartController)
+    monkeypatch.setattr(main_window_module, "WatchlistController", FakeWatchlistController)
+    monkeypatch.setattr(main_window_module, "TradeJournalController", FakeTradeJournalController)
+    monkeypatch.setattr(main_window_module, "MarketStatusService", FakeMarketStatusService)
+    monkeypatch.setattr(main_window_module, "RefreshScheduler", FakeRefreshScheduler)
+    monkeypatch.setattr(main_window_module, "WorkspaceStateService", FakeWorkspaceStateService)
+    FakeWorkspaceStateService.saved_states = []
+    FakeWorkspaceStateService.state = {
+        "active_layout": "Trading",
+        "dock_visibility": {
+            "activity": False,
+            "trade_card": True,
+        },
+        "dock_floating": {
+            "chart": False,
+        },
+    }
+
+    window = MainWindow()
+
+    try:
+        assert window.active_workspace_layout == "Trading"
+        assert window.trade_card_dock.isHidden() is False
+        assert window.activity_dock.isHidden() is True
+        assert window.chart_dock.isFloating() is False
+    finally:
+        window.close()
