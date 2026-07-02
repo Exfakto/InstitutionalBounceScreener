@@ -24,6 +24,10 @@ def test_operations_toolbar_contains_expected_buttons(app):
         "detect_support",
         "validate_bounces",
         "run_screener",
+        "save_preset",
+        "load_preset",
+        "reset_filters",
+        "refresh_results",
         "open_detail",
     ]
     assert toolbar.buttons["update_universe"].text() == "Update Universe"
@@ -32,6 +36,10 @@ def test_operations_toolbar_contains_expected_buttons(app):
     assert toolbar.buttons["detect_support"].text() == "Detect Support"
     assert toolbar.buttons["validate_bounces"].text() == "Validate Bounces"
     assert toolbar.buttons["run_screener"].text() == "Run Screener"
+    assert toolbar.buttons["save_preset"].text() == "Save Preset"
+    assert toolbar.buttons["load_preset"].text() == "Load Preset"
+    assert toolbar.buttons["reset_filters"].text() == "Reset Filters"
+    assert toolbar.buttons["refresh_results"].text() == "Refresh Results"
     assert toolbar.buttons["open_detail"].text() == "Open Detail"
 
 
@@ -55,6 +63,10 @@ def test_operations_toolbar_emits_operation_signals(app):
     toolbar.detect_support_requested.connect(lambda: emitted.append("support"))
     toolbar.validate_bounces_requested.connect(lambda: emitted.append("bounces"))
     toolbar.run_screener_requested.connect(lambda: emitted.append("screener"))
+    toolbar.save_preset_requested.connect(lambda: emitted.append("save"))
+    toolbar.load_preset_requested.connect(lambda: emitted.append("load"))
+    toolbar.reset_filters_requested.connect(lambda: emitted.append("reset"))
+    toolbar.refresh_results_requested.connect(lambda: emitted.append("refresh"))
 
     toolbar.buttons["update_universe"].click()
     toolbar.buttons["download_prices"].click()
@@ -62,6 +74,10 @@ def test_operations_toolbar_emits_operation_signals(app):
     toolbar.buttons["detect_support"].click()
     toolbar.buttons["validate_bounces"].click()
     toolbar.buttons["run_screener"].click()
+    toolbar.buttons["save_preset"].click()
+    toolbar.buttons["load_preset"].click()
+    toolbar.buttons["reset_filters"].click()
+    toolbar.buttons["refresh_results"].click()
 
     assert emitted == [
         "update",
@@ -70,6 +86,10 @@ def test_operations_toolbar_emits_operation_signals(app):
         "support",
         "bounces",
         "screener",
+        "save",
+        "load",
+        "reset",
+        "refresh",
     ]
 
 
