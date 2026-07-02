@@ -68,11 +68,11 @@ class TradeCard(QWidget):
         self.group = QGroupBox("Trade Card")
         self.group.setObjectName("ResearchPreviewCard")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(16, 20, 16, 16)
+        group_layout.setContentsMargins(16, 22, 16, 16)
         group_layout.setSpacing(12)
 
         self.empty_state_label = QLabel("No trade card available.")
-        self.empty_state_label.setObjectName("ResearchPreviewWarnings")
+        self.empty_state_label.setObjectName("EmptyStateLabel")
         self.empty_state_label.setAlignment(Qt.AlignCenter)
         self.empty_state_label.setWordWrap(True)
         self.empty_state_label.setMinimumHeight(140)
@@ -88,9 +88,13 @@ class TradeCard(QWidget):
         actions_layout.setSpacing(8)
         self.copy_button = QPushButton("Copy Summary")
         self.copy_button.setObjectName("TradeCardCopyButton")
+        self.copy_button.setProperty("variant", "secondary")
+        self.copy_button.setMinimumHeight(34)
         self.copy_button.clicked.connect(self.copy_summary)
         self.compact_toggle_button = QPushButton("Compact")
         self.compact_toggle_button.setObjectName("TradeCardCompactToggle")
+        self.compact_toggle_button.setProperty("variant", "secondary")
+        self.compact_toggle_button.setMinimumHeight(34)
         self.compact_toggle_button.clicked.connect(self.toggle_compact)
         actions_layout.addWidget(self.copy_button)
         actions_layout.addWidget(self.compact_toggle_button)
@@ -268,7 +272,7 @@ class TradeCard(QWidget):
         section.setObjectName("ResearchPreviewSection")
         layout = QVBoxLayout(section)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(9)
         return section, layout
 
     @classmethod

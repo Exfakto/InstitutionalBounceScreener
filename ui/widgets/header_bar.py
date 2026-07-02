@@ -20,11 +20,11 @@ class HeaderBar(QFrame):
         super().__init__(parent)
 
         self.setObjectName("HeaderBar")
-        self.setMaximumHeight(124)
-        self.setMinimumHeight(96)
+        self.setMaximumHeight(136)
+        self.setMinimumHeight(104)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(22, 12, 22, 12)
+        layout.setContentsMargins(20, 12, 20, 12)
         layout.setSpacing(24)
 
         title_layout = QVBoxLayout()
@@ -47,6 +47,7 @@ class HeaderBar(QFrame):
         self.version_label = QLabel(version)
         self.version_label.setObjectName("HeaderVersion")
         self.version_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.version_label.setMinimumWidth(168)
         version_font = self.version_label.font()
         version_font.setBold(True)
         self.version_label.setFont(version_font)
@@ -54,30 +55,36 @@ class HeaderBar(QFrame):
         self.status_label = QLabel(status)
         self.status_label.setObjectName("HeaderStatus")
         self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.status_label.setMinimumWidth(168)
 
         self.market_status_label = QLabel("Market: --")
         self.market_status_label.setObjectName("HeaderMarketStatus")
         self.market_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.market_status_label.setMinimumWidth(168)
 
         self.auto_refresh_label = QLabel("Auto-refresh: --")
         self.auto_refresh_label.setObjectName("HeaderRefreshStatus")
         self.auto_refresh_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.auto_refresh_label.setMinimumWidth(168)
 
         self.refresh_interval_label = QLabel("Interval: --")
         self.refresh_interval_label.setObjectName("HeaderRefreshStatus")
         self.refresh_interval_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.refresh_interval_label.setMinimumWidth(168)
 
         self.last_refresh_label = QLabel("Last refresh: --")
         self.last_refresh_label.setObjectName("HeaderRefreshStatus")
         self.last_refresh_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.last_refresh_label.setMinimumWidth(168)
 
         self.next_refresh_label = QLabel("Next refresh: --")
         self.next_refresh_label.setObjectName("HeaderRefreshStatus")
         self.next_refresh_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.next_refresh_label.setMinimumWidth(168)
 
         status_layout = QVBoxLayout()
         status_layout.setContentsMargins(0, 0, 0, 0)
-        status_layout.setSpacing(5)
+        status_layout.setSpacing(4)
         status_layout.addWidget(self.version_label)
         status_layout.addWidget(self.status_label)
         status_layout.addWidget(self.market_status_label)

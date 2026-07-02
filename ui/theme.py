@@ -124,7 +124,7 @@ class Theme:
             background-color: {cls.HEADER_BACKGROUND};
             color: {cls.SECONDARY_TEXT};
             border-top: 1px solid {cls.MUTED_BORDER};
-            padding: 4px 8px;
+            padding: 5px 8px;
         }}
 
         QWidget {{
@@ -152,7 +152,7 @@ class Theme:
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
             border-radius: 6px;
-            padding: 8px 12px;
+            padding: 8px 13px;
             min-height: 26px;
             font-weight: 600;
         }}
@@ -171,6 +171,7 @@ class Theme:
             background-color: {cls.SECONDARY};
             color: {cls.SUBTLE_TEXT};
             border-color: {cls.SOFT_BORDER};
+            font-weight: 600;
         }}
 
         QPushButton[variant="primary"] {{
@@ -198,8 +199,12 @@ class Theme:
         }}
 
         QTableWidget::item {{
-            padding: 7px 8px;
+            padding: 8px 9px;
             border: none;
+        }}
+
+        QTableWidget::item:hover {{
+            background-color: {cls.ELEVATED_PANEL};
         }}
 
         QTableWidget::item:selected {{
@@ -214,11 +219,11 @@ class Theme:
 
         QHeaderView::section {{
             background-color: {cls.HEADER_BACKGROUND};
-            color: {cls.TEXT};
+            color: {cls.SECONDARY_TEXT};
             border: none;
             border-right: 1px solid {cls.SOFT_BORDER};
             border-bottom: 1px solid {cls.BORDER};
-            padding: 8px;
+            padding: 9px 10px;
             font-weight: 700;
         }}
 
@@ -270,8 +275,8 @@ class Theme:
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
             border-radius: 8px;
-            margin-top: 14px;
-            padding-top: 14px;
+            margin-top: 16px;
+            padding-top: 16px;
             font-weight: 700;
         }}
 
@@ -279,9 +284,11 @@ class Theme:
             subcontrol-origin: margin;
             subcontrol-position: top left;
             left: 10px;
-            padding: 0 6px;
-            color: {cls.MUTED_TEXT};
+            padding: 0 7px;
+            color: {cls.SECONDARY_TEXT};
             background-color: {cls.SECONDARY};
+            font-size: 9pt;
+            font-weight: 800;
         }}
 
         QFrame {{
@@ -311,6 +318,10 @@ class Theme:
             color: {cls.MUTED_TEXT};
         }}
 
+        QLabel#HeaderStatus {{
+            font-weight: 600;
+        }}
+
         QLabel#HeaderMarketStatus {{
             color: {cls.SECONDARY_TEXT};
             background-color: {cls.ACCENT_MUTED};
@@ -325,7 +336,7 @@ class Theme:
             background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.MUTED_BORDER};
             border-radius: 5px;
-            padding: 3px 7px;
+            padding: 3px 8px;
         }}
 
         QLabel#ToolbarGroupLabel {{
@@ -334,6 +345,10 @@ class Theme:
             text-transform: uppercase;
             padding-left: 4px;
             padding-right: 4px;
+        }}
+
+        QWidget#OperationsToolbar {{
+            background-color: transparent;
         }}
 
         QFrame#ToolbarSeparator {{
@@ -391,6 +406,7 @@ class Theme:
         QLabel#ResearchPreviewCompany,
         QLabel#ResearchPreviewFieldLabel {{
             color: {cls.MUTED_TEXT};
+            font-weight: 600;
         }}
 
         QLabel#ResearchPreviewFieldValue {{
@@ -451,14 +467,38 @@ class Theme:
             background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.MUTED_BORDER};
             border-radius: 6px;
-            padding: 7px;
+            padding: 8px;
             line-height: 125%;
+        }}
+
+        QLabel#EmptyStateLabel {{
+            color: {cls.SECONDARY_TEXT};
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: 8px;
+            padding: 18px;
+            font-weight: 600;
+            line-height: 130%;
         }}
 
         QGroupBox#ResearchPreviewCard,
         QGroupBox#ActivityLogGroup {{
             background-color: {cls.SECONDARY};
             border-color: {cls.BORDER};
+        }}
+
+        QDockWidget {{
+            color: {cls.SECONDARY_TEXT};
+        }}
+
+        QDockWidget::title {{
+            background-color: {cls.HEADER_BACKGROUND};
+            color: {cls.SECONDARY_TEXT};
+            border: 1px solid {cls.BORDER};
+            border-bottom: none;
+            padding: 7px 9px;
+            font-weight: 800;
+            text-align: left;
         }}
 
         QTabWidget::pane {{
@@ -535,7 +575,7 @@ class Theme:
             background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.SOFT_BORDER};
             border-radius: 6px;
-            padding: 7px 9px;
+            padding: 8px 10px;
             font-family: "Consolas", "Segoe UI", monospace;
             font-size: 9pt;
         }}

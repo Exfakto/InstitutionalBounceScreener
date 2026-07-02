@@ -135,8 +135,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(14, 14, 14, 14)
+        main_layout.setSpacing(12)
 
         ##########################################################
         # Header
@@ -246,7 +246,7 @@ class MainWindow(QMainWindow):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
         self.filter_sections = {}
         for title, fields in [
@@ -261,8 +261,8 @@ class MainWindow(QMainWindow):
             section.setChecked(True)
             section.setObjectName("ScreenerFilterSection")
             form = QFormLayout(section)
-            form.setContentsMargins(12, 16, 12, 12)
-            form.setVerticalSpacing(8)
+            form.setContentsMargins(12, 18, 12, 12)
+            form.setVerticalSpacing(9)
             for field in fields:
                 control = QComboBox()
                 control.addItems(["Any", "Low", "Moderate", "High"])

@@ -43,11 +43,13 @@ class WatchlistPanel(QWidget):
         layout.setSpacing(10)
 
         self.group = QGroupBox("Watchlist")
+        self.group.setObjectName("ResearchPreviewCard")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(14, 18, 14, 14)
+        group_layout.setContentsMargins(16, 22, 16, 16)
         group_layout.setSpacing(12)
 
         self.table = QTableWidget(0, len(self.COLUMNS))
+        self.table.setObjectName("WatchlistTable")
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -60,12 +62,13 @@ class WatchlistPanel(QWidget):
         self.table.horizontalHeader().setStretchLastSection(True)
 
         self.intelligence_group = QGroupBox("Watchlist Intelligence")
+        self.intelligence_group.setObjectName("ResearchPreviewCard")
         intelligence_layout = QVBoxLayout()
-        intelligence_layout.setContentsMargins(12, 16, 12, 12)
-        intelligence_layout.setSpacing(9)
+        intelligence_layout.setContentsMargins(12, 18, 12, 12)
+        intelligence_layout.setSpacing(10)
 
         self.intelligence_empty_label = QLabel("No watchlist intelligence available.")
-        self.intelligence_empty_label.setObjectName("ResearchPreviewWarnings")
+        self.intelligence_empty_label.setObjectName("EmptyStateLabel")
         self.intelligence_empty_label.setWordWrap(True)
 
         metrics_layout = QGridLayout()
@@ -97,11 +100,18 @@ class WatchlistPanel(QWidget):
 
         intelligence_layout.addWidget(self.intelligence_empty_label)
         intelligence_layout.addLayout(metrics_layout)
-        intelligence_layout.addWidget(QLabel("Top Candidates"))
+        top_label = QLabel("Top Candidates")
+        top_label.setObjectName("ResearchPreviewSectionTitle")
+        weak_label = QLabel("Weak Candidates")
+        weak_label.setObjectName("ResearchPreviewSectionTitle")
+        stale_label = QLabel("Stale Items")
+        stale_label.setObjectName("ResearchPreviewSectionTitle")
+
+        intelligence_layout.addWidget(top_label)
         intelligence_layout.addWidget(self.top_candidates_table)
-        intelligence_layout.addWidget(QLabel("Weak Candidates"))
+        intelligence_layout.addWidget(weak_label)
         intelligence_layout.addWidget(self.weak_candidates_table)
-        intelligence_layout.addWidget(QLabel("Stale Items"))
+        intelligence_layout.addWidget(stale_label)
         intelligence_layout.addWidget(self.stale_items_table)
         self.intelligence_group.setLayout(intelligence_layout)
 
@@ -112,6 +122,12 @@ class WatchlistPanel(QWidget):
         self.add_button = QPushButton("Add Selected Candidate")
         self.remove_button = QPushButton("Remove Selected")
         self.refresh_button = QPushButton("Refresh")
+        self.add_button.setProperty("variant", "secondary")
+        self.remove_button.setProperty("variant", "secondary")
+        self.refresh_button.setProperty("variant", "secondary")
+        self.add_button.setMinimumHeight(34)
+        self.remove_button.setMinimumHeight(34)
+        self.refresh_button.setMinimumHeight(34)
 
         self.add_button.clicked.connect(self.add_selected_candidate_requested.emit)
         self.remove_button.clicked.connect(self.remove_selected_requested.emit)
@@ -272,6 +288,7 @@ class WatchlistPanel(QWidget):
     @staticmethod
     def intelligence_table():
         table = QTableWidget(0, 4)
+        table.setObjectName("WatchlistIntelligenceTable")
         table.setHorizontalHeaderLabels(["Ticker", "Company", "Status", "Score"])
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionMode(QAbstractItemView.NoSelection)

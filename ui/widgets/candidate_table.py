@@ -40,8 +40,9 @@ class CandidateTable(QTableWidget):
         self.setShowGrid(False)
         self.setMouseTracking(True)
         self.setSortingEnabled(False)
+        self.setWordWrap(False)
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(38)
+        self.verticalHeader().setDefaultSectionSize(40)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setMinimumSectionSize(104)
@@ -305,9 +306,10 @@ class CandidateTable(QTableWidget):
             selection-background-color: #1E3A56;
             selection-color: #F4F7FA;
             gridline-color: transparent;
+            outline: none;
         }
         QTableWidget#CandidateTable::item {
-            padding: 8px 10px;
+            padding: 9px 11px;
             border-bottom: 1px solid #26313B;
         }
         QTableWidget#CandidateTable::item:hover {
@@ -323,7 +325,7 @@ class CandidateTable(QTableWidget):
             border: none;
             border-right: 1px solid #26313B;
             border-bottom: 1px solid #34404D;
-            padding: 9px 10px;
+            padding: 10px 11px;
             font-weight: 700;
         }
         """

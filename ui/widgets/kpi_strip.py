@@ -18,18 +18,19 @@ class KpiStrip(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("KpiStrip")
 
         self.cards = {}
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
         for key, title in self.CARD_DEFINITIONS:
             card = StatisticsCard(title)
             card.setObjectName("KpiCard")
-            card.setMaximumHeight(92)
-            card.setMinimumHeight(78)
+            card.setMaximumHeight(96)
+            card.setMinimumHeight(82)
             card.setMinimumWidth(172)
             card.title.setObjectName("KpiTitle")
             card.value.setObjectName("KpiValue")

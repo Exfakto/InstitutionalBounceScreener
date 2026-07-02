@@ -54,6 +54,7 @@ class OperationsToolbar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("OperationsToolbar")
 
         self.buttons = {}
 
@@ -67,6 +68,7 @@ class OperationsToolbar(QWidget):
 
             label = QLabel(group_label)
             label.setObjectName("ToolbarGroupLabel")
+            label.setMinimumHeight(34)
             layout.addWidget(label)
 
             for key, text, signal_name in actions:
@@ -76,6 +78,7 @@ class OperationsToolbar(QWidget):
                     "primary" if key in {"run_screener", "refresh_results"} else "secondary",
                 )
                 button.setMinimumHeight(34)
+                button.setMinimumWidth(118)
                 button.clicked.connect(getattr(self, signal_name).emit)
 
                 self.buttons[key] = button

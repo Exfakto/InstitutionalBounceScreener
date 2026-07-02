@@ -36,6 +36,7 @@ class LegacyResearchPreview(QWidget):
         group_layout.setSpacing(12)
 
         self.empty_state_label = QLabel("Select a candidate to begin research.")
+        self.empty_state_label.setObjectName("EmptyStateLabel")
         self.empty_state_label.setAlignment(Qt.AlignCenter)
         self.empty_state_label.setWordWrap(True)
         self.empty_state_label.setMinimumHeight(160)
@@ -373,16 +374,16 @@ class ResearchPreview(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(8)
 
         self.group = QGroupBox("Research Preview 2.0")
         self.group.setObjectName("ResearchPreviewCard")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(16, 20, 16, 16)
+        group_layout.setContentsMargins(16, 22, 16, 16)
         group_layout.setSpacing(12)
 
         self.empty_state_label = QLabel("Select a candidate to begin research.")
-        self.empty_state_label.setObjectName("ResearchPreviewWarnings")
+        self.empty_state_label.setObjectName("EmptyStateLabel")
         self.empty_state_label.setAlignment(Qt.AlignCenter)
         self.empty_state_label.setWordWrap(True)
         self.empty_state_label.setMinimumHeight(160)
@@ -396,7 +397,7 @@ class ResearchPreview(QWidget):
         header_section = self.create_section()
         header_layout = header_section.layout()
         header_layout.setContentsMargins(12, 12, 12, 12)
-        header_layout.setSpacing(5)
+        header_layout.setSpacing(6)
 
         self.ticker_label = QLabel("")
         self.ticker_label.setObjectName("ResearchPreviewTicker")
@@ -420,8 +421,8 @@ class ResearchPreview(QWidget):
 
         summary_section = self.create_section("Overall Rating")
         summary_layout = summary_section.layout()
-        summary_layout.setContentsMargins(10, 10, 10, 10)
-        summary_layout.setSpacing(6)
+        summary_layout.setContentsMargins(12, 12, 12, 12)
+        summary_layout.setSpacing(7)
 
         self.summary_labels = {}
         for key, label in self.SUMMARY_FIELDS:
@@ -436,8 +437,8 @@ class ResearchPreview(QWidget):
 
         technical_section = self.create_section("Technical")
         technical_layout = technical_section.layout()
-        technical_layout.setContentsMargins(10, 10, 10, 10)
-        technical_layout.setSpacing(6)
+        technical_layout.setContentsMargins(12, 12, 12, 12)
+        technical_layout.setSpacing(7)
 
         self.technical_labels = {}
         for key, label, _fields in self.TECHNICAL_FIELDS:
@@ -445,8 +446,8 @@ class ResearchPreview(QWidget):
 
         fundamentals_section = self.create_section("Fundamentals")
         fundamentals_layout = fundamentals_section.layout()
-        fundamentals_layout.setContentsMargins(10, 10, 10, 10)
-        fundamentals_layout.setSpacing(6)
+        fundamentals_layout.setContentsMargins(12, 12, 12, 12)
+        fundamentals_layout.setSpacing(7)
 
         self.fundamental_labels = {}
         for key, label, _value_type in self.FUNDAMENTAL_FIELDS:
@@ -462,8 +463,8 @@ class ResearchPreview(QWidget):
 
         institutional_section = self.create_section("Institutional")
         institutional_layout = institutional_section.layout()
-        institutional_layout.setContentsMargins(10, 10, 10, 10)
-        institutional_layout.setSpacing(6)
+        institutional_layout.setContentsMargins(12, 12, 12, 12)
+        institutional_layout.setSpacing(7)
 
         self.institutional_labels = {}
         for key, label, _fields in self.INSTITUTIONAL_FIELDS:
@@ -474,8 +475,8 @@ class ResearchPreview(QWidget):
 
         risk_section = self.create_section("Risk")
         risk_layout = risk_section.layout()
-        risk_layout.setContentsMargins(10, 10, 10, 10)
-        risk_layout.setSpacing(6)
+        risk_layout.setContentsMargins(12, 12, 12, 12)
+        risk_layout.setSpacing(7)
 
         self.risk_labels = {}
         for key, label, _fields in self.RISK_FIELDS:
@@ -483,8 +484,8 @@ class ResearchPreview(QWidget):
 
         decision_section = self.create_section("Decision")
         decision_layout = decision_section.layout()
-        decision_layout.setContentsMargins(10, 10, 10, 10)
-        decision_layout.setSpacing(6)
+        decision_layout.setContentsMargins(12, 12, 12, 12)
+        decision_layout.setSpacing(7)
 
         self.decision_label = QLabel("Decision unavailable.")
         self.decision_label.setObjectName("ResearchPreviewSignal")
@@ -495,8 +496,8 @@ class ResearchPreview(QWidget):
 
         checklist_section = self.create_section("Institutional Checklist")
         checklist_layout = checklist_section.layout()
-        checklist_layout.setContentsMargins(10, 10, 10, 10)
-        checklist_layout.setSpacing(5)
+        checklist_layout.setContentsMargins(12, 12, 12, 12)
+        checklist_layout.setSpacing(7)
 
         self.checklist_rows = {}
         self.checklist_name_labels = {}
@@ -515,8 +516,8 @@ class ResearchPreview(QWidget):
 
         thesis_section = self.create_section("Trade Thesis")
         thesis_layout = thesis_section.layout()
-        thesis_layout.setContentsMargins(10, 10, 10, 10)
-        thesis_layout.setSpacing(5)
+        thesis_layout.setContentsMargins(12, 12, 12, 12)
+        thesis_layout.setSpacing(7)
 
         self.thesis_title_label = QLabel("Trade thesis unavailable.")
         self.thesis_title_label.setObjectName("ResearchPreviewFieldValue")
