@@ -13,6 +13,7 @@ class ExportService:
     """
 
     SUPPORTED_FORMATS = {"csv", "json"}
+    RESEARCH_REPORT_FORMATS = {"json", "txt", "markdown"}
 
     def export_watchlist(
         self,
@@ -88,6 +89,68 @@ class ExportService:
             allow_overwrite,
             "Research Preview",
         )
+
+    def export_research_report(
+        self,
+        report: Any,
+        destination_path: str | Path,
+        format: str = "json",
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        normalized_format = self._normalize_format(format)
+
+        if normalized_format not in self.RESEARCH_REPORT_FORMATS:
+            return self._result(
+                False,
+                f"Unsupported export format: {format}.",
+                export_format=normalized_format,
+            )
+
+        destination = self._destination_path(destination_path, normalized_format)
+
+        if destination is None:
+            return self._result(False, "Destination path is required.")
+
+        if destination.exists() and not overwrite:
+            return self._result(
+                False,
+                "Destination file already exists.",
+                path=str(destination),
+                export_format=normalized_format,
+            )
+
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            normalized_report = self._normalize_data(report)
+
+            if normalized_format == "json":
+                self._write_json(normalized_report, destination)
+            elif normalized_format == "txt":
+                self._write_text_report(normalized_report, destination)
+            else:
+                self._write_markdown_report(normalized_report, destination)
+
+            return self._result(
+                True,
+                "Research Report exported.",
+                path=str(destination),
+                export_format=normalized_format,
+                count=self._count_records(normalized_report),
+            )
+        except OSError as exc:
+            return self._result(
+                False,
+                f"Export failed: {exc}",
+                path=str(destination),
+                export_format=normalized_format,
+            )
+        except (TypeError, ValueError) as exc:
+            return self._result(
+                False,
+                f"Export failed: {exc}",
+                path=str(destination),
+                export_format=normalized_format,
+            )
 
     def _export(
         self,
@@ -170,6 +233,69 @@ class ExportService:
             json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False),
             encoding="utf-8",
         )
+
+    @classmethod
+    def _write_text_report(cls, data: Any, destination: Path) -> None:
+        destination.write_text(cls._text_report(data), encoding="utf-8")
+
+    @classmethod
+    def _write_markdown_report(cls, data: Any, destination: Path) -> None:
+        destination.write_text(cls._markdown_report(data), encoding="utf-8")
+
+    @classmethod
+    def _text_report(cls, data: Any) -> str:
+        report = data if isinstance(data, dict) else {"report": data}
+        title = report.get("title") or "Research Report"
+        sections = [str(title)]
+
+        for key, heading in cls._research_report_sections():
+            value = report.get(key)
+            if value in (None, "", []):
+                continue
+            sections.append(f"{heading}\n{cls._format_report_value(value)}")
+
+        return "\n\n".join(sections).rstrip() + "\n"
+
+    @classmethod
+    def _markdown_report(cls, data: Any) -> str:
+        report = data if isinstance(data, dict) else {"report": data}
+        title = report.get("title") or "Research Report"
+        sections = [f"# {title}"]
+
+        for key, heading in cls._research_report_sections():
+            value = report.get(key)
+            if value in (None, "", []):
+                continue
+            sections.append(f"## {heading}\n\n{cls._format_report_value(value)}")
+
+        return "\n\n".join(sections).rstrip() + "\n"
+
+    @staticmethod
+    def _research_report_sections() -> list[tuple[str, str]]:
+        return [
+            ("executive_summary", "Executive Summary"),
+            ("setup_quality", "Setup Quality"),
+            ("technical_analysis", "Technical Assessment"),
+            ("fundamental_analysis", "Fundamental Assessment"),
+            ("institutional_analysis", "Institutional Assessment"),
+            ("trade_plan", "Trade Plan"),
+            ("risk_summary", "Risk Assessment"),
+            ("warnings", "Warnings"),
+            ("conclusion", "Final Conclusion"),
+            ("confidence", "Confidence"),
+        ]
+
+    @classmethod
+    def _format_report_value(cls, value: Any) -> str:
+        if isinstance(value, list):
+            if not value:
+                return ""
+            return "\n".join(f"- {item}" for item in value)
+
+        if isinstance(value, dict):
+            return json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False)
+
+        return str(value)
 
     @classmethod
     def _csv_rows(cls, data: Any) -> list[dict[str, Any]]:
@@ -273,8 +399,10 @@ class ExportService:
 
         destination = Path(path_text)
 
-        if destination.suffix.lower() != f".{export_format}":
-            destination = destination.with_suffix(f".{export_format}")
+        suffix = ".md" if export_format == "markdown" else f".{export_format}"
+
+        if destination.suffix.lower() != suffix:
+            destination = destination.with_suffix(suffix)
 
         return destination
 

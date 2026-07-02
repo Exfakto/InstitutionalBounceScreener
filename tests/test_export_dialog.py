@@ -1,5 +1,5 @@
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialogButtonBox
 
 from ui import export_dialog as export_dialog_module
 from ui.export_dialog import ExportDialog
@@ -21,6 +21,7 @@ def test_export_dialog_initialization(app):
     assert dialog.isModal()
     assert dialog.object_combo.currentText() == "Watchlist"
     assert dialog.format_combo.currentText() == "CSV"
+    assert dialog.object_combo.findText("Research Report") >= 0
     assert dialog.destination_folder_input.text() == "exports"
     assert dialog.filename_input.text() == "export"
 
@@ -56,3 +57,34 @@ def test_export_dialog_browse_updates_destination(app, monkeypatch):
     assert dialog.destination_folder_input.text() == "C:/Exports"
     assert "Exports" in dialog.destination_preview_label.text()
     assert dialog.destination_preview_label.text().endswith("export.csv")
+
+
+def test_export_dialog_research_report_formats(app):
+    dialog = ExportDialog()
+
+    dialog.object_combo.setCurrentText("Research Report")
+
+    formats = [
+        dialog.format_combo.itemText(index)
+        for index in range(dialog.format_combo.count())
+    ]
+    assert formats == ["JSON", "TXT", "Markdown"]
+    assert dialog.format_combo.currentText() == "JSON"
+    assert dialog.destination_preview_label.text().endswith("export.json")
+
+    dialog.format_combo.setCurrentText("Markdown")
+
+    options = dialog.export_options()
+    assert options["object_name"] == "Research Report"
+    assert options["format"] == "markdown"
+    assert options["destination_path"].endswith("export.md")
+
+
+def test_export_dialog_research_report_unavailable_state(app):
+    dialog = ExportDialog(research_report_available=False)
+
+    dialog.object_combo.setCurrentText("Research Report")
+
+    save_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Save)
+    assert save_button.isEnabled() is False
+    assert "unavailable" in dialog.availability_label.text()

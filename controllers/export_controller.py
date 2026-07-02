@@ -83,3 +83,17 @@ class ExportController:
             export_format,
             allow_overwrite,
         )
+
+    def export_research_report(
+        self,
+        report: Any,
+        destination_path: str | Path,
+        format: str = "json",
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        return self.export_service.export_research_report(
+            report,
+            destination_path,
+            format,
+            overwrite,
+        )
