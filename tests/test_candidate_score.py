@@ -4,6 +4,7 @@ from datetime import datetime
 from analysis import CandidateScore, ScoreResult
 from analysis.institutional_checklist import InstitutionalChecklistEvaluator
 from analysis.opportunity_rating import OpportunityRatingCalculator
+from analysis.research_report import ResearchReportGenerator
 from analysis.trade_thesis import TradeThesisGenerator
 
 
@@ -27,6 +28,7 @@ class CandidateScoreTest(unittest.TestCase):
         self.assertIsNone(candidate.opportunity_rating)
         self.assertIsNone(candidate.institutional_checklist)
         self.assertIsNone(candidate.trade_thesis)
+        self.assertIsNone(candidate.research_report)
         self.assertEqual(candidate.primary_score_value, 80.0)
 
     def test_candidate_score_uses_gen2_as_primary_score_when_available(self):
@@ -75,6 +77,8 @@ class CandidateScoreTest(unittest.TestCase):
         )
         metrics["institutional_checklist"] = checklist
         thesis = TradeThesisGenerator().generate(metrics)
+        metrics["trade_thesis"] = thesis
+        report = ResearchReportGenerator().generate(metrics)
         candidate = CandidateScore(
             ticker="AAPL",
             scores=[],
@@ -82,11 +86,13 @@ class CandidateScoreTest(unittest.TestCase):
             opportunity_rating=opportunity,
             institutional_checklist=checklist,
             trade_thesis=thesis,
+            research_report=report,
         )
 
         self.assertEqual(candidate.opportunity_rating, opportunity)
         self.assertEqual(candidate.institutional_checklist, checklist)
         self.assertEqual(candidate.trade_thesis, thesis)
+        self.assertEqual(candidate.research_report, report)
         self.assertEqual(
             candidate.institutional_checklist.overall_label,
             "Exceptional",

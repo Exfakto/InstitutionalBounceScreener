@@ -133,6 +133,8 @@ class AnalysisPipelineTest(unittest.TestCase):
         self.assertEqual(candidate.institutional_checklist.total_checks, 10)
         self.assertIsNotNone(candidate.trade_thesis)
         self.assertIn("AAA", candidate.trade_thesis.title)
+        self.assertIsNotNone(candidate.research_report)
+        self.assertIn("AAA", candidate.research_report.title)
         self.assertEqual(candidate.metrics["company_name"], "AAA Corp")
         self.assertEqual(
             [
