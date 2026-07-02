@@ -27,3 +27,6 @@ dist/
 
 # Logs
 *.log
+
+# Runtime workspace state
+config/workspace_state.json

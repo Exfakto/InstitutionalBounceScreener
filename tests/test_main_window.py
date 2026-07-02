@@ -170,6 +170,19 @@ class FakeRefreshScheduler:
         pass
 
 
+class FakeWorkspaceStateService:
+    state = {}
+    saved_states = []
+
+    def load_state(self):
+        return dict(self.state)
+
+    def save_state(self, state):
+        self.saved_states.append(state)
+        self.state = dict(state)
+        return state
+
+
 @pytest.fixture
 def patched_window(monkeypatch, app):
     monkeypatch.setattr(main_window_module, "MarketController", FakeMarketController)
@@ -182,6 +195,9 @@ def patched_window(monkeypatch, app):
     monkeypatch.setattr(main_window_module, "TradeJournalController", FakeTradeJournalController)
     monkeypatch.setattr(main_window_module, "MarketStatusService", FakeMarketStatusService)
     monkeypatch.setattr(main_window_module, "RefreshScheduler", FakeRefreshScheduler)
+    monkeypatch.setattr(main_window_module, "WorkspaceStateService", FakeWorkspaceStateService)
+    FakeWorkspaceStateService.state = {}
+    FakeWorkspaceStateService.saved_states = []
 
     window = MainWindow()
     yield window
@@ -264,3 +280,53 @@ def test_main_window_no_duplicate_core_widgets(patched_window):
     assert window.findChildren(type(window.candidates_table)).count(window.candidates_table) == 1
     assert window.findChildren(type(window.research_preview)).count(window.research_preview) == 1
     assert window.findChildren(type(window.trade_card)).count(window.trade_card) == 1
+
+
+def test_main_window_restores_workspace_state(monkeypatch, app):
+    monkeypatch.setattr(main_window_module, "MarketController", FakeMarketController)
+    monkeypatch.setattr(main_window_module, "IndicatorController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "SupportController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "BounceController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "ScoringController", FakeScoringController)
+    monkeypatch.setattr(main_window_module, "ChartController", FakeChartController)
+    monkeypatch.setattr(main_window_module, "WatchlistController", FakeWatchlistController)
+    monkeypatch.setattr(main_window_module, "TradeJournalController", FakeTradeJournalController)
+    monkeypatch.setattr(main_window_module, "MarketStatusService", FakeMarketStatusService)
+    monkeypatch.setattr(main_window_module, "RefreshScheduler", FakeRefreshScheduler)
+    monkeypatch.setattr(main_window_module, "WorkspaceStateService", FakeWorkspaceStateService)
+    FakeWorkspaceStateService.saved_states = []
+    FakeWorkspaceStateService.state = {
+        "window": {"size": [1100, 700], "position": [30, 40], "maximized": False},
+        "splitters": {
+            "workspace_splitter": [500, 200],
+            "bottom_splitter": [700, 300],
+        },
+        "active_tab": 2,
+        "active_screener_preset": "Momentum",
+    }
+
+    window = MainWindow()
+
+    try:
+        assert window.size().width() == 1100
+        assert window.size().height() == 700
+        assert window.bottom_left_tabs.currentIndex() == 2
+        assert window.active_preset_status.text() == "Active preset: Momentum"
+    finally:
+        window.close()
+
+
+def test_main_window_saves_workspace_state_on_close(patched_window):
+    window = patched_window
+    window.screener_preset_controller.active_preset = "Default"
+    window.bottom_left_tabs.setCurrentIndex(1)
+
+    window.close()
+
+    saved = FakeWorkspaceStateService.saved_states[-1]
+    assert saved["window"]["size"][0] > 0
+    assert saved["window"]["size"][1] > 0
+    assert "workspace_splitter" in saved["splitters"]
+    assert saved["active_tab"] == 1
+    assert saved["active_workspace"] == "Watchlist"
+    assert saved["active_screener_preset"] == "Default"

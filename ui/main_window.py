@@ -28,6 +28,7 @@ from controllers.trade_journal_controller import TradeJournalController
 from controllers.screener_preset_controller import ScreenerPresetController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
+from services.workspace_state_service import WorkspaceStateService
 
 from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
@@ -103,6 +104,7 @@ class MainWindow(QMainWindow):
         self.trade_journal_controller = TradeJournalController()
         self.screener_preset_controller = ScreenerPresetController()
         self.market_status_service = MarketStatusService()
+        self.workspace_state_service = WorkspaceStateService()
         self.refresh_scheduler = RefreshScheduler()
         self.refresh_scheduler.register_callback(self.handle_live_refresh_result)
         self.last_refresh_at = None
@@ -113,6 +115,7 @@ class MainWindow(QMainWindow):
         self.resize(1600, 900)
 
         self.build_ui()
+        self.restore_workspace_state()
         self.register_shortcuts()
 
         self.refresh_statistics()
@@ -336,6 +339,171 @@ class MainWindow(QMainWindow):
             status_bar.addPermanentWidget(label)
 
         self.update_screener_status()
+
+    # ----------------------------------------------------------
+
+    def restore_workspace_state(self):
+
+        if not hasattr(self, "workspace_state_service"):
+            return
+
+        state = self.workspace_state_service.load_state()
+        self.apply_workspace_state(state)
+
+    # ----------------------------------------------------------
+
+    def apply_workspace_state(self, state):
+
+        if not isinstance(state, dict):
+            return
+
+        window_state = state.get("window") or {}
+        self.restore_window_geometry(window_state)
+        self.restore_splitter_state(state.get("splitters") or {})
+        self.restore_tab_state(state)
+
+        active_preset = state.get("active_screener_preset")
+        if active_preset:
+            self.screener_preset_controller.active_preset = active_preset
+            self.update_screener_status(active_preset=active_preset)
+
+    # ----------------------------------------------------------
+
+    def restore_window_geometry(self, window_state):
+
+        if not isinstance(window_state, dict):
+            return
+
+        size = window_state.get("size")
+        position = window_state.get("position")
+
+        try:
+            if (
+                isinstance(size, list)
+                and len(size) == 2
+                and int(size[0]) > 0
+                and int(size[1]) > 0
+            ):
+                self.resize(int(size[0]), int(size[1]))
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            if isinstance(position, list) and len(position) == 2:
+                self.move(int(position[0]), int(position[1]))
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            if window_state.get("maximized"):
+                self.showMaximized()
+        except RuntimeError:
+            pass
+
+    # ----------------------------------------------------------
+
+    def restore_splitter_state(self, splitters):
+
+        if not isinstance(splitters, dict):
+            return
+
+        for name in [
+            "workspace_splitter",
+            "screener_workspace_splitter",
+            "center_splitter",
+            "bottom_splitter",
+        ]:
+            splitter = getattr(self, name, None)
+            sizes = splitters.get(name)
+            if splitter is None or not isinstance(sizes, list):
+                continue
+
+            try:
+                splitter.setSizes([int(size) for size in sizes])
+            except (TypeError, ValueError):
+                continue
+
+    # ----------------------------------------------------------
+
+    def restore_tab_state(self, state):
+
+        active_tab = state.get("active_tab")
+        if active_tab is None or not hasattr(self, "bottom_left_tabs"):
+            return
+
+        try:
+            index = int(active_tab)
+        except (TypeError, ValueError):
+            return
+
+        if 0 <= index < self.bottom_left_tabs.count():
+            self.bottom_left_tabs.setCurrentIndex(index)
+
+    # ----------------------------------------------------------
+
+    def capture_workspace_state(self):
+
+        geometry = self.normalGeometry() if self.isMaximized() else self.geometry()
+        selected_ticker = (
+            self.candidates_table.selected_ticker()
+            if hasattr(self, "candidates_table")
+            else None
+        )
+        active_tab = (
+            self.bottom_left_tabs.currentIndex()
+            if hasattr(self, "bottom_left_tabs")
+            else None
+        )
+        active_workspace = (
+            self.bottom_left_tabs.tabText(active_tab)
+            if active_tab is not None and hasattr(self, "bottom_left_tabs")
+            else None
+        )
+
+        return {
+            "window": {
+                "size": [geometry.width(), geometry.height()],
+                "position": [geometry.x(), geometry.y()],
+                "maximized": self.isMaximized(),
+            },
+            "splitters": self.capture_splitter_state(),
+            "selected_ticker": selected_ticker,
+            "active_tab": active_tab,
+            "active_workspace": active_workspace,
+            "active_screener_preset": getattr(
+                self.screener_preset_controller,
+                "active_preset",
+                None,
+            ),
+        }
+
+    # ----------------------------------------------------------
+
+    def capture_splitter_state(self):
+
+        splitters = {}
+        for name in [
+            "workspace_splitter",
+            "screener_workspace_splitter",
+            "center_splitter",
+            "bottom_splitter",
+        ]:
+            splitter = getattr(self, name, None)
+            if splitter is not None:
+                splitters[name] = list(splitter.sizes())
+
+        return splitters
+
+    # ----------------------------------------------------------
+
+    def save_workspace_state(self):
+
+        if not hasattr(self, "workspace_state_service"):
+            return None
+
+        return self.workspace_state_service.save_state(
+            self.capture_workspace_state()
+        )
 
     # ----------------------------------------------------------
 
@@ -1126,6 +1294,8 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------
 
     def closeEvent(self, event):
+
+        self.save_workspace_state()
 
         if hasattr(self, "refresh_scheduler"):
             self.refresh_scheduler.stop()
