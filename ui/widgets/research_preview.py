@@ -287,6 +287,20 @@ class ResearchPreview(QWidget):
         ("opportunity", "Opportunity Score"),
         ("checklist", "Checklist Completion"),
     ]
+    FUNDAMENTAL_FIELDS = [
+        ("revenue_growth_ttm", "Revenue Growth", "percent"),
+        ("eps_growth_ttm", "EPS Growth", "percent"),
+        ("roe", "ROE", "percent"),
+        ("gross_margin", "Gross Margin", "percent"),
+        ("free_cash_flow", "Free Cash Flow", "currency"),
+        ("debt_to_equity", "Debt / Equity", "number"),
+        ("current_ratio", "Current Ratio", "number"),
+        ("market_cap", "Market Cap", "currency"),
+    ]
+    FUNDAMENTAL_ALIASES = {
+        "revenue_growth_ttm": ("revenue_growth_ttm", "revenue_growth"),
+        "eps_growth_ttm": ("eps_growth_ttm", "eps_growth"),
+    }
     SCORE_FIELDS = LegacyResearchPreview.SCORE_FIELDS
     CHECKLIST_ITEMS = [
         ("near_support", "Near Support", "Near validated support"),
@@ -380,6 +394,23 @@ class ResearchPreview(QWidget):
         for key, label in self.SCORE_FIELDS:
             self.score_labels[key] = self.create_value_row(summary_layout, label)
 
+        fundamentals_section = self.create_section("Fundamentals")
+        fundamentals_layout = fundamentals_section.layout()
+        fundamentals_layout.setContentsMargins(8, 8, 8, 8)
+        fundamentals_layout.setSpacing(5)
+
+        self.fundamental_labels = {}
+        for key, label, _value_type in self.FUNDAMENTAL_FIELDS:
+            self.fundamental_labels[key] = self.create_value_row(
+                fundamentals_layout,
+                label,
+            )
+
+        self.fundamentals_unavailable_label = QLabel("Fundamentals unavailable.")
+        self.fundamentals_unavailable_label.setObjectName("ResearchPreviewWarnings")
+        self.fundamentals_unavailable_label.setWordWrap(True)
+        fundamentals_layout.addWidget(self.fundamentals_unavailable_label)
+
         checklist_section = self.create_section("Institutional Checklist")
         checklist_layout = checklist_section.layout()
         checklist_layout.setContentsMargins(8, 8, 8, 8)
@@ -444,6 +475,7 @@ class ResearchPreview(QWidget):
 
         dashboard_layout.addWidget(header_section)
         dashboard_layout.addWidget(summary_section)
+        dashboard_layout.addWidget(fundamentals_section)
         dashboard_layout.addWidget(checklist_section)
         dashboard_layout.addWidget(thesis_section)
         dashboard_layout.addWidget(self.warning_title_label)
@@ -484,6 +516,7 @@ class ResearchPreview(QWidget):
         for label in self.score_labels.values():
             label.setText("-")
 
+        self.set_fundamentals(None)
         self.set_checklist_unavailable()
         self.set_trade_thesis(None)
         self.warning_label.setText("No warnings")
@@ -531,6 +564,7 @@ class ResearchPreview(QWidget):
         for key, _label in self.SCORE_FIELDS:
             self.score_labels[key].setText(self.format_score(score_map.get(key)))
 
+        self.set_fundamentals(self.fundamentals_for_candidate(candidate_score))
         self.set_checklist(checklist)
         self.set_trade_thesis(thesis)
         self.warning_label.setText(
@@ -582,6 +616,64 @@ class ResearchPreview(QWidget):
             self.format_list("Strengths", thesis.strengths)
         )
         self.risks_label.setText(self.format_list("Risks", thesis.risks))
+
+    def set_fundamentals(self, fundamentals):
+        """
+        Display local synchronized fundamental metrics without recalculation.
+        """
+
+        has_any_value = False
+        fundamentals = fundamentals or {}
+
+        for key, _label, value_type in self.FUNDAMENTAL_FIELDS:
+            value = self.fundamental_value(fundamentals, key)
+            self.fundamental_labels[key].setText(
+                self.format_fundamental_value(value, value_type)
+            )
+
+            if value is not None:
+                has_any_value = True
+
+        self.fundamentals_unavailable_label.setVisible(not has_any_value)
+
+    @classmethod
+    def fundamentals_for_candidate(cls, candidate_score):
+        if candidate_score is None:
+            return {}
+
+        if isinstance(candidate_score, dict):
+            metrics = candidate_score.get("metrics") or candidate_score
+        else:
+            metrics = getattr(candidate_score, "metrics", None) or {}
+
+        if not isinstance(metrics, dict):
+            return {}
+
+        return {
+            key: metrics.get(key)
+            for key in set(metrics)
+            if key in cls.fundamental_metric_names()
+        }
+
+    @classmethod
+    def fundamental_metric_names(cls):
+        names = set()
+
+        for key, _label, _value_type in cls.FUNDAMENTAL_FIELDS:
+            names.add(key)
+            names.update(cls.FUNDAMENTAL_ALIASES.get(key, ()))
+
+        return names
+
+    @classmethod
+    def fundamental_value(cls, fundamentals, key):
+        for candidate_key in cls.FUNDAMENTAL_ALIASES.get(key, (key,)):
+            value = fundamentals.get(candidate_key)
+
+            if value is not None and value != "":
+                return value
+
+        return None
 
     def set_placeholder_checklist(self):
         """
@@ -739,6 +831,35 @@ class ResearchPreview(QWidget):
     @staticmethod
     def format_percent(value):
         return f"{float(value):.0f}%"
+
+    @staticmethod
+    def format_fundamental_value(value, value_type):
+        if value is None or value == "":
+            return "--"
+
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+
+        if value_type == "percent":
+            return f"{numeric_value:.1f}%"
+
+        if value_type == "currency":
+            abs_value = abs(numeric_value)
+
+            if abs_value >= 1_000_000_000_000:
+                return f"${numeric_value / 1_000_000_000_000:.2f}T"
+
+            if abs_value >= 1_000_000_000:
+                return f"${numeric_value / 1_000_000_000:.2f}B"
+
+            if abs_value >= 1_000_000:
+                return f"${numeric_value / 1_000_000:.2f}M"
+
+            return f"${numeric_value:,.0f}"
+
+        return f"{numeric_value:.2f}"
 
     @classmethod
     def format_checklist_summary(cls, checklist):

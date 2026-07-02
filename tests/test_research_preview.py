@@ -60,6 +60,7 @@ def make_candidate(
     opportunity=None,
     checklist=None,
     thesis=None,
+    fundamentals=None,
 ):
     metrics = checklist_metrics()
     metrics["ticker"] = "AAPL"
@@ -106,6 +107,7 @@ def make_candidate(
         opportunity_rating=opportunity,
         institutional_checklist=checklist,
         trade_thesis=thesis,
+        metrics=fundamentals or {},
         warnings=warnings or [],
         timestamp=datetime(2026, 6, 30, tzinfo=timezone.utc),
     )
@@ -145,6 +147,23 @@ def test_research_preview_clear_resets_every_section(app):
     )
 
 
+def test_research_preview_clear_resets_fundamentals(app):
+    preview = ResearchPreview()
+    preview.set_candidate(
+        make_candidate(
+            fundamentals={
+                "revenue_growth_ttm": 12.5,
+                "market_cap": 3000000000000,
+            }
+        )
+    )
+
+    preview.clear()
+
+    assert preview.fundamentals_unavailable_label.isHidden() is False
+    assert all(label.text() == "--" for label in preview.fundamental_labels.values())
+
+
 def test_research_preview_displays_score_summary(app):
     preview = ResearchPreview()
 
@@ -164,6 +183,63 @@ def test_research_preview_displays_score_summary(app):
     assert preview.score_labels["technical_score"].text() == "84.0"
     assert preview.score_labels["support_score"].text() == "91.0"
     assert preview.score_labels["bounce_score"].text() == "76.0"
+
+
+def test_research_preview_displays_populated_fundamentals(app):
+    preview = ResearchPreview()
+
+    preview.set_candidate(
+        make_candidate(
+            fundamentals={
+                "revenue_growth_ttm": 12.5,
+                "eps_growth_ttm": 10.25,
+                "roe": 24.7,
+                "gross_margin": 46.2,
+                "free_cash_flow": 95000000000,
+                "debt_to_equity": 1.2,
+                "current_ratio": 0.92,
+                "market_cap": 3000000000000,
+            }
+        )
+    )
+
+    assert preview.fundamentals_unavailable_label.isHidden() is True
+    assert preview.fundamental_labels["revenue_growth_ttm"].text() == "12.5%"
+    assert preview.fundamental_labels["eps_growth_ttm"].text() == "10.2%"
+    assert preview.fundamental_labels["roe"].text() == "24.7%"
+    assert preview.fundamental_labels["gross_margin"].text() == "46.2%"
+    assert preview.fundamental_labels["free_cash_flow"].text() == "$95.00B"
+    assert preview.fundamental_labels["debt_to_equity"].text() == "1.20"
+    assert preview.fundamental_labels["current_ratio"].text() == "0.92"
+    assert preview.fundamental_labels["market_cap"].text() == "$3.00T"
+
+
+def test_research_preview_displays_partial_fundamentals(app):
+    preview = ResearchPreview()
+
+    preview.set_candidate(
+        make_candidate(
+            fundamentals={
+                "revenue_growth": 8.0,
+                "market_cap": 2500000000,
+            }
+        )
+    )
+
+    assert preview.fundamentals_unavailable_label.isHidden() is True
+    assert preview.fundamental_labels["revenue_growth_ttm"].text() == "8.0%"
+    assert preview.fundamental_labels["eps_growth_ttm"].text() == "--"
+    assert preview.fundamental_labels["market_cap"].text() == "$2.50B"
+
+
+def test_research_preview_displays_missing_fundamentals(app):
+    preview = ResearchPreview()
+
+    preview.set_candidate(make_candidate())
+
+    assert preview.fundamentals_unavailable_label.text() == "Fundamentals unavailable."
+    assert preview.fundamentals_unavailable_label.isHidden() is False
+    assert all(label.text() == "--" for label in preview.fundamental_labels.values())
 
 
 def test_research_preview_displays_gen2_overall_when_available(app):
