@@ -505,10 +505,28 @@ class Theme:
 
         QLabel#PriceChartSummary {{
             color: {cls.SECONDARY_TEXT};
-            background-color: {cls.CARD_BACKGROUND};
+            background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.BORDER};
             border-radius: 8px;
-            padding: 14px;
+            padding: 18px;
+            font-weight: 600;
+        }}
+
+        QFrame#PriceChartHeader {{
+            background-color: {cls.HEADER_BACKGROUND};
+            border: 1px solid {cls.BORDER};
+            border-radius: 7px;
+        }}
+
+        QLabel#PriceChartHeaderTitle {{
+            color: {cls.PRIMARY_TEXT};
+            font-size: 13pt;
+            font-weight: 800;
+        }}
+
+        QLabel#PriceChartHeaderMeta {{
+            color: {cls.SECONDARY_TEXT};
+            font-size: 9pt;
             font-weight: 600;
         }}
 

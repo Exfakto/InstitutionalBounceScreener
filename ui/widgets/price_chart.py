@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtCore import QDateTime, QPointF, Qt
+from PySide6.QtCore import QDateTime, QMargins, QPointF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
+    QFrame,
     QGraphicsSimpleTextItem,
     QHBoxLayout,
     QLabel,
@@ -48,15 +49,16 @@ class PriceChart(QWidget):
     Reusable read-only price chart widget.
     """
 
-    EMPTY_MESSAGE = "Select a candidate to view chart."
-    NO_PRICE_MESSAGE = "No price history available."
+    EMPTY_MESSAGE = "No chart data available.\nSync historical data or select another ticker."
+    NO_PRICE_MESSAGE = "No chart data available.\nSync historical data or select another ticker."
     BACKEND_UNAVAILABLE_MESSAGE = "Chart rendering backend is unavailable."
     READOUT_EMPTY_MESSAGE = "No price selected."
-    COLOR_BACKGROUND = "#15181C"
-    COLOR_PLOT_BACKGROUND = "#1E242B"
+    COLOR_BACKGROUND = "#11161C"
+    COLOR_PLOT_BACKGROUND = "#182029"
     COLOR_TEXT = "#F4F7FA"
     COLOR_MUTED_TEXT = "#A8B3C1"
-    COLOR_GRID = "#3D4652"
+    COLOR_GRID = "#33404D"
+    COLOR_AXIS = "#6F7D8C"
     COLOR_CLOSE = "#4F8FDB"
     COLOR_SMA20 = "#41B883"
     COLOR_SMA50 = "#D6A23A"
@@ -90,6 +92,25 @@ class PriceChart(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
+
+        self.header_frame = QFrame()
+        self.header_frame.setObjectName("PriceChartHeader")
+        header_layout = QVBoxLayout(self.header_frame)
+        header_layout.setContentsMargins(10, 8, 10, 8)
+        header_layout.setSpacing(3)
+
+        self.header_title_label = QLabel("Price Chart")
+        self.header_title_label.setObjectName("PriceChartHeaderTitle")
+        self.header_title_label.setAlignment(Qt.AlignLeft)
+
+        self.header_meta_label = QLabel("No ticker selected")
+        self.header_meta_label.setObjectName("PriceChartHeaderMeta")
+        self.header_meta_label.setAlignment(Qt.AlignLeft)
+        self.header_meta_label.setWordWrap(True)
+
+        header_layout.addWidget(self.header_title_label)
+        header_layout.addWidget(self.header_meta_label)
+        layout.addWidget(self.header_frame)
 
         self.summary_label = QLabel("")
         self.summary_label.setObjectName("PriceChartSummary")
@@ -140,6 +161,8 @@ class PriceChart(QWidget):
         """
 
         self.chart_data = None
+        self.header_title_label.setText("Price Chart")
+        self.header_meta_label.setText("No ticker selected")
         self.summary_label.setText(self.EMPTY_MESSAGE)
         self.summary_label.show()
         self.readout_label.setText(self.READOUT_EMPTY_MESSAGE)
@@ -159,6 +182,7 @@ class PriceChart(QWidget):
         prices = self.chart_data.get("prices") or []
 
         if not prices:
+            self.update_header(self.chart_data, None)
             self.summary_label.setText(self.NO_PRICE_MESSAGE)
             self.summary_label.show()
             self.readout_label.setText(self.READOUT_EMPTY_MESSAGE)
@@ -173,6 +197,7 @@ class PriceChart(QWidget):
 
         if not CHARTS_AVAILABLE:
             self.update_readout(prices)
+            self.update_header(self.chart_data, "unavailable")
             self.summary_label.setText(self.placeholder_summary(self.chart_data))
             self.summary_label.show()
             return
@@ -180,6 +205,7 @@ class PriceChart(QWidget):
         points = self.series_points(prices, "close")
 
         if not points:
+            self.update_header(self.chart_data, None)
             self.summary_label.setText(self.NO_PRICE_MESSAGE)
             self.summary_label.show()
             self.readout_label.setText(self.READOUT_EMPTY_MESSAGE)
@@ -188,6 +214,7 @@ class PriceChart(QWidget):
 
         self.update_readout(prices)
         self.render_chart(self.chart_data, points)
+        self.update_header(self.chart_data, self.render_mode)
         self.summary_label.hide()
         self.chart_view.show()
         self.reset_view()
@@ -244,9 +271,15 @@ class PriceChart(QWidget):
             else:
                 self.overlay_series[key] = series
 
-        self.chart.setTitle(self.chart_title(chart_data))
+        self.chart.setTitle("")
         self.chart.legend().setVisible(len(chart_series) > 1)
         self.chart.legend().setLabelColor(QColor(self.COLOR_TEXT))
+        self.chart.legend().setBackgroundVisible(True)
+        legend_brush = QColor(self.COLOR_BACKGROUND)
+        legend_brush.setAlpha(210)
+        self.chart.legend().setBrush(QBrush(legend_brush))
+        self.chart.legend().setBorderColor(QColor(self.COLOR_AXIS))
+        self.chart.legend().setFont(QFont("Segoe UI", 8))
 
         x_axis = QDateTimeAxis()
         x_axis.setFormat("MMM d")
@@ -254,6 +287,9 @@ class PriceChart(QWidget):
         x_axis.setLabelsColor(QColor(self.COLOR_TEXT))
         x_axis.setTitleBrush(QColor(self.COLOR_MUTED_TEXT))
         x_axis.setGridLineColor(QColor(self.COLOR_GRID))
+        x_axis.setLinePenColor(QColor(self.COLOR_AXIS))
+        x_axis.setLabelsFont(QFont("Segoe UI", 8))
+        x_axis.setTitleFont(QFont("Segoe UI", 8))
         x_axis.setRange(
             QDateTime.fromMSecsSinceEpoch(points[0][0]),
             QDateTime.fromMSecsSinceEpoch(points[-1][0]),
@@ -265,6 +301,9 @@ class PriceChart(QWidget):
         y_axis.setLabelsColor(QColor(self.COLOR_TEXT))
         y_axis.setTitleBrush(QColor(self.COLOR_MUTED_TEXT))
         y_axis.setGridLineColor(QColor(self.COLOR_GRID))
+        y_axis.setLinePenColor(QColor(self.COLOR_AXIS))
+        y_axis.setLabelsFont(QFont("Segoe UI", 8))
+        y_axis.setTitleFont(QFont("Segoe UI", 8))
         line_values = [
             value
             for series_points in [
@@ -372,11 +411,13 @@ class PriceChart(QWidget):
             lower.append(end_x, float(low))
             upper.append(start_x, float(high))
             upper.append(end_x, float(high))
+            lower.setPen(QPen(QColor(cls.support_zone_border_color(zone)), 1))
+            upper.setPen(QPen(QColor(cls.support_zone_border_color(zone)), 1))
 
             band = QAreaSeries(upper, lower)
             band.boundary_series = (upper, lower)
             band.setName(f"Support {index + 1}")
-            band.setPen(QPen(Qt.NoPen))
+            band.setPen(QPen(QColor(cls.support_zone_border_color(zone)), 1))
             band.setBrush(cls.support_zone_brush(zone))
             bands.append(band)
 
@@ -392,6 +433,14 @@ class PriceChart(QWidget):
         color.setAlpha(70 if zone.get("validated") else 55)
 
         return QBrush(color)
+
+    @staticmethod
+    def support_zone_border_color(zone):
+        return (
+            PriceChart.COLOR_SUPPORT_VALIDATED
+            if zone.get("validated")
+            else PriceChart.COLOR_SUPPORT_NORMAL
+        )
 
     @staticmethod
     def support_zone_values(support_zones):
@@ -434,8 +483,8 @@ class PriceChart(QWidget):
                 continue
 
             label = QGraphicsSimpleTextItem(self.support_label_text(zone))
-            label.setBrush(QBrush(QColor(self.COLOR_MUTED_TEXT)))
-            label.setFont(QFont("Segoe UI", 8))
+            label.setBrush(QBrush(QColor(self.COLOR_TEXT)))
+            label.setFont(QFont("Segoe UI", 8, QFont.DemiBold))
             label.setZValue(5)
             position = self.chart.mapToPosition(QPointF(label_x, float(high)))
             label.setPos(position)
@@ -539,6 +588,54 @@ class PriceChart(QWidget):
 
         return str(value)
 
+    def update_header(self, chart_data, mode):
+        ticker = chart_data.get("ticker") or "Price Chart"
+        support_zones = chart_data.get("support_zones") or []
+        support_count = len(support_zones)
+        prices = chart_data.get("prices") or []
+        latest_close = prices[-1].get("close") if prices else None
+        date_range = self.date_range_text(prices)
+        mode_text = self.mode_label(mode)
+
+        self.header_title_label.setText(str(ticker))
+
+        parts = [mode_text]
+
+        if date_range:
+            parts.append(date_range)
+
+        if latest_close is not None:
+            parts.append(f"Last close {float(latest_close):.2f}")
+
+        parts.append(f"{support_count} support zones")
+        self.header_meta_label.setText(" | ".join(parts))
+
+    @staticmethod
+    def mode_label(mode):
+        labels = {
+            "candlestick": "Candlestick",
+            "line": "Line",
+            "unavailable": "Chart unavailable",
+        }
+
+        return labels.get(mode, "No data")
+
+    @staticmethod
+    def date_range_text(prices):
+        if not prices:
+            return ""
+
+        start = prices[0].get("date")
+        end = prices[-1].get("date")
+
+        if start and end and start != end:
+            return f"{start} to {end}"
+
+        if start or end:
+            return str(start or end)
+
+        return ""
+
     @staticmethod
     def date_to_msecs(value, index):
         try:
@@ -593,6 +690,8 @@ class PriceChart(QWidget):
         chart.setPlotAreaBackgroundBrush(QColor(PriceChart.COLOR_PLOT_BACKGROUND))
         chart.setPlotAreaBackgroundVisible(True)
         chart.setTitleBrush(QColor(PriceChart.COLOR_TEXT))
+        chart.setMargins(QMargins(10, 8, 10, 8))
+        chart.setDropShadowEnabled(False)
 
         return chart
 

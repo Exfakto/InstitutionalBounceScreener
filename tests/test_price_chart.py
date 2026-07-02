@@ -143,8 +143,12 @@ def test_price_chart_clear_shows_empty_state(app):
 
     widget.clear()
 
-    assert widget.summary_label.text() == "Select a candidate to view chart."
+    assert widget.summary_label.text() == (
+        "No chart data available.\nSync historical data or select another ticker."
+    )
     assert widget.readout_label.text() == "No price selected."
+    assert widget.header_title_label.text() == "Price Chart"
+    assert widget.header_meta_label.text() == "No ticker selected"
     assert widget.chart_data is None
 
     if widget.chart is not None:
@@ -180,8 +184,12 @@ def test_price_chart_missing_price_history_shows_message(app):
 
     widget.set_chart_data({"ticker": "EMPTY", "prices": []})
 
-    assert widget.summary_label.text() == "No price history available."
+    assert widget.summary_label.text() == (
+        "No chart data available.\nSync historical data or select another ticker."
+    )
     assert widget.readout_label.text() == "No price selected."
+    assert widget.header_title_label.text() == "EMPTY"
+    assert widget.header_meta_label.text() == "No data | 0 support zones"
     assert widget.support_band_series == []
     assert widget.support_labels == []
 
@@ -200,7 +208,11 @@ def test_price_chart_plots_close_prices_when_qtcharts_available(app):
     assert widget.summary_label.isHidden() is True
     assert len(widget.chart.series()) == 1
     assert widget.chart.series()[0].name() == price_series_name()
-    assert widget.chart.title() == "AAPL Close 103.50"
+    assert widget.chart.title() == ""
+    assert widget.header_title_label.text() == "AAPL"
+    assert "2026-01-01 to 2026-01-02" in widget.header_meta_label.text()
+    assert "Last close 103.50" in widget.header_meta_label.text()
+    assert "0 support zones" in widget.header_meta_label.text()
 
     if price_chart_module.CANDLESTICKS_AVAILABLE:
         assert widget.render_mode == "candlestick"
@@ -267,6 +279,8 @@ def test_price_chart_replaces_existing_series_on_update(app):
     assert len(widget.chart.series()) == 1
     assert widget.chart.series()[0].name() == price_series_name()
     assert "Latest: 2026-01-01" in widget.readout_label.text()
+    assert "2026-01-01" in widget.header_meta_label.text()
+    assert "Last close 101.00" in widget.header_meta_label.text()
 
 
 def test_price_chart_plots_price_with_sma20_overlay(app):
@@ -481,6 +495,7 @@ def test_price_chart_replaces_support_zones_on_repeated_update(app):
 
     assert len(widget.support_band_series) == 1
     assert len(widget.support_labels) == 1
+    assert "1 support zones" in widget.header_meta_label.text()
 
 
 def test_price_chart_repeated_updates_do_not_duplicate_controls(app):
@@ -492,6 +507,7 @@ def test_price_chart_repeated_updates_do_not_duplicate_controls(app):
 
     assert widget.controls_layout.count() == 6
     assert widget.reset_button.text() == "Reset"
+    assert widget.header_title_label.text() == "AAPL"
 
 
 def test_price_chart_placeholder_summary_when_backend_unavailable(app, monkeypatch):
@@ -504,4 +520,24 @@ def test_price_chart_placeholder_summary_when_backend_unavailable(app, monkeypat
     assert "Latest close: 103.5" in widget.summary_label.text()
     assert "Price rows: 2" in widget.summary_label.text()
     assert "Chart rendering backend is unavailable." in widget.summary_label.text()
+    assert widget.header_title_label.text() == "AAPL"
+    assert "Chart unavailable" in widget.header_meta_label.text()
     assert widget.chart_view is None
+
+
+def test_price_chart_header_handles_missing_optional_fields(app):
+    widget = PriceChart()
+    data = {
+        "prices": [
+            {
+                "date": "2026-01-03",
+                "close": 10.0,
+            }
+        ]
+    }
+
+    widget.set_chart_data(data)
+
+    assert widget.header_title_label.text() == "Price Chart"
+    assert "Last close 10.00" in widget.header_meta_label.text()
+    assert "0 support zones" in widget.header_meta_label.text()
