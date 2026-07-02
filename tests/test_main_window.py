@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDockWidget
 
 from ui import main_window as main_window_module
 from ui.main_window import MainWindow
@@ -207,7 +207,7 @@ def patched_window(monkeypatch, app):
 def test_professional_screener_workspace_creation(patched_window):
     window = patched_window
 
-    assert window.screener_workspace_splitter.count() == 3
+    assert window.screener_workspace_splitter.count() == 2
     assert set(window.filter_sections) == {
         "Universe",
         "Fundamentals",
@@ -215,9 +215,39 @@ def test_professional_screener_workspace_creation(patched_window):
         "Technical",
         "Risk",
     }
-    assert window.bottom_left_tabs.indexOf(window.watchlist_panel) >= 0
-    assert window.bottom_left_tabs.indexOf(window.candidates_table) == -1
+    assert window.candidates_table.parent() is window.screener_workspace_splitter
     assert window.statusBar() is not None
+
+
+def test_main_window_creates_dock_widgets(patched_window):
+    window = patched_window
+
+    assert set(window.workspace_docks) == {
+        "chart",
+        "research",
+        "trade_card",
+        "watchlist",
+        "activity",
+        "portfolio",
+    }
+    assert all(isinstance(dock, QDockWidget) for dock in window.workspace_docks.values())
+    assert window.chart_dock.windowTitle() == "Chart"
+    assert window.research_dock.windowTitle() == "Research"
+    assert window.trade_card_dock.windowTitle() == "Trade Card"
+    assert window.watchlist_dock.windowTitle() == "Watchlist"
+    assert window.activity_dock.windowTitle() == "Activity"
+    assert window.portfolio_dock.windowTitle() == "Portfolio"
+
+
+def test_main_window_embeds_existing_widgets_in_docks(patched_window):
+    window = patched_window
+
+    assert window.chart_dock.widget() is window.price_chart
+    assert window.research_dock.widget() is window.research_preview
+    assert window.trade_card_dock.widget() is window.trade_card
+    assert window.watchlist_dock.widget() is window.watchlist_panel
+    assert window.activity_dock.widget() is window.activity_panel
+    assert window.portfolio_dock.widget() is window.performance_dashboard
 
 
 def test_main_window_toolbar_wiring(patched_window):
@@ -301,7 +331,7 @@ def test_main_window_restores_workspace_state(monkeypatch, app):
             "workspace_splitter": [500, 200],
             "bottom_splitter": [700, 300],
         },
-        "active_tab": 2,
+        "active_workspace": "Research",
         "active_screener_preset": "Momentum",
     }
 
@@ -310,7 +340,7 @@ def test_main_window_restores_workspace_state(monkeypatch, app):
     try:
         assert window.size().width() == 1100
         assert window.size().height() == 700
-        assert window.bottom_left_tabs.currentIndex() == 2
+        assert window.research_dock.windowTitle() == "Research"
         assert window.active_preset_status.text() == "Active preset: Momentum"
     finally:
         window.close()
@@ -319,7 +349,7 @@ def test_main_window_restores_workspace_state(monkeypatch, app):
 def test_main_window_saves_workspace_state_on_close(patched_window):
     window = patched_window
     window.screener_preset_controller.active_preset = "Default"
-    window.bottom_left_tabs.setCurrentIndex(1)
+    window.watchlist_dock.raise_()
 
     window.close()
 
@@ -327,6 +357,26 @@ def test_main_window_saves_workspace_state_on_close(patched_window):
     assert saved["window"]["size"][0] > 0
     assert saved["window"]["size"][1] > 0
     assert "workspace_splitter" in saved["splitters"]
-    assert saved["active_tab"] == 1
-    assert saved["active_workspace"] == "Watchlist"
+    assert saved["dock_state"]
+    assert saved["active_workspace"] in {
+        "Chart",
+        "Research",
+        "Trade Card",
+        "Watchlist",
+        "Activity",
+        "Portfolio",
+        "Results",
+    }
     assert saved["active_screener_preset"] == "Default"
+
+
+def test_main_window_dock_widgets_can_be_restored(patched_window):
+    window = patched_window
+
+    window.chart_dock.setFloating(True)
+    assert window.chart_dock.isFloating() is True
+
+    window.restoreDockWidget(window.chart_dock)
+    window.chart_dock.setFloating(False)
+
+    assert window.chart_dock.isFloating() is False

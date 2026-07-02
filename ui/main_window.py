@@ -6,13 +6,13 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDockWidget,
     QFormLayout,
     QGroupBox,
     QLabel,
     QMainWindow,
     QSplitter,
     QStatusBar,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -211,14 +211,8 @@ class MainWindow(QMainWindow):
         self.screener_workspace_splitter = QSplitter(Qt.Horizontal)
         self.screener_workspace_splitter.setObjectName("ScreenerWorkspaceSplitter")
         self.screener_workspace_splitter.setChildrenCollapsible(False)
-
-        self.workspace_splitter = QSplitter(Qt.Vertical)
-        self.workspace_splitter.setObjectName("MainWorkspaceSplitter")
-        self.workspace_splitter.setChildrenCollapsible(False)
-
-        self.center_splitter = QSplitter(Qt.Horizontal)
-        self.center_splitter.setObjectName("CenterWorkspaceSplitter")
-        self.center_splitter.setChildrenCollapsible(False)
+        self.workspace_splitter = self.screener_workspace_splitter
+        self.center_splitter = self.screener_workspace_splitter
 
         self.price_chart.setMinimumSize(720, 360)
         self.candidates_table.setMinimumSize(640, 360)
@@ -227,60 +221,15 @@ class MainWindow(QMainWindow):
         self.research_preview.setMinimumWidth(360)
         self.trade_card.setMinimumWidth(360)
 
-        self.decision_panel = QWidget()
-        self.decision_panel.setObjectName("DecisionPanel")
-        decision_layout = QVBoxLayout(self.decision_panel)
-        decision_layout.setContentsMargins(0, 0, 0, 0)
-        decision_layout.setSpacing(10)
-        decision_layout.addWidget(self.research_preview, stretch=3)
-        decision_layout.addWidget(self.trade_card, stretch=2)
-
-        self.center_splitter.addWidget(self.price_chart)
-        self.center_splitter.addWidget(self.decision_panel)
-        self.center_splitter.setStretchFactor(0, 55)
-        self.center_splitter.setStretchFactor(1, 45)
-        self.center_splitter.setSizes([520, 430])
-
         self.screener_workspace_splitter.addWidget(self.screener_filters_panel)
         self.screener_workspace_splitter.addWidget(self.candidates_table)
-        self.screener_workspace_splitter.addWidget(self.center_splitter)
-        self.screener_workspace_splitter.setStretchFactor(0, 20)
-        self.screener_workspace_splitter.setStretchFactor(1, 50)
-        self.screener_workspace_splitter.setStretchFactor(2, 30)
-        self.screener_workspace_splitter.setSizes([280, 820, 500])
+        self.screener_workspace_splitter.setStretchFactor(0, 25)
+        self.screener_workspace_splitter.setStretchFactor(1, 75)
+        self.screener_workspace_splitter.setSizes([300, 1100])
 
-        self.bottom_splitter = QSplitter(Qt.Horizontal)
-        self.bottom_splitter.setObjectName("BottomWorkspaceSplitter")
-        self.bottom_splitter.setChildrenCollapsible(False)
-
-        self.bottom_left_tabs = QTabWidget()
-        self.bottom_left_tabs.setObjectName("BottomLeftTabs")
-        self.bottom_left_tabs.setMinimumSize(720, 220)
-        self.candidates_tab_anchor = QWidget()
-        self.candidates_tab_anchor.setObjectName("CandidatesTabAnchor")
-        self.bottom_left_tabs.addTab(self.candidates_tab_anchor, "Candidates")
-        self.bottom_left_tabs.addTab(self.watchlist_panel, "Watchlist")
-        self.bottom_left_tabs.addTab(self.performance_dashboard, "Portfolio")
-        self.bottom_left_tabs.addTab(self.trade_journal_panel, "Trade Journal")
-
-        self.bottom_right_tabs = QTabWidget()
-        self.bottom_right_tabs.setObjectName("BottomRightTabs")
-        self.bottom_right_tabs.setMinimumSize(360, 220)
-        self.bottom_right_tabs.addTab(self.activity_panel, "Activity")
-
-        self.bottom_splitter.addWidget(self.bottom_left_tabs)
-        self.bottom_splitter.addWidget(self.bottom_right_tabs)
-        self.bottom_splitter.setStretchFactor(0, 65)
-        self.bottom_splitter.setStretchFactor(1, 35)
-        self.bottom_splitter.setSizes([1040, 560])
-
-        self.workspace_splitter.addWidget(self.screener_workspace_splitter)
-        self.workspace_splitter.addWidget(self.bottom_splitter)
-        self.workspace_splitter.setStretchFactor(0, 3)
-        self.workspace_splitter.setStretchFactor(1, 1)
-        self.workspace_splitter.setSizes([600, 260])
-
-        main_layout.addWidget(self.workspace_splitter, stretch=1)
+        main_layout.addWidget(self.screener_workspace_splitter, stretch=1)
+        self.create_workspace_docks()
+        self.apply_default_dock_layout()
         self.build_screener_status_bar()
         self.refresh_watchlist()
         self.refresh_trade_journal()
@@ -342,6 +291,66 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def create_workspace_docks(self):
+
+        self.workspace_docks = {
+            "chart": self.create_dock("Chart", self.price_chart),
+            "research": self.create_dock("Research", self.research_preview),
+            "trade_card": self.create_dock("Trade Card", self.trade_card),
+            "watchlist": self.create_dock("Watchlist", self.watchlist_panel),
+            "activity": self.create_dock("Activity", self.activity_panel),
+            "portfolio": self.create_dock("Portfolio", self.performance_dashboard),
+        }
+
+        self.chart_dock = self.workspace_docks["chart"]
+        self.research_dock = self.workspace_docks["research"]
+        self.trade_card_dock = self.workspace_docks["trade_card"]
+        self.watchlist_dock = self.workspace_docks["watchlist"]
+        self.activity_dock = self.workspace_docks["activity"]
+        self.portfolio_dock = self.workspace_docks["portfolio"]
+
+    # ----------------------------------------------------------
+
+    def create_dock(self, title, widget):
+
+        dock = QDockWidget(title, self)
+        dock.setObjectName(f"{title.replace(' ', '')}Dock")
+        dock.setWidget(widget)
+        dock.setAllowedAreas(Qt.AllDockWidgetAreas)
+        dock.setFeatures(
+            QDockWidget.DockWidgetMovable
+            | QDockWidget.DockWidgetFloatable
+            | QDockWidget.DockWidgetClosable
+        )
+        self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        return dock
+
+    # ----------------------------------------------------------
+
+    def apply_default_dock_layout(self):
+
+        self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
+        self.splitDockWidget(self.chart_dock, self.research_dock, Qt.Vertical)
+        self.splitDockWidget(self.research_dock, self.trade_card_dock, Qt.Vertical)
+
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.watchlist_dock)
+        self.splitDockWidget(self.watchlist_dock, self.activity_dock, Qt.Horizontal)
+        self.tabifyDockWidget(self.activity_dock, self.portfolio_dock)
+        self.activity_dock.raise_()
+
+        self.resizeDocks(
+            [self.chart_dock, self.research_dock, self.trade_card_dock],
+            [360, 280, 220],
+            Qt.Vertical,
+        )
+        self.resizeDocks(
+            [self.watchlist_dock, self.activity_dock],
+            [980, 460],
+            Qt.Horizontal,
+        )
+
+    # ----------------------------------------------------------
+
     def restore_workspace_state(self):
 
         if not hasattr(self, "workspace_state_service"):
@@ -360,6 +369,7 @@ class MainWindow(QMainWindow):
         window_state = state.get("window") or {}
         self.restore_window_geometry(window_state)
         self.restore_splitter_state(state.get("splitters") or {})
+        self.restore_dock_state(state.get("dock_state"))
         self.restore_tab_state(state)
 
         active_preset = state.get("active_screener_preset")
@@ -425,7 +435,29 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def restore_dock_state(self, dock_state):
+
+        if not dock_state:
+            return
+
+        try:
+            from PySide6.QtCore import QByteArray
+
+            data = bytes.fromhex(str(dock_state))
+            self.restoreState(QByteArray(data))
+        except (TypeError, ValueError, RuntimeError):
+            return
+
+    # ----------------------------------------------------------
+
     def restore_tab_state(self, state):
+
+        active_dock = state.get("active_workspace")
+        if active_dock and hasattr(self, "workspace_docks"):
+            for dock in self.workspace_docks.values():
+                if dock.windowTitle() == active_dock:
+                    dock.raise_()
+                    return
 
         active_tab = state.get("active_tab")
         if active_tab is None or not hasattr(self, "bottom_left_tabs"):
@@ -450,14 +482,12 @@ class MainWindow(QMainWindow):
             else None
         )
         active_tab = (
-            self.bottom_left_tabs.currentIndex()
-            if hasattr(self, "bottom_left_tabs")
+            self.active_workspace_index()
+            if hasattr(self, "workspace_docks")
             else None
         )
         active_workspace = (
-            self.bottom_left_tabs.tabText(active_tab)
-            if active_tab is not None and hasattr(self, "bottom_left_tabs")
-            else None
+            self.active_workspace_title()
         )
 
         return {
@@ -467,6 +497,7 @@ class MainWindow(QMainWindow):
                 "maximized": self.isMaximized(),
             },
             "splitters": self.capture_splitter_state(),
+            "dock_state": bytes(self.saveState()).hex(),
             "selected_ticker": selected_ticker,
             "active_tab": active_tab,
             "active_workspace": active_workspace,
@@ -493,6 +524,31 @@ class MainWindow(QMainWindow):
                 splitters[name] = list(splitter.sizes())
 
         return splitters
+
+    # ----------------------------------------------------------
+
+    def active_workspace_title(self):
+
+        for dock in getattr(self, "workspace_docks", {}).values():
+            if dock.isVisible() and dock.widget() is not None:
+                return dock.windowTitle()
+
+        return "Results"
+
+    # ----------------------------------------------------------
+
+    def active_workspace_index(self):
+
+        titles = [
+            dock.windowTitle()
+            for dock in getattr(self, "workspace_docks", {}).values()
+        ]
+        active_title = self.active_workspace_title()
+
+        try:
+            return titles.index(active_title)
+        except ValueError:
+            return None
 
     # ----------------------------------------------------------
 

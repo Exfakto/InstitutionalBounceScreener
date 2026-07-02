@@ -1,31 +1,42 @@
-from PySide6.QtWidgets import QApplication, QSplitter, QTabWidget
+from PySide6.QtWidgets import QApplication, QDockWidget, QSplitter
 
 from ui.main_window import MainWindow
 
 
-def test_main_window_uses_professional_splitter_layout():
+def test_main_window_uses_professional_dock_layout():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
 
     try:
         assert isinstance(window.workspace_splitter, QSplitter)
         assert isinstance(window.center_splitter, QSplitter)
-        assert isinstance(window.bottom_splitter, QSplitter)
-        assert isinstance(window.bottom_left_tabs, QTabWidget)
-        assert isinstance(window.bottom_right_tabs, QTabWidget)
-
         assert window.workspace_splitter.count() == 2
-        assert window.center_splitter.count() == 2
-        assert window.bottom_splitter.count() == 2
 
-        assert window.center_splitter.widget(0) is window.price_chart
-        assert window.center_splitter.widget(1) is window.decision_panel
+        assert set(window.workspace_docks) == {
+            "chart",
+            "research",
+            "trade_card",
+            "watchlist",
+            "activity",
+            "portfolio",
+        }
+        assert all(
+            isinstance(dock, QDockWidget)
+            for dock in window.workspace_docks.values()
+        )
+        assert window.chart_dock.windowTitle() == "Chart"
+        assert window.research_dock.windowTitle() == "Research"
+        assert window.trade_card_dock.windowTitle() == "Trade Card"
+        assert window.watchlist_dock.windowTitle() == "Watchlist"
+        assert window.activity_dock.windowTitle() == "Activity"
+        assert window.portfolio_dock.windowTitle() == "Portfolio"
 
-        assert window.bottom_left_tabs.tabText(0) == "Candidates"
-        assert window.bottom_left_tabs.tabText(1) == "Watchlist"
-        assert window.bottom_left_tabs.tabText(2) == "Portfolio"
-        assert window.bottom_left_tabs.tabText(3) == "Trade Journal"
-        assert window.bottom_right_tabs.tabText(0) == "Activity"
+        assert window.chart_dock.widget() is window.price_chart
+        assert window.research_dock.widget() is window.research_preview
+        assert window.trade_card_dock.widget() is window.trade_card
+        assert window.watchlist_dock.widget() is window.watchlist_panel
+        assert window.activity_dock.widget() is window.activity_panel
+        assert window.portfolio_dock.widget() is window.performance_dashboard
     finally:
         window.close()
 
