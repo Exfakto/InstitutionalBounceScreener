@@ -1514,23 +1514,9 @@ class CandidateDetailWindow(QDialog):
         header.setObjectName("CandidateDetailSectionTitle")
         layout.addWidget(header)
 
-        grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(10)
-
         self.risk_labels = {}
-        for index, (key, title, value, role) in enumerate(self.risk_items()):
-            card, value_label = self.create_summary_card(title, value)
-            card.setObjectName("CandidateDetailInstitutionalCard")
-            value_label.setProperty("status", role)
-            value_label.style().unpolish(value_label)
-            value_label.style().polish(value_label)
-            self.risk_labels[key] = value_label
-            self.section_labels[f"risk.{key}"] = value_label
-            grid.addWidget(card, index // 4, index % 4)
-
-        layout.addLayout(grid)
+        for title, items in self.risk_sections():
+            layout.addWidget(self.risk_section(title, items))
 
         warning_section = QFrame()
         warning_section.setObjectName("CandidateDetailWhySection")
@@ -1554,63 +1540,169 @@ class CandidateDetailWindow(QDialog):
         layout.addStretch()
         return tab
 
-    def risk_items(self):
+    def risk_section(self, title, items):
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title_label)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+
+        for index, (key, item_title, value, role) in enumerate(items):
+            card, value_label = self.create_summary_card(item_title, value)
+            card.setObjectName("CandidateDetailInstitutionalCard")
+            value_label.setProperty("status", role)
+            value_label.style().unpolish(value_label)
+            value_label.style().polish(value_label)
+            self.risk_labels[key] = value_label
+            self.section_labels[f"risk.{key}"] = value_label
+            grid.addWidget(card, index // 3, index % 3)
+
+        layout.addLayout(grid)
+        return section
+
+    def risk_sections(self):
         return [
-            self.risk_item(
-                "risk_rating",
-                "Risk Rating",
-                ("risk_rating", "risk_level", "rating"),
-                "rating",
+            (
+                "Risk Summary",
+                [
+                    self.risk_item(
+                        "risk_rating",
+                        "Risk Rating",
+                        ("risk_rating", "risk_level", "rating"),
+                        "rating",
+                    ),
+                    self.risk_item(
+                        "overall_risk_score",
+                        "Overall Risk Score",
+                        ("overall_risk_score", "risk_score", "composite_risk_score"),
+                        "risk_score",
+                    ),
+                ],
             ),
-            self.risk_item(
-                "upcoming_earnings",
-                "Upcoming Earnings",
-                ("upcoming_earnings", "earnings_date", "next_earnings_date"),
-                "text",
+            (
+                "Event Risk",
+                [
+                    self.risk_item(
+                        "upcoming_earnings",
+                        "Upcoming Earnings Date",
+                        ("upcoming_earnings", "earnings_date", "next_earnings_date"),
+                        "text",
+                    ),
+                    self.risk_item(
+                        "earnings_within_7_days",
+                        "Earnings Within 7 Days",
+                        ("earnings_within_7_days", "earnings_soon", "near_term_earnings"),
+                        "flag_negative",
+                    ),
+                ],
             ),
-            self.risk_item(
-                "short_interest",
-                "Short Interest",
-                ("short_interest", "short_interest_pct", "short_float_pct"),
-                "percent_high_bad",
+            (
+                "Technical Risk",
+                [
+                    self.risk_item(
+                        "short_interest",
+                        "Short Interest",
+                        ("short_interest", "short_interest_pct", "short_float_pct"),
+                        "percent_high_bad",
+                    ),
+                    self.risk_item(
+                        "price_below_200dma",
+                        "Price Below 200 DMA",
+                        ("price_below_200dma", "below_200_dma", "below_ema200"),
+                        "flag_negative",
+                    ),
+                    self.risk_item(
+                        "recent_support_break",
+                        "Recent Support Break",
+                        ("recent_support_break", "support_break", "recent_breakdown"),
+                        "flag_negative",
+                    ),
+                    self.risk_item(
+                        "support_failure_risk",
+                        "Support Failure Risk",
+                        ("support_failure_risk", "support_failure_risk_pct", "breakdown_risk"),
+                        "percent_high_bad",
+                    ),
+                    self.risk_item(
+                        "volatility",
+                        "Volatility / ATR",
+                        ("volatility", "volatility_pct", "atr_pct", "atr"),
+                        "percent_high_bad",
+                    ),
+                    self.risk_item(
+                        "price_above_support_10pct",
+                        "Current Price More Than 10% Above Support",
+                        (
+                            "price_above_support_10pct",
+                            "more_than_10pct_above_support",
+                            "far_above_support",
+                        ),
+                        "flag_negative",
+                    ),
+                ],
             ),
-            self.risk_item(
-                "support_failure_risk",
-                "Support Failure Risk",
-                ("support_failure_risk", "support_failure_risk_pct", "breakdown_risk"),
-                "percent_high_bad",
+            (
+                "Financial Risk",
+                [
+                    self.risk_item(
+                        "debt_to_equity",
+                        "Debt to Equity",
+                        ("debt_to_equity", "debt_equity", "debt_to_equity_ratio"),
+                        "ratio_high_bad",
+                    ),
+                    self.risk_item(
+                        "debt_risk",
+                        "Debt Risk",
+                        ("debt_risk", "debt_risk_score", "leverage_risk"),
+                        "risk_score",
+                    ),
+                    self.risk_item(
+                        "excessive_debt",
+                        "Excessive Debt",
+                        ("excessive_debt", "high_debt", "excess_debt_flag"),
+                        "flag_negative",
+                    ),
+                ],
             ),
-            self.risk_item(
-                "volatility",
-                "Volatility",
-                ("volatility", "volatility_pct", "atr_pct"),
-                "percent_high_bad",
-            ),
-            self.risk_item(
-                "debt_risk",
-                "Debt Risk",
-                ("debt_risk", "debt_risk_score", "leverage_risk"),
-                "risk_score",
-            ),
-            self.risk_item(
-                "insider_selling_risk",
-                "Insider Selling Risk",
-                ("insider_selling_risk", "insider_selling_flag", "insider_selling_score"),
-                "risk_score",
-            ),
-            self.risk_item(
-                "overall_risk_score",
-                "Overall Risk Score",
-                ("overall_risk_score", "risk_score", "composite_risk_score"),
-                "risk_score",
+            (
+                "Insider / Sentiment Risk",
+                [
+                    self.risk_item(
+                        "heavy_insider_selling",
+                        "Heavy Insider Selling",
+                        ("heavy_insider_selling", "insider_selling_heavy", "heavy_selling"),
+                        "flag_negative",
+                    ),
+                    self.risk_item(
+                        "insider_selling_risk",
+                        "Insider Selling Risk",
+                        ("insider_selling_risk", "insider_selling_flag", "insider_selling_score"),
+                        "risk_score",
+                    ),
+                ],
             ),
         ]
 
+    def risk_items(self):
+        return [item for _, section_items in self.risk_sections() for item in section_items]
+
     def risk_item(self, key, title, aliases, value_type):
         if key == "risk_rating":
+            fallback_risk = self.risk_text()
+            if fallback_risk == "N/A":
+                fallback_risk = None
             raw_value = self.first_existing(
                 *[self.risk_value(alias) for alias in aliases],
-                self.risk_text(),
+                fallback_risk,
             )
         else:
             raw_value = self.first_existing(
@@ -1641,12 +1733,22 @@ class CandidateDetailWindow(QDialog):
         if value_type == "text":
             return str(value)
 
+        if value_type == "flag_negative":
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+            number = self.number_value(value)
+            if number is not None:
+                return "Yes" if number > 0 else "No"
+            return str(value)
+
         number = self.number_value(value)
         if number is None:
             return str(value)
 
         if value_type == "percent_high_bad":
             return f"{number:.1f}%"
+        if value_type == "ratio_high_bad":
+            return f"{number:.2f}"
         if value_type == "risk_score":
             return f"{number:.1f}"
         return str(value)
@@ -1663,7 +1765,10 @@ class CandidateDetailWindow(QDialog):
                 return "watch"
             if any(word in text for word in ("low", "strong", "controlled")):
                 return "positive"
-            return "neutral"
+            return "missing"
+
+        if value_type == "flag_negative":
+            return "negative" if self.truthy_value(value) else "positive"
 
         if value_type == "text":
             return "neutral"
@@ -1686,6 +1791,13 @@ class CandidateDetailWindow(QDialog):
                 return "watch"
             return "positive"
 
+        if value_type == "ratio_high_bad":
+            if number >= 2:
+                return "negative"
+            if number >= 1:
+                return "watch"
+            return "positive"
+
         if value_type == "risk_score":
             if number >= 70:
                 return "negative"
@@ -1697,7 +1809,21 @@ class CandidateDetailWindow(QDialog):
 
     def active_risk_warnings(self):
         warnings = []
-        for key, title, value, role in self.risk_items():
+        warning_order = [
+            "risk_rating",
+            "upcoming_earnings",
+            "short_interest",
+            "support_failure_risk",
+            "volatility",
+            "debt_risk",
+            "insider_selling_risk",
+            "overall_risk_score",
+        ]
+        risk_items = {key: (title, value, role) for key, title, value, role in self.risk_items()}
+        for key in warning_order:
+            if key not in risk_items:
+                continue
+            title, value, role = risk_items[key]
             if value == "N/A" or role != "negative":
                 continue
             warnings.append(f"* {title}: {value}")
