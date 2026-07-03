@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -19,6 +20,7 @@ class ScreeningResultsPanel(QWidget):
     SOURCE_ROLE = Qt.UserRole + 1
     refresh_ranked_candidates_requested = Signal()
     refresh_run_history_requested = Signal()
+    run_screening_requested = Signal(str)
     run_selected = Signal(str)
     candidate_selected = Signal(object)
 
@@ -59,6 +61,8 @@ class ScreeningResultsPanel(QWidget):
         )
         layout.setSpacing(DesignSystem.Spacing.MD)
 
+        layout.addWidget(self.build_screening_controls())
+
         ranked_section, self.ranked_candidates_table, self.ranked_empty_label = (
             self.build_table_section(
                 "Ranked Candidates",
@@ -87,6 +91,47 @@ class ScreeningResultsPanel(QWidget):
         self.run_history_table.itemSelectionChanged.connect(
             self.handle_run_selection
         )
+
+    def build_screening_controls(self):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        section.setStyleSheet(DesignSystem.card_style())
+        layout = QHBoxLayout(section)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+        )
+        layout.setSpacing(DesignSystem.Spacing.SM)
+
+        label = QLabel("Tickers")
+        label.setObjectName("ResearchPreviewFieldLabel")
+        self.ticker_input = QLineEdit()
+        self.ticker_input.setObjectName("ScreeningTickerInput")
+        self.ticker_input.setPlaceholderText("AAPL, MSFT, NVDA")
+        self.run_screening_button = QPushButton("Run Screening")
+        self.run_screening_button.setObjectName("PrimaryButton")
+        self.run_screening_button.clicked.connect(self.emit_run_screening)
+        self.screening_status_label = QLabel("Ready")
+        self.screening_status_label.setObjectName("ResearchPreviewFieldValue")
+
+        layout.addWidget(label)
+        layout.addWidget(self.ticker_input, stretch=1)
+        layout.addWidget(self.run_screening_button)
+        layout.addWidget(self.screening_status_label)
+        return section
+
+    def emit_run_screening(self):
+        self.run_screening_requested.emit(self.ticker_input.text())
+
+    def set_screening_active(self, active, status_text=None):
+        self.run_screening_button.setEnabled(not active)
+        if status_text is not None:
+            self.screening_status_label.setText(status_text)
+
+    def set_screening_status(self, status_text):
+        self.screening_status_label.setText(status_text)
 
     def build_table_section(self, title, empty_text, headers, signal):
         section = QFrame()

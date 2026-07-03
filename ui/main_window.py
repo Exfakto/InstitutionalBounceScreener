@@ -53,6 +53,7 @@ from ui.widgets.performance_dashboard import PerformanceDashboard
 from ui.candidate_detail_window import CandidateDetailWindow
 from ui.stock_detail_window import StockDetailWindow
 from ui.export_dialog import ExportDialog
+from ui.screening_worker import ScreeningWorker
 from ui.settings_dialog import SettingsDialog
 from ui.about_dialog import AboutDialog
 from ui.design_system import DashboardDesignSystem as DesignSystem
@@ -261,6 +262,9 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.run_selected.connect(
             self.load_ranked_candidates_for_run
+        )
+        self.screening_results_panel.run_screening_requested.connect(
+            self.start_screening_from_input
         )
         self.activity_panel = ActivityPanel()
 
@@ -1920,6 +1924,96 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def parse_screening_tickers(self, ticker_text):
+
+        tickers = []
+        for raw_ticker in str(ticker_text or "").split(","):
+            ticker = raw_ticker.strip().upper()
+            if ticker and ticker not in tickers:
+                tickers.append(ticker)
+        return tickers
+
+    # ----------------------------------------------------------
+
+    def start_screening_from_input(self, ticker_text=None):
+
+        if not hasattr(self, "screening_results_panel"):
+            return None
+
+        text = (
+            ticker_text
+            if ticker_text is not None
+            else self.screening_results_panel.ticker_input.text()
+        )
+        tickers = self.parse_screening_tickers(text)
+        if not tickers:
+            self.screening_results_panel.set_screening_status("Enter at least one ticker")
+            return None
+
+        if getattr(self, "screening_worker", None) is not None:
+            self.screening_results_panel.set_screening_status("Screening already running")
+            return self.screening_worker
+
+        worker = self.create_screening_worker(tickers)
+        self.screening_worker = worker
+        self.screening_results_panel.set_screening_active(
+            True,
+            f"Starting screening for {len(tickers)} ticker(s)...",
+        )
+        worker.started_signal.connect(self.handle_screening_started)
+        worker.progress_signal.connect(self.handle_screening_progress)
+        worker.completed_signal.connect(self.handle_screening_completed)
+        worker.failed_signal.connect(self.handle_screening_failed)
+        worker.start()
+        return worker
+
+    # ----------------------------------------------------------
+
+    def create_screening_worker(self, tickers):
+
+        return ScreeningWorker(
+            tickers=tickers,
+            repository=self.screening_repository(),
+            parent=self,
+        )
+
+    # ----------------------------------------------------------
+
+    def handle_screening_started(self, message):
+
+        self.screening_results_panel.set_screening_active(True, message)
+
+    # ----------------------------------------------------------
+
+    def handle_screening_progress(self, message):
+
+        self.screening_results_panel.set_screening_status(message)
+
+    # ----------------------------------------------------------
+
+    def handle_screening_completed(self, result):
+
+        count = len(getattr(result, "ranked_candidates", []) or [])
+        self.screening_results_panel.set_screening_active(
+            False,
+            f"Screening complete: {count} ranked candidate(s)",
+        )
+        self.screening_worker = None
+        self.refresh_screening_run_history_view()
+        self.refresh_ranked_candidates_view()
+
+    # ----------------------------------------------------------
+
+    def handle_screening_failed(self, message):
+
+        self.screening_results_panel.set_screening_active(
+            False,
+            f"Screening failed: {message}",
+        )
+        self.screening_worker = None
+
+    # ----------------------------------------------------------
+
     def refresh_ranked_candidates_view(self):
 
         if not hasattr(self, "screening_results_panel"):
@@ -2180,6 +2274,11 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "refresh_scheduler"):
             self.refresh_scheduler.stop()
+
+        worker = getattr(self, "screening_worker", None)
+        if worker is not None and hasattr(worker, "isRunning") and worker.isRunning():
+            worker.quit()
+            worker.wait(1000)
 
         self.controller.close()
         self.indicator_controller.close()

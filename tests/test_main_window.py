@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QApplication, QDockWidget
 
 from ui import main_window as main_window_module
@@ -216,6 +216,33 @@ class FakeScreeningRepository:
     def fetch_ranked_candidates(self, run_id):
         self.run_candidate_calls.append(run_id)
         return list(self.ranked_by_run.get(run_id, []))
+
+
+class FakeScreeningWorker(QObject):
+    started_signal = Signal(str)
+    progress_signal = Signal(str)
+    completed_signal = Signal(object)
+    failed_signal = Signal(str)
+    instances = []
+
+    def __init__(self, tickers=None, repository=None, parent=None, **kwargs):
+        super().__init__(parent)
+        self.tickers = tickers or []
+        self.repository = repository
+        self.started = False
+        FakeScreeningWorker.instances.append(self)
+
+    def start(self):
+        self.started = True
+
+    def isRunning(self):
+        return self.started
+
+    def quit(self):
+        self.started = False
+
+    def wait(self, timeout=None):
+        return True
 
 
 @pytest.fixture
@@ -1079,6 +1106,114 @@ def test_main_window_no_selected_candidate_behavior(patched_window):
     assert window.screening_results_panel.candidate_detail_empty_label.text() == "No selected candidate"
     assert window.screening_results_panel.candidate_detail_empty_label.isHidden() is False
     assert window.screening_results_panel.candidate_detail_content.isHidden() is True
+
+
+def test_main_window_screening_ticker_parsing(patched_window):
+    window = patched_window
+
+    assert window.parse_screening_tickers(" aapl, msft, AAPL,, nvda ") == [
+        "AAPL",
+        "MSFT",
+        "NVDA",
+    ]
+
+
+def test_main_window_run_screening_button_starts_worker(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    repository = FakeScreeningRepository()
+    window._screening_repository = repository
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    window.screening_results_panel.ticker_input.setText("aapl, msft")
+    window.screening_results_panel.run_screening_button.click()
+
+    assert len(FakeScreeningWorker.instances) == 1
+    assert FakeScreeningWorker.instances[0].tickers == ["AAPL", "MSFT"]
+    assert FakeScreeningWorker.instances[0].repository is repository
+    assert FakeScreeningWorker.instances[0].started is True
+
+
+def test_main_window_run_screening_button_disabled_during_run(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    window.start_screening_from_input("AAPL")
+
+    assert window.screening_results_panel.run_screening_button.isEnabled() is False
+    assert window.screening_results_panel.screening_status_label.text().startswith(
+        "Starting screening"
+    )
+
+
+def test_main_window_screening_completion_refreshes_results(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=1,
+            ticker="AAPL",
+            final_score=91,
+            grade="A+",
+            confidence_level="HIGH",
+            setup_label="Elite Institutional Bounce",
+            explanation=[],
+            warnings=[],
+            rejection_reasons=[],
+        )
+    ]
+    repository.run_history = [
+        {
+            "run_id": "run-complete",
+            "status": "COMPLETED",
+            "tickers_requested": 1,
+            "tickers_processed": 1,
+            "candidate_count": 1,
+        }
+    ]
+    window._screening_repository = repository
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    worker = window.start_screening_from_input("AAPL")
+    worker.completed_signal.emit(SimpleNamespace(ranked_candidates=repository.ranked_candidates))
+
+    assert window.screening_results_panel.run_screening_button.isEnabled() is True
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Screening complete: 1 ranked candidate(s)"
+    )
+    assert window.screening_results_panel.ranked_candidates_table.item(0, 1).text() == "AAPL"
+    assert window.screening_results_panel.run_history_table.item(0, 0).text() == "run-complete"
+    assert repository.ranked_calls == 1
+    assert repository.history_calls == 1
+
+
+def test_main_window_screening_failure_shows_safe_error_state(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    worker = window.start_screening_from_input("AAPL")
+    worker.failed_signal.emit("planned failure")
+
+    assert window.screening_results_panel.run_screening_button.isEnabled() is True
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Screening failed: planned failure"
+    )
+    assert window.screening_worker is None
 
 
 def test_main_window_dashboard_refresh_clears_old_rows_before_loading_new_rows(patched_window):
