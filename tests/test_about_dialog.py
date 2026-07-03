@@ -1,6 +1,6 @@
 import pytest
 from types import SimpleNamespace
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QScrollArea
 
 from ui.about_dialog import AboutDialog
 
@@ -62,6 +62,8 @@ def test_about_dialog_renders_diagnostics(app):
     dialog = AboutDialog(controller=FakeDiagnosticsController())
 
     assert dialog.isModal()
+    assert isinstance(dialog.scroll_area, QScrollArea)
+    assert dialog.scroll_area.widgetResizable() is True
     assert dialog.app_name_label.text() == "Institutional Bounce Screener"
     assert "Version: v3.0.0-beta" in dialog.version_label.text()
     assert "Build: 2026-07-03" in dialog.version_label.text()

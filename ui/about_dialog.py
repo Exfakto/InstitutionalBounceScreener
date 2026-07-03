@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFileDialog,
     QMessageBox,
+    QScrollArea,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -95,7 +96,12 @@ class AboutDialog(QDialog):
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         self.button_box.rejected.connect(self.reject)
 
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.addWidget(self.app_name_label)
         layout.addWidget(self.version_label)
         layout.addWidget(self.description_label)
@@ -107,7 +113,9 @@ class AboutDialog(QDialog):
         layout.addWidget(self.run_beta_validation_button)
         layout.addWidget(self.refresh_button)
         layout.addWidget(self.copy_button)
-        layout.addWidget(self.button_box)
+        self.scroll_area.setWidget(content)
+        outer_layout.addWidget(self.scroll_area)
+        outer_layout.addWidget(self.button_box)
 
         self.load_diagnostics()
 

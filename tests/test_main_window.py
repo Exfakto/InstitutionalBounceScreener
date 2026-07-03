@@ -378,6 +378,25 @@ def test_professional_screener_workspace_creation(patched_window):
     assert window.screening_results_panel is not None
     assert window.pipeline_progress_panel is not None
     assert window.dashboard.activity_feed_table is not None
+
+
+def test_main_window_responsive_startup_size_and_minimum(patched_window):
+    window = patched_window
+
+    assert window.size().width() <= 1280
+    assert window.size().height() <= 760
+    assert window.minimumWidth() <= 900
+    assert window.minimumHeight() <= 620
+
+
+def test_main_window_key_panels_allow_compact_resizing(patched_window):
+    window = patched_window
+
+    assert window.price_chart.minimumWidth() <= 360
+    assert window.price_chart.minimumHeight() <= 180
+    assert window.candidates_table.minimumWidth() <= 420
+    assert window.candidates_table.minimumHeight() <= 220
+    assert window.screener_filters_panel.maximumWidth() <= 230
     assert window.dashboard.activity_count() >= 1
     assert window.screener_workspace_splitter.count() == 2
     assert set(window.filter_sections) == {

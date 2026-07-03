@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QSizePolicy,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -158,10 +159,12 @@ class MainWindow(QMainWindow):
         self.data_refresh_cancel_requested = False
 
         self.setWindowTitle("Institutional Bounce Screener")
-        self.resize(1600, 900)
+        self.resize(1280, 760)
+        self.setMinimumSize(900, 620)
 
         self.build_ui()
         self.restore_workspace_state()
+        self.ensure_window_fits_screen()
         self.register_shortcuts()
 
         self.refresh_statistics()
@@ -178,12 +181,12 @@ class MainWindow(QMainWindow):
 
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(
-            DesignSystem.Spacing.XL,
-            DesignSystem.Spacing.LG,
-            DesignSystem.Spacing.XL,
-            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
         )
-        main_layout.setSpacing(DesignSystem.Spacing.LG)
+        main_layout.setSpacing(DesignSystem.Spacing.SM)
 
         ##########################################################
         # Header
@@ -239,8 +242,9 @@ class MainWindow(QMainWindow):
         ##########################################################
 
         self.dashboard = InstitutionalDashboard()
-        self.dashboard.setMinimumHeight(180)
-        self.dashboard.setMaximumHeight(280)
+        self.dashboard.setMinimumHeight(120)
+        self.dashboard.setMaximumHeight(190)
+        self.dashboard.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
 
         ##########################################################
         # Main Workspace
@@ -361,18 +365,18 @@ class MainWindow(QMainWindow):
         self.workspace_splitter = self.screener_workspace_splitter
         self.center_splitter = self.screener_workspace_splitter
 
-        self.price_chart.setMinimumSize(520, 280)
-        self.candidates_table.setMinimumSize(620, 320)
-        self.screener_filters_panel.setMinimumWidth(190)
-        self.screener_filters_panel.setMaximumWidth(260)
-        self.research_preview.setMinimumWidth(300)
-        self.trade_card.setMinimumWidth(300)
+        self.price_chart.setMinimumSize(360, 180)
+        self.candidates_table.setMinimumSize(420, 220)
+        self.screener_filters_panel.setMinimumWidth(150)
+        self.screener_filters_panel.setMaximumWidth(230)
+        self.research_preview.setMinimumWidth(240)
+        self.trade_card.setMinimumWidth(240)
 
         self.screener_workspace_splitter.addWidget(self.screener_filters_panel)
         self.screener_workspace_splitter.addWidget(self.candidates_table)
         self.screener_workspace_splitter.setStretchFactor(0, 14)
         self.screener_workspace_splitter.setStretchFactor(1, 86)
-        self.screener_workspace_splitter.setSizes([220, 1280])
+        self.screener_workspace_splitter.setSizes([180, 980])
 
         main_layout.addWidget(self.screener_workspace_splitter, stretch=4)
         main_layout.addWidget(self.pipeline_progress_panel)
@@ -386,6 +390,7 @@ class MainWindow(QMainWindow):
         self.refresh_ranked_candidates_view()
         self.refresh_screening_run_history_view()
         self.refresh_cache_coverage_summary()
+        self.center_on_screen()
 
     # ----------------------------------------------------------
 
@@ -772,13 +777,14 @@ class MainWindow(QMainWindow):
                 and int(size[0]) > 0
                 and int(size[1]) > 0
             ):
-                self.resize(int(size[0]), int(size[1]))
+                width, height = self.constrained_window_size(int(size[0]), int(size[1]))
+                self.resize(width, height)
         except (TypeError, ValueError):
             pass
 
         try:
             if isinstance(position, list) and len(position) == 2:
-                self.move(int(position[0]), int(position[1]))
+                self.move_within_screen(int(position[0]), int(position[1]))
         except (TypeError, ValueError):
             pass
 
@@ -787,6 +793,60 @@ class MainWindow(QMainWindow):
                 self.showMaximized()
         except RuntimeError:
             pass
+
+    # ----------------------------------------------------------
+
+    def ensure_window_fits_screen(self):
+
+        width, height = self.constrained_window_size(
+            self.size().width(),
+            self.size().height(),
+        )
+        if width != self.size().width() or height != self.size().height():
+            self.resize(width, height)
+        self.move_within_screen(self.x(), self.y())
+
+    # ----------------------------------------------------------
+
+    def center_on_screen(self):
+
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        geometry = screen.availableGeometry()
+        frame = self.frameGeometry()
+        frame.moveCenter(geometry.center())
+        self.move(frame.topLeft())
+
+    # ----------------------------------------------------------
+
+    def move_within_screen(self, x, y):
+
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            self.move(x, y)
+            return
+        geometry = screen.availableGeometry()
+        width = self.size().width()
+        height = self.size().height()
+        max_x = max(geometry.left(), geometry.right() - width)
+        max_y = max(geometry.top(), geometry.bottom() - height)
+        clamped_x = min(max(int(x), geometry.left()), max_x)
+        clamped_y = min(max(int(y), geometry.top()), max_y)
+        self.move(clamped_x, clamped_y)
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def constrained_window_size(width, height):
+
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return width, height
+        geometry = screen.availableGeometry()
+        max_width = max(900, geometry.width() - 40)
+        max_height = max(620, geometry.height() - 80)
+        return min(width, max_width), min(height, max_height)
 
     # ----------------------------------------------------------
 
