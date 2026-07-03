@@ -258,6 +258,10 @@ CREATE TABLE IF NOT EXISTS institutional_metrics (
 
     institutional_score REAL,
 
+    source TEXT,
+
+    as_of_date TEXT,
+
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 
 );

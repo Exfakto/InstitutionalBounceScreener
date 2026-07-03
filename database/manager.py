@@ -2,6 +2,7 @@ from pathlib import Path
 import sqlite3
 import pandas as pd
 
+from database.institutional_data import InstitutionalData
 from database.schema import (
     BOUNCE_VALIDATIONS_TABLE,
     EARNINGS_TABLE,
@@ -64,6 +65,7 @@ class DatabaseManager:
         self.cursor.execute(FUNDAMENTALS_TABLE)
         self.ensure_fundamentals_profile_columns()
         self.cursor.execute(INSTITUTIONAL_METRICS_TABLE)
+        self.ensure_institutional_metrics_columns()
         self.cursor.execute(EARNINGS_TABLE)
         self.cursor.execute(WATCHLIST_TABLE)
         self.cursor.execute(PAPER_TRADES_TABLE)
@@ -911,6 +913,23 @@ class DatabaseManager:
     # Institutional Metrics
     # ==========================================================
 
+    def ensure_institutional_metrics_columns(self):
+        """
+        Add institutional data storage columns to existing local databases.
+        """
+
+        self.cursor.execute("PRAGMA table_info(institutional_metrics)")
+        existing_columns = {row[1] for row in self.cursor.fetchall()}
+
+        migrations = {
+            "source": "ALTER TABLE institutional_metrics ADD COLUMN source TEXT",
+            "as_of_date": "ALTER TABLE institutional_metrics ADD COLUMN as_of_date TEXT",
+        }
+
+        for column, statement in migrations.items():
+            if column not in existing_columns:
+                self.cursor.execute(statement)
+
     def save_institutional_metrics(self, records):
         """
         Save institutional metrics, replacing rows by ticker.
@@ -930,6 +949,8 @@ class DatabaseManager:
                     self._sqlite_int(record.get("insider_buying_flag")),
                     self._sqlite_int(record.get("insider_selling_flag")),
                     self._sqlite_float(record.get("institutional_score")),
+                    record.get("source"),
+                    self._format_date(record.get("as_of_date")),
                 )
             )
 
@@ -944,11 +965,13 @@ class DatabaseManager:
                     net_institutional_buying,
                     insider_buying_flag,
                     insider_selling_flag,
-                    institutional_score
+                    institutional_score,
+                    source,
+                    as_of_date
                 )
                 VALUES
                 (
-                    ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 rows,
@@ -957,6 +980,58 @@ class DatabaseManager:
         self.connection.commit()
 
         return len(rows)
+
+    def upsert_institutional_data(self, record):
+        """
+        Insert or update institutional data by ticker.
+        """
+
+        data = self._institutional_record_to_dict(record)
+        ticker = self._normalize_ticker(data.get("ticker"))
+        if ticker is None:
+            return None
+
+        self.cursor.execute(
+            """
+            INSERT INTO institutional_metrics
+            (
+                ticker,
+                institutional_ownership_pct,
+                institutional_ownership_change_qoq,
+                net_institutional_buying,
+                insider_buying_flag,
+                insider_selling_flag,
+                source,
+                as_of_date,
+                updated_at
+            )
+            VALUES
+            (
+                ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT(ticker) DO UPDATE SET
+                institutional_ownership_pct = excluded.institutional_ownership_pct,
+                institutional_ownership_change_qoq = excluded.institutional_ownership_change_qoq,
+                net_institutional_buying = excluded.net_institutional_buying,
+                insider_buying_flag = excluded.insider_buying_flag,
+                insider_selling_flag = excluded.insider_selling_flag,
+                source = excluded.source,
+                as_of_date = excluded.as_of_date,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                ticker,
+                self._sqlite_float(data.get("institutional_ownership_pct")),
+                self._sqlite_float(data.get("institutional_ownership_change_qoq")),
+                self._sqlite_float(data.get("net_institutional_buying")),
+                self._sqlite_int(data.get("insider_buying_flag")),
+                self._sqlite_int(data.get("insider_selling_flag")),
+                data.get("source"),
+                self._format_date(data.get("as_of_date")),
+            ),
+        )
+        self.connection.commit()
+        return self.get_institutional_data(ticker)
 
     def get_institutional_metrics(self, ticker):
 
@@ -969,7 +1044,10 @@ class DatabaseManager:
                 net_institutional_buying,
                 insider_buying_flag,
                 insider_selling_flag,
-                institutional_score
+                institutional_score,
+                source,
+                as_of_date,
+                updated_at
             FROM institutional_metrics
             WHERE ticker = ?
             """,
@@ -977,6 +1055,47 @@ class DatabaseManager:
         )
 
         return self.cursor.fetchone()
+
+    def get_institutional_data(self, ticker):
+        normalized_ticker = self._normalize_ticker(ticker)
+        if normalized_ticker is None:
+            return None
+
+        row = self.get_institutional_metrics(normalized_ticker)
+        return self._row_to_institutional_data(row)
+
+    def get_institutional_data_for_tickers(self, tickers):
+        normalized = [
+            ticker
+            for ticker in (self._normalize_ticker(value) for value in (tickers or []))
+            if ticker is not None
+        ]
+        if not normalized:
+            return {}
+
+        placeholders = ",".join("?" for _ in normalized)
+        self.cursor.execute(
+            f"""
+            SELECT
+                ticker,
+                institutional_ownership_pct,
+                institutional_ownership_change_qoq,
+                net_institutional_buying,
+                insider_buying_flag,
+                insider_selling_flag,
+                source,
+                as_of_date,
+                updated_at
+            FROM institutional_metrics
+            WHERE ticker IN ({placeholders})
+            """,
+            normalized,
+        )
+
+        return {
+            row["ticker"]: self._row_to_institutional_data(row)
+            for row in self.cursor.fetchall()
+        }
 
     def institutional_metrics_count(self):
 
@@ -1639,6 +1758,60 @@ class DatabaseManager:
         Commit current transaction.
         """
         self.connection.commit()
+
+    @staticmethod
+    def _institutional_record_to_dict(record):
+        if record is None:
+            return {}
+        if isinstance(record, InstitutionalData):
+            return {
+                "ticker": record.ticker,
+                "institutional_ownership_pct": record.institutional_ownership_pct,
+                "institutional_ownership_change_qoq": record.institutional_ownership_change_qoq,
+                "net_institutional_buying": record.net_institutional_buying,
+                "insider_buying_flag": record.insider_buying_flag,
+                "insider_selling_flag": record.insider_selling_flag,
+                "source": record.source,
+                "as_of_date": record.as_of_date,
+            }
+        if isinstance(record, dict):
+            return dict(record)
+        return {
+            "ticker": getattr(record, "ticker", None),
+            "institutional_ownership_pct": getattr(
+                record,
+                "institutional_ownership_pct",
+                None,
+            ),
+            "institutional_ownership_change_qoq": getattr(
+                record,
+                "institutional_ownership_change_qoq",
+                None,
+            ),
+            "net_institutional_buying": getattr(record, "net_institutional_buying", None),
+            "insider_buying_flag": getattr(record, "insider_buying_flag", 0),
+            "insider_selling_flag": getattr(record, "insider_selling_flag", 0),
+            "source": getattr(record, "source", None),
+            "as_of_date": getattr(record, "as_of_date", None),
+        }
+
+    @staticmethod
+    def _row_to_institutional_data(row):
+        if row is None:
+            return None
+        return InstitutionalData(
+            ticker=row["ticker"],
+            institutional_ownership_pct=row["institutional_ownership_pct"],
+            institutional_ownership_change_qoq=row[
+                "institutional_ownership_change_qoq"
+            ],
+            net_institutional_buying=row["net_institutional_buying"],
+            insider_buying_flag=row["insider_buying_flag"],
+            insider_selling_flag=row["insider_selling_flag"],
+            source=row["source"],
+            as_of_date=row["as_of_date"],
+            updated_at=row["updated_at"],
+        )
 
     @staticmethod
     def _format_date(value):
