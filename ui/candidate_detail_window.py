@@ -1052,36 +1052,40 @@ class CandidateDetailWindow(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        header = QLabel("Historical Bounce Summary")
+        header = QLabel("Bounce History")
         header.setObjectName("CandidateDetailSectionTitle")
         layout.addWidget(header)
 
-        grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(10)
-
         self.bounce_summary_labels = {}
-        for index, (key, title, value, role) in enumerate(self.bounce_summary_items()):
-            card, value_label = self.create_summary_card(title, value)
-            card.setObjectName("CandidateDetailTechnicalCard")
-            value_label.setProperty("status", role)
-            value_label.style().unpolish(value_label)
-            value_label.style().polish(value_label)
-            self.bounce_summary_labels[key] = value_label
-            grid.addWidget(card, index // 4, index % 4)
 
-        layout.addLayout(grid)
+        layout.addWidget(
+            self.bounce_section("Bounce Summary", self.bounce_summary_items())
+        )
+        layout.addWidget(
+            self.bounce_section("Support Zone Details", self.support_zone_items())
+        )
+
+        table_title = QLabel("Historical Bounce Table")
+        table_title.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(table_title)
 
         self.bounce_empty_label = QLabel("No historical bounce data available.")
         self.bounce_empty_label.setObjectName("EmptyStateLabel")
         self.bounce_empty_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.bounce_empty_label)
 
-        self.bounce_history_table = QTableWidget(0, 5)
+        self.bounce_history_table = QTableWidget(0, 7)
         self.bounce_history_table.setObjectName("CandidateDetailBounceTable")
         self.bounce_history_table.setHorizontalHeaderLabels(
-            ["Date", "Support Price", "Bounce %", "Days to Peak", "Successful"]
+            [
+                "Date",
+                "Support Price",
+                "Low Price",
+                "Peak Price",
+                "Bounce %",
+                "Days to Peak",
+                "Successful",
+            ]
         )
         self.bounce_history_table.verticalHeader().setVisible(False)
         self.bounce_history_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -1098,8 +1102,52 @@ class CandidateDetailWindow(QDialog):
         self.bounce_empty_label.setVisible(not has_rows)
         self.bounce_history_table.setVisible(has_rows)
 
+        interpretation = QFrame()
+        interpretation.setObjectName("CandidateDetailWhySection")
+        interpretation_layout = QVBoxLayout(interpretation)
+        interpretation_layout.setContentsMargins(14, 12, 14, 12)
+        interpretation_layout.setSpacing(8)
+
+        interpretation_title = QLabel("Bounce Interpretation")
+        interpretation_title.setObjectName("CandidateDetailSectionTitle")
+        self.bounce_interpretation_label = QLabel(self.bounce_interpretation_text())
+        self.bounce_interpretation_label.setObjectName("CandidateDetailWhyItem")
+        self.bounce_interpretation_label.setWordWrap(True)
+        self.bounce_interpretation_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        interpretation_layout.addWidget(interpretation_title)
+        interpretation_layout.addWidget(self.bounce_interpretation_label)
+        layout.addWidget(interpretation)
         layout.addStretch()
         return tab
+
+    def bounce_section(self, title, items):
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title_label)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+
+        for index, (key, item_title, value, role) in enumerate(items):
+            card, value_label = self.create_summary_card(item_title, value)
+            card.setObjectName("CandidateDetailTechnicalCard")
+            value_label.setProperty("status", role)
+            value_label.style().unpolish(value_label)
+            value_label.style().polish(value_label)
+            self.bounce_summary_labels[key] = value_label
+            grid.addWidget(card, index // 4, index % 4)
+
+        layout.addLayout(grid)
+        return section
 
     def bounce_summary_items(self):
         return [
@@ -1153,6 +1201,40 @@ class CandidateDetailWindow(QDialog):
                 "Most Recent Bounce",
                 ("most_recent_bounce", "last_bounce", "last_bounce_date"),
                 "text",
+            ),
+            self.bounce_summary_item(
+                "failed_support_breaks",
+                "Failed Support Breaks",
+                ("failed_support_breaks", "support_failures", "failed_breaks"),
+                "integer_high_bad",
+            ),
+        ]
+
+    def support_zone_items(self):
+        return [
+            self.bounce_summary_item(
+                "primary_support",
+                "Primary Support",
+                ("primary_support", "support_price", "support_level"),
+                "price",
+            ),
+            self.bounce_summary_item(
+                "support_zone_low",
+                "Support Zone Low",
+                ("support_zone_low", "support_low", "zone_low"),
+                "price",
+            ),
+            self.bounce_summary_item(
+                "support_zone_high",
+                "Support Zone High",
+                ("support_zone_high", "support_high", "zone_high"),
+                "price",
+            ),
+            self.bounce_summary_item(
+                "support_strength",
+                "Support Strength",
+                ("support_strength", "support_strength_score", "support_score"),
+                "confidence",
             ),
         ]
 
@@ -1215,6 +1297,26 @@ class CandidateDetailWindow(QDialog):
                 self.format_bounce_value(
                     self.bounce_row_value(
                         row,
+                        "low_price",
+                        "low",
+                        "test_low",
+                        "support_test_low",
+                    ),
+                    "price",
+                ),
+                self.format_bounce_value(
+                    self.bounce_row_value(
+                        row,
+                        "peak_price",
+                        "peak",
+                        "high_price",
+                        "peak_high",
+                    ),
+                    "price",
+                ),
+                self.format_bounce_value(
+                    self.bounce_row_value(
+                        row,
                         "bounce_pct",
                         "bounce_percent",
                         "bounce_return_pct",
@@ -1244,7 +1346,7 @@ class CandidateDetailWindow(QDialog):
 
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                if column in {1, 2, 3}:
+                if column in {1, 2, 3, 4, 5}:
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 else:
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -1270,6 +1372,10 @@ class CandidateDetailWindow(QDialog):
             return f"${number:,.2f}"
         if value_type == "integer":
             return f"{int(number):,}"
+        if value_type == "integer_high_bad":
+            return f"{int(number):,}"
+        if value_type == "confidence":
+            return f"{number:.1f} / 100"
         if value_type == "percent_high_good":
             return f"{number:.1f}%"
         return f"{number:.1f}"
@@ -1294,7 +1400,85 @@ class CandidateDetailWindow(QDialog):
             if number >= 40:
                 return "watch"
             return "negative"
+        if value_type == "integer_high_bad":
+            if number >= 2:
+                return "negative"
+            if number == 1:
+                return "watch"
+            return "positive"
+        if value_type == "confidence":
+            if number >= 75:
+                return "positive"
+            if number >= 50:
+                return "watch"
+            return "negative"
         return "neutral"
+
+    def bounce_interpretation_text(self):
+        support_tests = self.first_existing(
+            self.bounce_value("support_tests"),
+            self.bounce_value("support_test_count"),
+            self.bounce_value("bounce_count"),
+        )
+        successful_bounces = self.first_existing(
+            self.bounce_value("successful_bounces"),
+            self.bounce_value("successful_bounce_count"),
+            self.bounce_value("successful_support_tests"),
+            self.bounce_value("validated_bounces"),
+        )
+        success_rate = self.first_existing(
+            self.bounce_value("bounce_success_rate"),
+            self.bounce_value("bounce_success_pct"),
+            self.bounce_value("historical_bounce_success_rate"),
+        )
+        average_bounce = self.first_existing(
+            self.bounce_value("average_historical_bounce"),
+            self.bounce_value("average_bounce"),
+            self.bounce_value("avg_bounce"),
+            self.bounce_value("average_bounce_pct"),
+        )
+
+        support_tests_number = self.number_value(support_tests)
+        successful_number = self.number_value(successful_bounces)
+        success_rate_number = self.number_value(success_rate)
+        average_bounce_number = self.number_value(average_bounce)
+
+        if all(
+            value is None
+            for value in (
+                support_tests_number,
+                successful_number,
+                success_rate_number,
+                average_bounce_number,
+            )
+        ):
+            return "Bounce interpretation is N/A."
+
+        tests_text = (
+            f"{int(support_tests_number):,} times"
+            if support_tests_number is not None
+            else "N/A times"
+        )
+        success_text = (
+            f"{success_rate_number:.1f}% success rate"
+            if success_rate_number is not None
+            else "N/A success rate"
+        )
+        average_text = (
+            f"{average_bounce_number:.1f}%"
+            if average_bounce_number is not None
+            else "N/A"
+        )
+
+        if successful_number is not None:
+            held_text = f"held {int(successful_number):,} of {tests_text}"
+        else:
+            held_text = f"held {tests_text}"
+
+        return (
+            f"This support zone has {held_text} with a {success_text} "
+            f"and an average bounce of {average_text}."
+        )
 
     def metrics_tab(self, title, key):
         tab = QWidget()

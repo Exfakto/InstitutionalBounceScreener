@@ -85,10 +85,15 @@ def test_candidate_detail_window_accepts_candidate_object(app):
             "median_bounce": 5.5,
             "largest_bounce": 12.4,
             "most_recent_bounce": "2026-06-28",
+            "support_zone_low": 432.0,
+            "support_zone_high": 440.0,
+            "failed_support_breaks": 1,
             "bounce_history": [
                 {
                     "date": "2026-06-01",
                     "support_price": 420.0,
+                    "low_price": 418.5,
+                    "peak_price": 451.5,
                     "bounce_pct": 7.5,
                     "days_to_peak": 6,
                     "successful": True,
@@ -96,6 +101,8 @@ def test_candidate_detail_window_accepts_candidate_object(app):
                 {
                     "date": "2026-06-28",
                     "support_price": 436.5,
+                    "low_price": 435.8,
+                    "peak_price": 454.8,
                     "bounce_pct": 4.2,
                     "days_to_peak": 3,
                     "successful": False,
@@ -194,14 +201,26 @@ def test_candidate_detail_window_accepts_candidate_object(app):
     assert window.bounce_summary_labels["median_bounce"].text() == "5.5%"
     assert window.bounce_summary_labels["largest_bounce"].text() == "12.4%"
     assert window.bounce_summary_labels["most_recent_bounce"].text() == "2026-06-28"
+    assert window.bounce_summary_labels["failed_support_breaks"].text() == "1"
+    assert window.bounce_summary_labels["primary_support"].text() == "$438.00"
+    assert window.bounce_summary_labels["support_zone_low"].text() == "$432.00"
+    assert window.bounce_summary_labels["support_zone_high"].text() == "$440.00"
+    assert window.bounce_summary_labels["support_strength"].text() == "88.0 / 100"
     assert window.bounce_empty_label.isHidden()
     assert window.bounce_history_table.rowCount() == 2
+    assert window.bounce_history_table.columnCount() == 7
     assert window.bounce_history_table.item(0, 0).text() == "2026-06-01"
     assert window.bounce_history_table.item(0, 1).text() == "$420.00"
-    assert window.bounce_history_table.item(0, 2).text() == "7.5%"
-    assert window.bounce_history_table.item(0, 3).text() == "6"
-    assert window.bounce_history_table.item(0, 4).text() == "Yes"
-    assert window.bounce_history_table.item(1, 4).text() == "No"
+    assert window.bounce_history_table.item(0, 2).text() == "$418.50"
+    assert window.bounce_history_table.item(0, 3).text() == "$451.50"
+    assert window.bounce_history_table.item(0, 4).text() == "7.5%"
+    assert window.bounce_history_table.item(0, 5).text() == "6"
+    assert window.bounce_history_table.item(0, 6).text() == "Yes"
+    assert window.bounce_history_table.item(1, 6).text() == "No"
+    assert window.bounce_interpretation_label.text() == (
+        "This support zone has held 4 of 5 times with a 80.0% success rate "
+        "and an average bounce of 6.2%."
+    )
 
 
 def test_candidate_detail_window_missing_fields_show_na(app):
@@ -236,6 +255,7 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     assert window.bounce_empty_label.text() == "No historical bounce data available."
     assert not window.bounce_empty_label.isHidden()
     assert window.bounce_history_table.rowCount() == 0
+    assert window.bounce_interpretation_label.text() == "Bounce interpretation is N/A."
 
 
 def test_candidate_detail_window_institutional_outlook_can_show_distribution(app):
@@ -296,6 +316,8 @@ def test_candidate_detail_window_accepts_bounce_detail_history(app):
                     {
                         "bounce_date": "2026-05-15",
                         "support_level": 25.5,
+                        "low": 25.1,
+                        "peak": 27.9,
                         "max_bounce_pct": 9.25,
                         "peak_days": 4,
                         "validated": 1,
@@ -311,9 +333,11 @@ def test_candidate_detail_window_accepts_bounce_detail_history(app):
     assert window.bounce_history_table.rowCount() == 1
     assert window.bounce_history_table.item(0, 0).text() == "2026-05-15"
     assert window.bounce_history_table.item(0, 1).text() == "$25.50"
-    assert window.bounce_history_table.item(0, 2).text() == "9.2%"
-    assert window.bounce_history_table.item(0, 3).text() == "4"
-    assert window.bounce_history_table.item(0, 4).text() == "Yes"
+    assert window.bounce_history_table.item(0, 2).text() == "$25.10"
+    assert window.bounce_history_table.item(0, 3).text() == "$27.90"
+    assert window.bounce_history_table.item(0, 4).text() == "9.2%"
+    assert window.bounce_history_table.item(0, 5).text() == "4"
+    assert window.bounce_history_table.item(0, 6).text() == "Yes"
 
 
 def test_candidate_detail_window_accepts_risk_detail_values(app):
@@ -502,3 +526,62 @@ def test_candidate_detail_window_set_candidate_refreshes_institutional_values(ap
     assert window.institutional_labels["ownership"].text() == "68.0%"
     assert window.institutional_labels["holder_change"].text() == "+15"
     assert window.institutional_labels["net_buying"].text() == "$2.00M"
+
+
+def test_candidate_detail_window_set_candidate_refreshes_bounce_values(app):
+    window = CandidateDetailWindow(
+        SimpleNamespace(
+            ticker="OLD",
+            metrics={
+                "support_tests": 1,
+                "successful_bounces": 0,
+                "bounce_success_rate": 0,
+                "average_bounce": 0,
+                "bounce_history": [],
+            },
+        )
+    )
+
+    assert window.bounce_summary_labels["support_tests"].text() == "1"
+    assert window.bounce_history_table.rowCount() == 0
+    assert not window.bounce_empty_label.isHidden()
+
+    window.set_candidate(
+        SimpleNamespace(
+            ticker="NEW",
+            metrics={
+                "primary_support": 101.25,
+                "support_zone_low": 100.0,
+                "support_zone_high": 103.0,
+                "support_strength": 79,
+                "support_tests": 4,
+                "successful_bounces": 3,
+                "bounce_success_rate": 75,
+                "average_bounce": 11.5,
+                "failed_support_breaks": 0,
+                "bounce_history": [
+                    {
+                        "date": "2026-06-12",
+                        "support_price": 101.25,
+                        "low_price": 100.75,
+                        "peak_price": 113.0,
+                        "bounce_pct": 11.6,
+                        "days_to_peak": 5,
+                        "successful": True,
+                    }
+                ],
+            },
+        )
+    )
+
+    assert window.windowTitle() == "NEW Candidate Detail"
+    assert window.bounce_summary_labels["primary_support"].text() == "$101.25"
+    assert window.bounce_summary_labels["support_strength"].text() == "79.0 / 100"
+    assert window.bounce_summary_labels["failed_support_breaks"].text() == "0"
+    assert window.bounce_history_table.rowCount() == 1
+    assert window.bounce_empty_label.isHidden()
+    assert window.bounce_history_table.item(0, 3).text() == "$113.00"
+    assert window.bounce_interpretation_label.text() == (
+        "This support zone has held 3 of 4 times with a 75.0% success rate "
+        "and an average bounce of 11.5%."
+    )
