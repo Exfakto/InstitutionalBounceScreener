@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -39,7 +40,8 @@ class SettingsDialog(QDialog):
 
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.resize(560, 420)
+        self.resize(640, 520)
+        self.setMinimumSize(480, 360)
 
         self.tabs = QTabWidget()
         self._build_general_tab()
@@ -221,8 +223,7 @@ class SettingsDialog(QDialog):
         )
 
     def _build_general_tab(self) -> None:
-        tab = QWidget()
-        layout = QFormLayout(tab)
+        tab, layout = self._scrollable_form_tab()
 
         self.default_workspace_input = QLineEdit()
         self.auto_save_layout_checkbox = QCheckBox("Auto-save layout")
@@ -235,8 +236,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(tab, "General")
 
     def _build_providers_tab(self) -> None:
-        tab = QWidget()
-        layout = QFormLayout(tab)
+        tab, layout = self._scrollable_form_tab()
 
         self.current_provider_value = QLabel("--")
         self.enabled_providers_value = QLabel("--")
@@ -255,8 +255,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(tab, "Providers")
 
     def _build_refresh_tab(self) -> None:
-        tab = QWidget()
-        layout = QFormLayout(tab)
+        tab, layout = self._scrollable_form_tab()
 
         self.auto_refresh_checkbox = QCheckBox("Enabled")
         self.refresh_interval_spin = QSpinBox()
@@ -271,8 +270,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(tab, "Refresh")
 
     def _build_appearance_tab(self) -> None:
-        tab = QWidget()
-        layout = QFormLayout(tab)
+        tab, layout = self._scrollable_form_tab()
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["Dark", "Light (placeholder)"])
@@ -285,8 +283,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(tab, "Appearance")
 
     def _build_paths_tab(self) -> None:
-        tab = QWidget()
-        layout = QFormLayout(tab)
+        tab, layout = self._scrollable_form_tab()
 
         self.database_path_input = QLineEdit()
         self.database_path_input.setReadOnly(True)
@@ -307,8 +304,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(tab, "Paths")
 
     def _build_app_preferences_tab(self) -> None:
-        tab = QWidget()
-        layout = QFormLayout(tab)
+        tab, layout = self._scrollable_form_tab()
 
         self.default_scan_mode_combo = QComboBox()
         self.default_scan_mode_combo.addItems(["Manual ticker input", "Universe scan mode"])
@@ -333,6 +329,18 @@ class SettingsDialog(QDialog):
         layout.addRow("", self.show_rejected_candidates_checkbox)
 
         self.tabs.addTab(tab, "App Preferences")
+
+    @staticmethod
+    def _scrollable_form_tab():
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget()
+        layout = QFormLayout(content)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        scroll.setWidget(content)
+        return scroll, layout
 
     @staticmethod
     def _section(settings: dict[str, Any], name: str) -> dict[str, Any]:

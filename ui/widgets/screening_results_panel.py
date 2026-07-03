@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLineEdit,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -71,8 +73,18 @@ class ScreeningResultsPanel(QWidget):
         )
         layout.setSpacing(DesignSystem.Spacing.MD)
 
-        layout.addWidget(self.build_screening_controls())
-        layout.addWidget(self.build_export_controls())
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("ScreeningResultsScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(DesignSystem.Spacing.MD)
+
+        content_layout.addWidget(self.build_screening_controls())
+        content_layout.addWidget(self.build_export_controls())
 
         ranked_section, self.ranked_candidates_table, self.ranked_empty_label = (
             self.build_table_section(
@@ -93,12 +105,16 @@ class ScreeningResultsPanel(QWidget):
             )
         )
 
-        layout.addWidget(ranked_section, stretch=3)
-        layout.addWidget(history_section, stretch=2)
-        layout.addWidget(self.build_run_detail_section(), stretch=1)
-        layout.addWidget(self.build_candidate_detail_section(), stretch=2)
+        content_layout.addWidget(ranked_section, stretch=3)
+        content_layout.addWidget(history_section, stretch=2)
+        content_layout.addWidget(self.build_run_detail_section(), stretch=1)
+        content_layout.addWidget(self.build_candidate_detail_section(), stretch=2)
         self.candidate_chart_panel = CandidateChartPanel()
-        layout.addWidget(self.candidate_chart_panel, stretch=2)
+        content_layout.addWidget(self.candidate_chart_panel, stretch=2)
+        content_layout.addStretch(1)
+        scroll_area.setWidget(content)
+        layout.addWidget(scroll_area)
+        self.scroll_area = scroll_area
 
         self.ranked_candidates_table.itemSelectionChanged.connect(
             self.handle_candidate_selection
@@ -141,6 +157,8 @@ class ScreeningResultsPanel(QWidget):
         self.cancel_screening_button.clicked.connect(self.cancel_screening_requested.emit)
         self.screening_status_label = QLabel("Ready")
         self.screening_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.screening_status_label.setProperty("status", "ready")
+        self.screening_status_label.setWordWrap(True)
         self.universe_count_label = QLabel("Universe: --")
         self.universe_count_label.setObjectName("ResearchPreviewFieldValue")
         self.preset_description_label = QLabel("Preset: --")
@@ -196,6 +214,7 @@ class ScreeningResultsPanel(QWidget):
         )
         self.export_status_label = QLabel("No exportable results")
         self.export_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.export_status_label.setProperty("status", "empty")
         self.export_status_label.setWordWrap(True)
 
         layout.addWidget(label)
@@ -244,10 +263,11 @@ class ScreeningResultsPanel(QWidget):
         self.run_screening_button.setEnabled(not active)
         self.cancel_screening_button.setEnabled(active)
         if status_text is not None:
-            self.screening_status_label.setText(status_text)
+            self.set_screening_status(status_text)
 
     def set_screening_status(self, status_text):
         self.screening_status_label.setText(status_text)
+        self.apply_status_property(self.screening_status_label, status_text)
 
     def set_export_enabled(self, enabled):
         for button in (
@@ -259,6 +279,7 @@ class ScreeningResultsPanel(QWidget):
 
     def set_export_status(self, status_text):
         self.export_status_label.setText(status_text or "")
+        self.apply_status_property(self.export_status_label, status_text)
 
     def build_table_section(self, title, empty_text, headers, signal, load_more_signal):
         section = QFrame()
@@ -297,11 +318,20 @@ class ScreeningResultsPanel(QWidget):
         table.setSortingEnabled(True)
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setShowGrid(False)
+        table.setWordWrap(False)
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(30)
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        table.horizontalHeader().setMinimumSectionSize(72)
+        if title == "Ranked Candidates":
+            table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        else:
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         table.setStyleSheet(DesignSystem.table_style())
-        table.setMinimumHeight(160)
+        table.setMinimumHeight(128)
         layout.addWidget(table)
 
         empty_label = QLabel(empty_text)
@@ -603,6 +633,10 @@ class ScreeningResultsPanel(QWidget):
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 else:
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                role = ScreeningResultsPanel.status_role(value)
+                if role:
+                    item.setData(Qt.UserRole + 2, role)
+                    item.setForeground(ScreeningResultsPanel.status_brush(role))
                 if row_index < len(source_rows):
                     item.setData(ScreeningResultsPanel.SOURCE_ROLE, source_rows[row_index])
                 table.setItem(row_index, column, item)
@@ -644,3 +678,42 @@ class ScreeningResultsPanel(QWidget):
         if isinstance(source, dict):
             return source.get(key)
         return getattr(source, key, None)
+
+    @staticmethod
+    def apply_status_property(label, text):
+        normalized = str(text or "").lower()
+        if any(word in normalized for word in ["failed", "error", "unable"]):
+            role = "error"
+        elif any(word in normalized for word in ["warning", "limited", "cancel"]):
+            role = "warning"
+        elif any(word in normalized for word in ["complete", "saved", "ready"]):
+            role = "success"
+        elif any(word in normalized for word in ["processing", "starting"]):
+            role = "running"
+        else:
+            role = "empty"
+        label.setProperty("status", role)
+        label.style().unpolish(label)
+        label.style().polish(label)
+
+    @staticmethod
+    def status_role(value):
+        text = str(value or "").upper()
+        if text in {"A+", "A", "HIGH", "COMPLETED", "COMPLETE"}:
+            return "success"
+        if text in {"B", "C", "MEDIUM", "PARTIAL", "WATCH"}:
+            return "warning"
+        if text in {"D", "REJECT", "LOW", "FAILED", "CANCELLED", "PARTIAL_CANCELLED"}:
+            return "error"
+        return None
+
+    @staticmethod
+    def status_brush(role):
+        from PySide6.QtGui import QColor, QBrush
+
+        colors = {
+            "success": "#4ade80",
+            "warning": "#facc15",
+            "error": "#fb7185",
+        }
+        return QBrush(QColor(colors.get(role, "#cbd5e1")))

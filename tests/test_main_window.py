@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtWidgets import QApplication, QDockWidget
+from PySide6.QtWidgets import QApplication, QDockWidget, QHeaderView
 
 from ui import main_window as main_window_module
 from ui.main_window import MainWindow
@@ -405,7 +405,10 @@ def test_main_window_dashboard_layout_prioritizes_candidate_workspace(patched_wi
     )
     assert layout.indexOf(window.pipeline_progress_panel) < layout.indexOf(window.dashboard)
     assert window.screener_filters_panel.maximumWidth() <= 280
-    assert window.candidates_table.minimumWidth() >= 880
+    assert window.candidates_table.minimumWidth() <= 620
+    assert window.screener_workspace_splitter.sizes()[1] > (
+        window.screener_workspace_splitter.sizes()[0]
+    )
 
 
 def test_main_window_dashboard_starts_with_empty_sections(patched_window):
@@ -926,6 +929,44 @@ def test_main_window_screening_results_view_construction(patched_window):
     assert panel.export_full_run_package_button.text() == (
         "Export Full Run Package JSON"
     )
+    assert panel.scroll_area.widgetResizable() is True
+    assert panel.scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+
+
+def test_main_window_results_tables_have_professional_configuration(patched_window):
+    panel = patched_window.screening_results_panel
+    ranked = panel.ranked_candidates_table
+    history = panel.run_history_table
+
+    assert ranked.alternatingRowColors() is True
+    assert ranked.isSortingEnabled() is True
+    assert ranked.showGrid() is False
+    assert ranked.verticalHeader().defaultSectionSize() >= 30
+    assert ranked.horizontalHeader().sectionResizeMode(5) == QHeaderView.Stretch
+    assert history.horizontalHeader().sectionResizeMode(0) == QHeaderView.Stretch
+
+
+def test_main_window_results_status_rendering(patched_window):
+    panel = patched_window.screening_results_panel
+
+    panel.set_screening_status("Processing AAPL")
+    assert panel.screening_status_label.property("status") == "running"
+
+    panel.set_screening_status("Screening complete")
+    assert panel.screening_status_label.property("status") == "success"
+
+    panel.set_screening_status("Unable to load dashboard data")
+    assert panel.screening_status_label.property("status") == "error"
+
+
+def test_main_window_responsive_resize_behavior(patched_window):
+    window = patched_window
+
+    window.resize(1180, 720)
+
+    assert window.price_chart.minimumWidth() <= 520
+    assert window.candidates_table.minimumWidth() <= 620
+    assert window.dashboard.maximumHeight() <= 280
 
 
 def test_main_window_loads_ranked_candidates_view(patched_window):

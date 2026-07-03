@@ -1,5 +1,5 @@
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QScrollArea
 
 from ui import settings_dialog as settings_dialog_module
 from ui.settings_dialog import SettingsDialog
@@ -93,6 +93,7 @@ def test_settings_dialog_loads_current_settings(app):
     dialog = SettingsDialog(controller=controller)
 
     assert dialog.isModal()
+    assert dialog.minimumWidth() <= 480
     assert dialog.default_workspace_input.text() == "Research"
     assert dialog.auto_save_layout_checkbox.isChecked() is False
     assert dialog.remember_last_ticker_checkbox.isChecked() is True
@@ -102,6 +103,14 @@ def test_settings_dialog_loads_current_settings(app):
     assert dialog.default_scan_preset_input.text() == "Liquid Large Cap"
     assert dialog.max_scan_size_spin.value() == 300
     assert dialog.ui_density_combo.currentText() == "COMPACT"
+
+
+def test_settings_dialog_tabs_are_scrollable(app):
+    dialog = SettingsDialog(controller=FakeSettingsController())
+
+    for index in range(dialog.tabs.count()):
+        assert isinstance(dialog.tabs.widget(index), QScrollArea)
+        assert dialog.tabs.widget(index).widgetResizable() is True
 
 
 def test_settings_dialog_save_updates_config(app):

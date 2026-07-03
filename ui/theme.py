@@ -710,6 +710,38 @@ class Theme:
             font-weight: 700;
         }}
 
+        QLabel#ResearchPreviewFieldValue[status="success"] {{
+            color: {cls.SUCCESS};
+            background-color: rgba(34, 197, 94, 0.10);
+            border: 1px solid rgba(34, 197, 94, 0.35);
+            border-radius: 5px;
+            padding: 3px 7px;
+        }}
+
+        QLabel#ResearchPreviewFieldValue[status="warning"] {{
+            color: {cls.WARNING};
+            background-color: rgba(250, 204, 21, 0.10);
+            border: 1px solid rgba(250, 204, 21, 0.35);
+            border-radius: 5px;
+            padding: 3px 7px;
+        }}
+
+        QLabel#ResearchPreviewFieldValue[status="error"] {{
+            color: {cls.ERROR};
+            background-color: rgba(248, 113, 113, 0.10);
+            border: 1px solid rgba(248, 113, 113, 0.35);
+            border-radius: 5px;
+            padding: 3px 7px;
+        }}
+
+        QLabel#ResearchPreviewFieldValue[status="running"] {{
+            color: {cls.PRIMARY};
+            background-color: {cls.PRIMARY_SOFT};
+            border: 1px solid {cls.PRIMARY};
+            border-radius: 5px;
+            padding: 3px 7px;
+        }}
+
         QLabel#ResearchPreviewSignal {{
             color: {cls.TEXT};
             background-color: {cls.PRIMARY_SOFT};
@@ -775,6 +807,11 @@ class Theme:
             padding: {DesignSystem.Spacing.XL}px;
             font-weight: 600;
             line-height: 130%;
+        }}
+
+        QScrollArea#ScreeningResultsScrollArea {{
+            background: transparent;
+            border: none;
         }}
 
         QGroupBox#ResearchPreviewCard,

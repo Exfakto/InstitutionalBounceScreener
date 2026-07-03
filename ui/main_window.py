@@ -231,8 +231,8 @@ class MainWindow(QMainWindow):
         ##########################################################
 
         self.dashboard = InstitutionalDashboard()
-        self.dashboard.setMinimumHeight(220)
-        self.dashboard.setMaximumHeight(320)
+        self.dashboard.setMinimumHeight(180)
+        self.dashboard.setMaximumHeight(280)
 
         ##########################################################
         # Main Workspace
@@ -323,12 +323,12 @@ class MainWindow(QMainWindow):
         self.workspace_splitter = self.screener_workspace_splitter
         self.center_splitter = self.screener_workspace_splitter
 
-        self.price_chart.setMinimumSize(720, 360)
-        self.candidates_table.setMinimumSize(880, 420)
+        self.price_chart.setMinimumSize(520, 280)
+        self.candidates_table.setMinimumSize(620, 320)
         self.screener_filters_panel.setMinimumWidth(190)
-        self.screener_filters_panel.setMaximumWidth(280)
-        self.research_preview.setMinimumWidth(360)
-        self.trade_card.setMinimumWidth(360)
+        self.screener_filters_panel.setMaximumWidth(260)
+        self.research_preview.setMinimumWidth(300)
+        self.trade_card.setMinimumWidth(300)
 
         self.screener_workspace_splitter.addWidget(self.screener_filters_panel)
         self.screener_workspace_splitter.addWidget(self.candidates_table)
