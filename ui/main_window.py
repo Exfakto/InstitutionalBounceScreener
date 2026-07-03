@@ -169,7 +169,9 @@ class MainWindow(QMainWindow):
         self.operations_toolbar.save_preset_requested.connect(self.save_screener_preset)
         self.operations_toolbar.load_preset_requested.connect(self.load_screener_preset)
         self.operations_toolbar.reset_filters_requested.connect(self.reset_screener_filters)
-        self.operations_toolbar.refresh_results_requested.connect(self.refresh_screener_results)
+        self.operations_toolbar.refresh_results_requested.connect(
+            self.refresh_dashboard_results
+        )
         self.operations_toolbar.open_detail_requested.connect(
             self.open_selected_stock_detail
         )
@@ -923,7 +925,24 @@ class MainWindow(QMainWindow):
 
     def refresh_screener_results(self):
 
-        return self.run_screener()
+        return self.refresh_dashboard_results()
+
+    # ----------------------------------------------------------
+
+    def refresh_dashboard_results(self):
+
+        try:
+            self.clear_screener_results()
+            result = self.run_screener()
+            self.refresh_statistics()
+            return result or {"success": True}
+        except Exception as exc:
+            self.clear_screener_results()
+            self.activity_panel.set_progress(0)
+            self.activity_panel.set_status("Refresh failed")
+            self.update_screener_status(candidate_count=0)
+            self.log(f"Dashboard refresh failed: {exc}")
+            return {"success": False, "error": str(exc)}
 
     # ----------------------------------------------------------
 
@@ -945,6 +964,7 @@ class MainWindow(QMainWindow):
             self.trade_card.clear()
         if hasattr(self, "price_chart"):
             self.price_chart.clear()
+        self.refresh_dashboard()
 
     # ----------------------------------------------------------
 

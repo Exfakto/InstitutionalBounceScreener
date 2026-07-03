@@ -76,6 +76,7 @@ class FakeProcessingController:
 class FakeScoringController:
     def __init__(self):
         self.calls = 0
+        self.candidate_sets = []
 
     def run_screener(self):
         self.calls += 1
@@ -86,16 +87,8 @@ class FakeScoringController:
             "support_score": SimpleNamespace(value=91.0),
             "bounce_score": SimpleNamespace(value=80.0),
         }
-        candidates = [
-            SimpleNamespace(
-                ticker="AAPL",
-                company_name="Apple Inc.",
-                primary_score_value=91.0,
-                composite_score=SimpleNamespace(value=91.0),
-                score_map=scores,
-                scores=[],
-                warnings=[],
-            )
+        candidates = self.candidate_sets.pop(0) if self.candidate_sets else [
+            self.make_candidate("AAPL", "Apple Inc.", 91.0, scores)
         ]
         return {
             "candidates": candidates,
@@ -103,6 +96,18 @@ class FakeScoringController:
             "skipped": 0,
             "elapsed_seconds": 0.1,
         }
+
+    @staticmethod
+    def make_candidate(ticker, company_name, score, score_map=None):
+        return SimpleNamespace(
+            ticker=ticker,
+            company_name=company_name,
+            primary_score_value=score,
+            composite_score=SimpleNamespace(value=score),
+            score_map=score_map or {},
+            scores=[],
+            warnings=[],
+        )
 
     def get_candidate_detail(self, ticker):
         return {}
@@ -334,6 +339,45 @@ def test_main_window_refresh_results_reuses_run_screen(patched_window):
     assert window.candidates_table.rowCount() == 1
 
 
+def test_main_window_dashboard_refresh_method_exists(patched_window):
+    window = patched_window
+
+    assert callable(window.refresh_dashboard_results)
+
+
+def test_main_window_dashboard_refresh_clears_old_rows_before_loading_new_rows(patched_window):
+    window = patched_window
+    old_candidates = [
+        FakeScoringController.make_candidate("OLD1", "Old One", 82.0),
+        FakeScoringController.make_candidate("OLD2", "Old Two", 81.0),
+    ]
+    new_candidates = [
+        FakeScoringController.make_candidate("NEW", "New Corp", 93.0)
+    ]
+    window.scoring_controller.candidate_sets = [old_candidates, new_candidates]
+
+    window.refresh_dashboard_results()
+    assert window.candidates_table.rowCount() == 2
+    assert window.dashboard.best_opportunities_table.rowCount() == 2
+
+    window.refresh_dashboard_results()
+
+    assert window.candidates_table.rowCount() == 1
+    assert window.candidates_table.item(0, 0).text() == "NEW"
+    assert window.dashboard.best_opportunities_table.rowCount() == 1
+    assert window.dashboard.best_opportunities_table.item(0, 0).text() == "NEW"
+
+
+def test_main_window_refresh_results_action_is_wired_to_dashboard_refresh(patched_window):
+    window = patched_window
+
+    window.operations_toolbar.buttons["refresh_results"].click()
+
+    assert window.scoring_controller.calls == 1
+    assert window.candidates_table.rowCount() == 1
+    assert window.dashboard.best_opportunities_table.rowCount() == 1
+
+
 def test_main_window_reset_clears_results_and_filters(patched_window):
     window = patched_window
     window.run_screener()
@@ -342,6 +386,7 @@ def test_main_window_reset_clears_results_and_filters(patched_window):
 
     assert result["success"] is True
     assert window.candidates_table.rowCount() == 0
+    assert window.dashboard.best_opportunities_table.rowCount() == 0
     assert window.candidate_count_status.text() == "Candidate count: 0"
     assert window.active_preset_status.text() == "Active preset: --"
 
