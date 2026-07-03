@@ -37,7 +37,9 @@ class CandidateDetailWindow(QDialog):
         self.build_ui()
 
     def build_ui(self):
-        layout = QVBoxLayout(self)
+        layout = self.layout()
+        if layout is None:
+            layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
@@ -53,6 +55,25 @@ class CandidateDetailWindow(QDialog):
         self.tabs.addTab(self.bounce_history_tab(), "Bounce History")
         self.tabs.addTab(self.risk_tab(), "Risk")
         layout.addWidget(self.tabs)
+
+    def set_candidate(self, candidate=None, detail=None):
+        self.candidate = candidate
+        self.detail = detail or {}
+        self.summary_labels = {}
+        self.overview_cards = {}
+        self.section_labels = {}
+
+        self.setWindowTitle(f"{self.ticker_text()} Candidate Detail")
+
+        old_layout = self.layout()
+        if old_layout is not None:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+
+        self.build_ui()
 
     def overview_tab(self):
         tab = QWidget()
@@ -180,18 +201,52 @@ class CandidateDetailWindow(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        header = QLabel("Technical Analysis Summary")
+        header = QLabel("Professional Technical Analysis")
         header.setObjectName("CandidateDetailSectionTitle")
         layout.addWidget(header)
+
+        self.technical_labels = {}
+
+        for title, items in self.technical_sections():
+            layout.addWidget(self.technical_section(title, items))
+
+        summary_section = QFrame()
+        summary_section.setObjectName("CandidateDetailWhySection")
+        summary_layout = QVBoxLayout(summary_section)
+        summary_layout.setContentsMargins(14, 12, 14, 12)
+        summary_layout.setSpacing(8)
+
+        summary_title = QLabel("Technical Summary")
+        summary_title.setObjectName("CandidateDetailSectionTitle")
+        self.technical_summary_label = QLabel(self.technical_summary_text())
+        self.technical_summary_label.setObjectName("CandidateDetailWhyItem")
+        self.technical_summary_label.setWordWrap(True)
+        self.technical_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        summary_layout.addWidget(summary_title)
+        summary_layout.addWidget(self.technical_summary_label)
+        layout.addWidget(summary_section)
+        layout.addStretch()
+        return tab
+
+    def technical_section(self, title, items):
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title_label)
 
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
 
-        self.technical_labels = {}
-        for index, (key, title, value, role) in enumerate(self.technical_items()):
-            card, value_label = self.create_summary_card(title, value)
+        for index, (key, item_title, value, role) in enumerate(items):
+            card, value_label = self.create_summary_card(item_title, value)
             card.setObjectName("CandidateDetailTechnicalCard")
             value_label.setProperty("status", role)
             value_label.style().unpolish(value_label)
@@ -200,42 +255,126 @@ class CandidateDetailWindow(QDialog):
             grid.addWidget(card, index // 3, index % 3)
 
         layout.addLayout(grid)
-        layout.addStretch()
-        return tab
+        return section
 
-    def technical_items(self):
+    def technical_sections(self):
         return [
-            self.technical_item("rsi", "RSI", ("rsi", "rsi14"), value_type="score"),
-            self.technical_item("macd", "MACD", ("macd", "macd_value")),
-            self.technical_item("atr", "ATR", ("atr", "atr14"), value_type="price"),
-            self.technical_item("ema20", "EMA 20", ("ema20", "ema_20", "ema20_price"), value_type="price"),
-            self.technical_item("ema50", "EMA 50", ("ema50", "ema_50", "ema50_price"), value_type="price"),
-            self.technical_item("ema200", "EMA 200", ("ema200", "ema_200", "ema200_price"), value_type="price"),
-            self.technical_item("vwap", "VWAP", ("vwap",), value_type="price"),
-            self.technical_item("trend", "Trend", ("trend", "trend_score"), value_type="trend"),
-            self.technical_item(
-                "relative_strength",
-                "Relative Strength",
-                ("relative_strength", "relative_strength_score"),
-                value_type="score",
+            (
+                "Trend Analysis",
+                [
+                    self.technical_item(
+                        "trend",
+                        "Trend",
+                        ("trend", "trend_label", "trend_score"),
+                        value_type="trend",
+                    ),
+                    self.technical_item(
+                        "market_structure",
+                        "Market Structure",
+                        ("market_structure", "structure", "price_structure"),
+                        value_type="trend",
+                    ),
+                    self.technical_item(
+                        "ema20",
+                        "EMA 20",
+                        ("ema20", "ema_20", "ema20_price"),
+                        value_type="price",
+                    ),
+                    self.technical_item(
+                        "ema50",
+                        "EMA 50",
+                        ("ema50", "ema_50", "ema50_price"),
+                        value_type="price",
+                    ),
+                    self.technical_item(
+                        "ema200",
+                        "EMA 200",
+                        ("ema200", "ema_200", "ema200_price"),
+                        value_type="price",
+                    ),
+                ],
             ),
-            self.technical_item(
-                "distance_to_support",
-                "Distance to Support",
-                ("distance_to_support", "distance_to_support_pct", "support_distance"),
-                value_type="percent",
+            (
+                "Momentum",
+                [
+                    self.technical_item(
+                        "rsi",
+                        "RSI (14)",
+                        ("rsi", "rsi14"),
+                        value_type="rsi_status",
+                    ),
+                    self.technical_item(
+                        "macd",
+                        "MACD",
+                        ("macd", "macd_value"),
+                        value_type="signed_status",
+                    ),
+                    self.technical_item(
+                        "signal_line",
+                        "Signal Line",
+                        ("signal_line", "macd_signal", "macd_signal_line"),
+                        value_type="signed_status",
+                    ),
+                    self.technical_item(
+                        "macd_histogram",
+                        "MACD Histogram",
+                        ("macd_histogram", "histogram", "macd_hist"),
+                        value_type="signed_status",
+                    ),
+                    self.technical_item(
+                        "relative_strength",
+                        "Relative Strength vs SPY",
+                        ("relative_strength_vs_spy", "relative_strength", "relative_strength_score"),
+                        value_type="score_status",
+                    ),
+                ],
             ),
-            self.technical_item(
-                "support_strength",
-                "Support Strength",
-                ("support_strength", "support_strength_score", "support_score"),
-                value_type="score",
-            ),
-            self.technical_item(
-                "bounce_probability",
-                "Bounce Probability",
-                ("bounce_probability", "bounce_success_rate", "bounce_score"),
-                value_type="percent_high_good",
+            (
+                "Support Analysis",
+                [
+                    self.technical_item(
+                        "primary_support",
+                        "Primary Support",
+                        ("primary_support", "support_price", "support_level"),
+                        value_type="price",
+                    ),
+                    self.technical_item(
+                        "support_strength",
+                        "Support Strength",
+                        ("support_strength", "support_strength_score", "support_score"),
+                        value_type="confidence",
+                    ),
+                    self.technical_item(
+                        "distance_to_support",
+                        "Distance From Support %",
+                        ("distance_to_support", "distance_to_support_pct", "support_distance"),
+                        value_type="percent_low_good",
+                    ),
+                    self.technical_item(
+                        "historical_tests",
+                        "Number of Historical Tests",
+                        ("support_tests", "support_test_count", "successful_support_tests", "bounce_count"),
+                        value_type="integer",
+                    ),
+                    self.technical_item(
+                        "bounce_success_rate",
+                        "Bounce Success Rate",
+                        ("bounce_success_rate", "bounce_success_pct", "historical_bounce_success_rate", "bounce_probability"),
+                        value_type="percent_high_good",
+                    ),
+                    self.technical_item(
+                        "average_historical_bounce",
+                        "Average Historical Bounce",
+                        ("average_historical_bounce", "average_bounce", "avg_bounce", "average_bounce_pct"),
+                        value_type="percent_high_good",
+                    ),
+                    self.technical_item(
+                        "support_confidence",
+                        "Support Confidence",
+                        ("support_confidence", "support_confidence_score", "confidence"),
+                        value_type="confidence",
+                    ),
+                ],
             ),
         ]
 
@@ -269,9 +408,27 @@ class CandidateDetailWindow(QDialog):
 
         if value_type == "price":
             return f"${number:,.2f}"
-        if value_type in {"percent", "percent_high_good"}:
+        if value_type in {"percent", "percent_high_good", "percent_low_good"}:
             return f"{number:.1f}%"
+        if value_type == "integer":
+            return f"{int(number):,}"
+        if value_type == "confidence":
+            return f"{number:.1f} / 100"
+        if value_type == "rsi_status":
+            return f"{number:.1f} ({self.technical_status_text(value, value_type)})"
+        if value_type in {"signed_status", "score_status"}:
+            return f"{number:.1f} ({self.technical_status_text(value, value_type)})"
         return f"{number:.1f}"
+
+    def technical_status_text(self, value, value_type):
+        role = self.technical_role(value, value_type)
+        if role == "positive":
+            return "Bullish"
+        if role == "negative":
+            return "Bearish"
+        if role == "watch":
+            return "Neutral"
+        return "N/A"
 
     def technical_role(self, value, value_type):
         if value in (None, ""):
@@ -296,8 +453,43 @@ class CandidateDetailWindow(QDialog):
                 return "watch"
             return "negative"
 
+        if value_type == "percent_low_good":
+            if number <= 3:
+                return "positive"
+            if number <= 8:
+                return "watch"
+            return "negative"
+
         if value_type == "percent_high_good":
             if number >= 70:
+                return "positive"
+            if number >= 50:
+                return "watch"
+            return "negative"
+
+        if value_type == "rsi_status":
+            if 50 <= number <= 70:
+                return "positive"
+            if 40 <= number < 50 or 70 < number <= 75:
+                return "watch"
+            return "negative"
+
+        if value_type == "signed_status":
+            if number > 0:
+                return "positive"
+            if number < 0:
+                return "negative"
+            return "watch"
+
+        if value_type == "score_status":
+            if number >= 70:
+                return "positive"
+            if number >= 50:
+                return "watch"
+            return "negative"
+
+        if value_type == "confidence":
+            if number >= 75:
                 return "positive"
             if number >= 50:
                 return "watch"
@@ -314,11 +506,100 @@ class CandidateDetailWindow(QDialog):
             return "watch"
         return "negative"
 
+    def technical_summary_text(self):
+        summary = []
+
+        price = self.number_value(
+            self.candidate_value("current_price")
+            or self.candidate_value("price")
+            or self.metrics().get("current_price")
+            or self.metrics().get("price")
+        )
+        ema_values = [
+            self.number_value(self.technical_value("ema20") or self.technical_value("ema_20")),
+            self.number_value(self.technical_value("ema50") or self.technical_value("ema_50")),
+            self.number_value(self.technical_value("ema200") or self.technical_value("ema_200")),
+        ]
+        known_emas = [value for value in ema_values if value is not None]
+        if price is not None and len(known_emas) == 3:
+            if all(price > value for value in known_emas):
+                summary.append("The stock remains above all major moving averages.")
+            elif all(price < value for value in known_emas):
+                summary.append("The stock is trading below all major moving averages.")
+            else:
+                summary.append("The stock is mixed relative to major moving averages.")
+        else:
+            summary.append("Moving average positioning is N/A.")
+
+        rsi = self.number_value(self.technical_value("rsi") or self.technical_value("rsi14"))
+        macd = self.number_value(self.technical_value("macd") or self.technical_value("macd_value"))
+        histogram = self.number_value(
+            self.technical_value("macd_histogram") or self.technical_value("macd_hist")
+        )
+        if any(value is not None for value in (rsi, macd, histogram)):
+            if (rsi is None or rsi >= 50) and (macd is None or macd > 0) and (
+                histogram is None or histogram >= 0
+            ):
+                summary.append("Momentum is improving.")
+            elif (rsi is not None and rsi < 45) or (macd is not None and macd < 0):
+                summary.append("Momentum is weakening.")
+            else:
+                summary.append("Momentum is neutral.")
+        else:
+            summary.append("Momentum readings are N/A.")
+
+        distance = self.number_value(
+            self.technical_value("distance_to_support_pct")
+            or self.technical_value("distance_to_support")
+            or self.technical_value("support_distance")
+        )
+        support_strength = self.number_value(
+            self.technical_value("support_strength_score")
+            or self.technical_value("support_strength")
+            or self.technical_value("support_score")
+        )
+        if distance is not None and support_strength is not None:
+            strength_text = "strong institutional" if support_strength >= 70 else "developing"
+            summary.append(
+                f"Price is trading within {distance:.1f}% of a {strength_text} support zone."
+            )
+        elif distance is not None:
+            summary.append(f"Price is trading within {distance:.1f}% of support.")
+        else:
+            summary.append("Support proximity is N/A.")
+
+        bounce_probability = self.number_value(
+            self.technical_value("bounce_probability")
+            or self.technical_value("bounce_success_rate")
+            or self.technical_value("historical_bounce_success_rate")
+            or self.technical_value("bounce_score")
+        )
+        if bounce_probability is not None:
+            if bounce_probability >= 70:
+                summary.append("Historical bounce probability is high.")
+            elif bounce_probability >= 50:
+                summary.append("Historical bounce probability is moderate.")
+            else:
+                summary.append("Historical bounce probability is weak.")
+        else:
+            summary.append("Historical bounce probability is N/A.")
+
+        return "\n".join(summary)
+
     def institutional_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
+
+        header = QLabel("Institutional Analysis")
+        header.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(header)
+
+        self.institutional_labels = {}
+
+        for title, items in self.institutional_sections():
+            layout.addWidget(self.institutional_section(title, items))
 
         outlook_card = QFrame()
         outlook_card.setObjectName("CandidateDetailInstitutionalOutlookCard")
@@ -344,71 +625,155 @@ class CandidateDetailWindow(QDialog):
 
         outlook_layout.addWidget(outlook_title)
         outlook_layout.addWidget(self.institutional_outlook_label)
+
+        self.institutional_summary_label = QLabel(self.institutional_summary_text())
+        self.institutional_summary_label.setObjectName("CandidateDetailWhyItem")
+        self.institutional_summary_label.setWordWrap(True)
+        self.institutional_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        outlook_layout.addWidget(self.institutional_summary_label)
+
         layout.addWidget(outlook_card)
+        layout.addStretch()
+        return tab
+
+    def institutional_section(self, title, items):
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title_label)
 
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
 
-        self.institutional_labels = {}
-        for index, (key, title, value, role) in enumerate(self.institutional_items()):
-            card, value_label = self.create_summary_card(title, value)
+        for index, (key, item_title, value, role) in enumerate(items):
+            card, value_label = self.create_summary_card(item_title, value)
             card.setObjectName("CandidateDetailInstitutionalCard")
             value_label.setProperty("status", role)
             value_label.style().unpolish(value_label)
             value_label.style().polish(value_label)
             self.institutional_labels[key] = value_label
-            grid.addWidget(card, index // 2, index % 2)
+            grid.addWidget(card, index // 3, index % 3)
 
         layout.addLayout(grid)
-        layout.addStretch()
-        return tab
+        return section
+
+    def institutional_sections(self):
+        return [
+            (
+                "Ownership Summary",
+                [
+                    self.institutional_item(
+                        "ownership",
+                        "Institutional Ownership %",
+                        ("institutional_ownership_pct", "institutional_ownership"),
+                        value_type="percent_high_good",
+                    ),
+                    self.institutional_item(
+                        "ownership_change_qoq",
+                        "Ownership Change QoQ",
+                        ("institutional_ownership_change_qoq", "ownership_change_qoq"),
+                        value_type="signed_percent",
+                    ),
+                    self.institutional_item(
+                        "holder_count",
+                        "Institutional Holders Count",
+                        ("institutional_holders", "holder_count", "holders"),
+                        value_type="integer",
+                    ),
+                    self.institutional_item(
+                        "holder_change",
+                        "Institutional Holders Change",
+                        ("institutional_holders_change", "holder_change", "holders_change_qoq"),
+                        value_type="signed_integer",
+                    ),
+                ],
+            ),
+            (
+                "Institutional Flow",
+                [
+                    self.institutional_item(
+                        "net_buying",
+                        "Net Institutional Buying",
+                        ("net_institutional_buying", "thirteen_f_net_change", "13f_net_change"),
+                        value_type="currency",
+                    ),
+                    self.institutional_item(
+                        "major_buyers",
+                        "Major Buyers",
+                        ("major_buyers", "top_buyers", "institutional_buyers"),
+                        value_type="list",
+                    ),
+                    self.institutional_item(
+                        "major_sellers",
+                        "Major Sellers",
+                        ("major_sellers", "top_sellers", "institutional_sellers"),
+                        value_type="list",
+                    ),
+                ],
+            ),
+            (
+                "13F Activity",
+                [
+                    self.institutional_item(
+                        "recent_13f_activity",
+                        "Recent 13F Activity",
+                        (
+                            "recent_13f_activity",
+                            "13f_status",
+                            "thirteen_f_status",
+                            "latest_13f_filing_date",
+                        ),
+                        value_type="text",
+                    ),
+                    self.institutional_item(
+                        "recent_13f_accumulation",
+                        "Recent 13F Accumulation",
+                        (
+                            "recent_13f_accumulation",
+                            "13f_accumulation",
+                            "thirteen_f_accumulation",
+                        ),
+                        value_type="text",
+                    ),
+                ],
+            ),
+            (
+                "Insider Activity",
+                [
+                    self.institutional_item(
+                        "insider_buying",
+                        "Insider Buying",
+                        ("insider_buying", "insider_buying_flag", "insider_buying_score"),
+                        value_type="flag_positive",
+                    ),
+                    self.institutional_item(
+                        "insider_selling",
+                        "Insider Selling",
+                        ("insider_selling", "insider_selling_flag", "insider_selling_score"),
+                        value_type="flag_negative",
+                    ),
+                    self.institutional_item(
+                        "insider_net_activity",
+                        "Insider Net Activity",
+                        ("insider_net_activity", "net_insider_activity", "insider_net_buying"),
+                        value_type="signed_text",
+                    ),
+                ],
+            ),
+        ]
 
     def institutional_items(self):
         return [
-            self.institutional_item(
-                "ownership",
-                "Institutional Ownership",
-                ("institutional_ownership_pct", "institutional_ownership"),
-                value_type="percent_high_good",
-            ),
-            self.institutional_item(
-                "ownership_change_qoq",
-                "Ownership Change QoQ",
-                ("institutional_ownership_change_qoq", "ownership_change_qoq"),
-                value_type="signed_percent",
-            ),
-            self.institutional_item(
-                "net_buying",
-                "Net Institutional Buying",
-                ("net_institutional_buying", "thirteen_f_net_change", "13f_net_change"),
-                value_type="currency",
-            ),
-            self.institutional_item(
-                "holder_count",
-                "Number of Institutional Holders",
-                ("institutional_holders", "holder_count", "holders"),
-                value_type="integer",
-            ),
-            self.institutional_item(
-                "recent_13f_activity",
-                "Recent 13F Activity",
-                ("recent_13f_activity", "13f_status", "thirteen_f_status", "latest_13f_filing_date"),
-                value_type="text",
-            ),
-            self.institutional_item(
-                "insider_buying",
-                "Insider Buying",
-                ("insider_buying", "insider_buying_flag", "insider_buying_score"),
-                value_type="flag_positive",
-            ),
-            self.institutional_item(
-                "insider_selling",
-                "Insider Selling",
-                ("insider_selling", "insider_selling_flag", "insider_selling_score"),
-                value_type="flag_negative",
-            ),
+            item
+            for _, section_items in self.institutional_sections()
+            for item in section_items
         ]
 
     def institutional_item(self, key, title, aliases, value_type="text"):
@@ -433,6 +798,11 @@ class CandidateDetailWindow(QDialog):
         if value in (None, ""):
             return "N/A"
 
+        if value_type == "list":
+            if isinstance(value, (list, tuple)):
+                return ", ".join(str(item) for item in value) if value else "N/A"
+            return str(value)
+
         if value_type in {"flag_positive", "flag_negative"}:
             if isinstance(value, bool):
                 return "Yes" if value else "No"
@@ -451,6 +821,12 @@ class CandidateDetailWindow(QDialog):
             return self.format_currency_value(number, value)
         if value_type == "integer":
             return f"{int(number):,}" if number is not None else str(value)
+        if value_type == "signed_integer":
+            return f"{int(number):+,}" if number is not None else str(value)
+        if value_type == "signed_text":
+            if number is not None:
+                return self.format_currency_value(number, value)
+            return str(value)
         return str(value)
 
     @staticmethod
@@ -495,23 +871,38 @@ class CandidateDetailWindow(QDialog):
             if number < 0:
                 return "negative"
             return "neutral"
+        if value_type in {"signed_integer", "signed_text"}:
+            if number is not None:
+                if number > 0:
+                    return "positive"
+                if number < 0:
+                    return "negative"
+                return "neutral"
+            text = str(value).lower()
+            if any(word in text for word in ("buying", "positive", "accumulation", "inflow")):
+                return "positive"
+            if any(word in text for word in ("selling", "negative", "distribution", "outflow")):
+                return "negative"
+            return "neutral"
         return "neutral"
 
     def institutional_outlook_text(self):
         score = self.institutional_outlook_score()
         if score is None:
-            return "N/A"
+            return "Unknown"
+        if score >= 4:
+            return "Strong Accumulation"
         if score >= 2:
-            return "Strong"
+            return "Accumulation"
         if score <= -2:
-            return "Weak"
+            return "Distribution"
         return "Neutral"
 
     def institutional_outlook_role(self):
         outlook = self.institutional_outlook_text()
-        if outlook == "Strong":
+        if outlook in {"Strong Accumulation", "Accumulation"}:
             return "positive"
-        if outlook == "Weak":
+        if outlook == "Distribution":
             return "negative"
         if outlook == "Neutral":
             return "watch"
@@ -522,8 +913,10 @@ class CandidateDetailWindow(QDialog):
         score = 0
 
         ownership = self.number_value(
-            self.institutional_value("institutional_ownership_pct")
-            or self.institutional_value("institutional_ownership")
+            self.first_existing(
+                self.institutional_value("institutional_ownership_pct"),
+                self.institutional_value("institutional_ownership"),
+            )
         )
         if ownership is not None:
             values_seen += 1
@@ -533,21 +926,49 @@ class CandidateDetailWindow(QDialog):
                 score -= 1
 
         ownership_change = self.number_value(
-            self.institutional_value("institutional_ownership_change_qoq")
-            or self.institutional_value("ownership_change_qoq")
+            self.first_existing(
+                self.institutional_value("institutional_ownership_change_qoq"),
+                self.institutional_value("ownership_change_qoq"),
+            )
         )
         if ownership_change is not None:
+                values_seen += 1
+                score += 1 if ownership_change > 0 else -1 if ownership_change < 0 else 0
+
+        holder_change = self.number_value(
+            self.first_existing(
+                self.institutional_value("institutional_holders_change"),
+                self.institutional_value("holder_change"),
+                self.institutional_value("holders_change_qoq"),
+            )
+        )
+        if holder_change is not None:
             values_seen += 1
-            score += 1 if ownership_change > 0 else -1 if ownership_change < 0 else 0
+            score += 1 if holder_change > 0 else -1 if holder_change < 0 else 0
 
         net_buying = self.number_value(
-            self.institutional_value("net_institutional_buying")
-            or self.institutional_value("thirteen_f_net_change")
-            or self.institutional_value("13f_net_change")
+            self.first_existing(
+                self.institutional_value("net_institutional_buying"),
+                self.institutional_value("thirteen_f_net_change"),
+                self.institutional_value("13f_net_change"),
+            )
         )
         if net_buying is not None:
             values_seen += 1
             score += 1 if net_buying > 0 else -1 if net_buying < 0 else 0
+
+        accumulation = self.first_existing(
+            self.institutional_value("recent_13f_accumulation"),
+            self.institutional_value("13f_accumulation"),
+            self.institutional_value("thirteen_f_accumulation"),
+        )
+        if accumulation not in (None, ""):
+            values_seen += 1
+            text = str(accumulation).lower()
+            if any(word in text for word in ("strong", "accumulation", "buying", "positive")):
+                score += 1
+            elif any(word in text for word in ("distribution", "selling", "negative")):
+                score -= 1
 
         buying = self.institutional_value("insider_buying_flag")
         if buying not in (None, ""):
@@ -562,6 +983,68 @@ class CandidateDetailWindow(QDialog):
         if values_seen == 0:
             return None
         return score
+
+    def institutional_summary_text(self):
+        outlook = self.institutional_outlook_text()
+        ownership = self.number_value(
+            self.first_existing(
+                self.institutional_value("institutional_ownership_pct"),
+                self.institutional_value("institutional_ownership"),
+            )
+        )
+        holder_change = self.number_value(
+            self.first_existing(
+                self.institutional_value("institutional_holders_change"),
+                self.institutional_value("holder_change"),
+                self.institutional_value("holders_change_qoq"),
+            )
+        )
+        activity = self.first_existing(
+            self.institutional_value("recent_13f_accumulation"),
+            self.institutional_value("13f_accumulation"),
+            self.institutional_value("thirteen_f_accumulation"),
+            self.institutional_value("recent_13f_activity"),
+        )
+
+        if outlook == "Unknown":
+            return "Institutional sponsorship is N/A."
+
+        if outlook == "Distribution":
+            lead = "Institutional sponsorship shows distribution risk."
+        elif outlook == "Strong Accumulation":
+            lead = "Institutional sponsorship appears strong."
+        elif outlook == "Accumulation":
+            lead = "Institutional sponsorship appears constructive."
+        else:
+            lead = "Institutional sponsorship appears neutral."
+
+        details = []
+        if ownership is not None:
+            if ownership >= 60:
+                details.append("Ownership is above 60%")
+            elif ownership >= 35:
+                details.append("ownership is moderate")
+            else:
+                details.append("ownership is below institutional leadership levels")
+        else:
+            details.append("ownership is N/A")
+
+        if holder_change is not None:
+            if holder_change > 0:
+                details.append("holders increased last quarter")
+            elif holder_change < 0:
+                details.append("holders declined last quarter")
+            else:
+                details.append("holder count was flat last quarter")
+        else:
+            details.append("holder change is N/A")
+
+        if activity not in (None, ""):
+            details.append(f"recent 13F activity suggests {activity}")
+        else:
+            details.append("recent 13F activity is N/A")
+
+        return f"{lead} " + ", ".join(details) + "."
 
     def bounce_history_tab(self):
         tab = QWidget()

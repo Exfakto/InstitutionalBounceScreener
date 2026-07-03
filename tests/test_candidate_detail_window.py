@@ -47,20 +47,30 @@ def test_candidate_detail_window_accepts_candidate_object(app):
             "bounce_probability": 84.0,
             "rsi14": 58.2,
             "macd": 1.25,
+            "macd_signal": 0.8,
+            "macd_histogram": 0.45,
             "atr": 3.2,
             "ema20": 448.5,
             "ema50": 431.25,
             "ema200": 390.1,
             "vwap": 446.75,
+            "market_structure": "Bullish",
+            "primary_support": 438.0,
             "trend_score": 76.0,
             "distance_to_support_pct": 2.4,
             "support_strength_score": 88.0,
+            "support_confidence": 82.0,
             "institutional_ownership_change_qoq": 1.3,
             "net_institutional_buying": 250000000,
             "institutional_holders": 1240,
+            "institutional_holders_change": 34,
             "recent_13f_activity": "Current",
+            "recent_13f_accumulation": "accumulation",
+            "major_buyers": ["BlackRock", "Vanguard"],
+            "major_sellers": ["Small Cap Fund"],
             "insider_buying_flag": 1,
             "insider_selling_flag": 0,
+            "insider_net_activity": 1250000,
             "upcoming_earnings": "2026-07-24",
             "short_interest_pct": 6.5,
             "support_failure_risk_pct": 22.0,
@@ -114,28 +124,50 @@ def test_candidate_detail_window_accepts_candidate_object(app):
         "* Positive relative strength",
         "* High bounce probability",
     ]
-    assert window.technical_labels["rsi"].text() == "58.2"
-    assert window.technical_labels["macd"].text() == "1.2"
-    assert window.technical_labels["atr"].text() == "$3.20"
+    assert window.technical_labels["trend"].text() == "76.0"
+    assert window.technical_labels["trend"].property("status") == "positive"
+    assert window.technical_labels["market_structure"].text() == "Bullish"
+    assert window.technical_labels["market_structure"].property("status") == "positive"
     assert window.technical_labels["ema20"].text() == "$448.50"
     assert window.technical_labels["ema50"].text() == "$431.25"
     assert window.technical_labels["ema200"].text() == "$390.10"
-    assert window.technical_labels["vwap"].text() == "$446.75"
-    assert window.technical_labels["trend"].text() == "76.0"
-    assert window.technical_labels["relative_strength"].text() == "81.0"
+    assert window.technical_labels["rsi"].text() == "58.2 (Bullish)"
+    assert window.technical_labels["macd"].text() == "1.2 (Bullish)"
+    assert window.technical_labels["signal_line"].text() == "0.8 (Bullish)"
+    assert window.technical_labels["macd_histogram"].text() == "0.5 (Bullish)"
+    assert window.technical_labels["relative_strength"].text() == "81.0 (Bullish)"
+    assert window.technical_labels["primary_support"].text() == "$438.00"
     assert window.technical_labels["distance_to_support"].text() == "2.4%"
-    assert window.technical_labels["support_strength"].text() == "88.0"
-    assert window.technical_labels["bounce_probability"].text() == "84.0%"
-    assert window.technical_labels["bounce_probability"].property("status") == "positive"
-    assert window.institutional_outlook_label.text() == "Strong"
+    assert window.technical_labels["support_strength"].text() == "88.0 / 100"
+    assert window.technical_labels["historical_tests"].text() == "5"
+    assert window.technical_labels["bounce_success_rate"].text() == "80.0%"
+    assert window.technical_labels["average_historical_bounce"].text() == "6.2%"
+    assert window.technical_labels["support_confidence"].text() == "82.0 / 100"
+    assert window.technical_labels["bounce_success_rate"].property("status") == "positive"
+    assert window.technical_summary_label.text() == (
+        "The stock remains above all major moving averages.\n"
+        "Momentum is improving.\n"
+        "Price is trading within 2.4% of a strong institutional support zone.\n"
+        "Historical bounce probability is high."
+    )
+    assert window.institutional_outlook_label.text() == "Strong Accumulation"
     assert window.institutional_outlook_label.property("status") == "positive"
     assert window.institutional_labels["ownership"].text() == "72.0%"
     assert window.institutional_labels["ownership_change_qoq"].text() == "+1.3%"
     assert window.institutional_labels["net_buying"].text() == "$250.00M"
     assert window.institutional_labels["holder_count"].text() == "1,240"
+    assert window.institutional_labels["holder_change"].text() == "+34"
     assert window.institutional_labels["recent_13f_activity"].text() == "Current"
+    assert window.institutional_labels["recent_13f_accumulation"].text() == "accumulation"
+    assert window.institutional_labels["major_buyers"].text() == "BlackRock, Vanguard"
+    assert window.institutional_labels["major_sellers"].text() == "Small Cap Fund"
     assert window.institutional_labels["insider_buying"].text() == "Yes"
     assert window.institutional_labels["insider_selling"].text() == "No"
+    assert window.institutional_labels["insider_net_activity"].text() == "$1.25M"
+    assert window.institutional_summary_label.text() == (
+        "Institutional sponsorship appears strong. Ownership is above 60%, "
+        "holders increased last quarter, recent 13F activity suggests accumulation."
+    )
     assert window.risk_labels["risk_rating"].text() == "Moderate"
     assert window.risk_labels["risk_rating"].property("status") == "watch"
     assert window.risk_labels["upcoming_earnings"].text() == "2026-07-24"
@@ -187,8 +219,15 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     assert window.summary_text.toPlainText() == "N/A"
     assert [label.text() for label in window.why_labels] == ["N/A"]
     assert all(label.text() == "N/A" for label in window.technical_labels.values())
-    assert window.institutional_outlook_label.text() == "N/A"
+    assert window.technical_summary_label.text() == (
+        "Moving average positioning is N/A.\n"
+        "Momentum readings are N/A.\n"
+        "Support proximity is N/A.\n"
+        "Historical bounce probability is N/A."
+    )
+    assert window.institutional_outlook_label.text() == "Unknown"
     assert all(label.text() == "N/A" for label in window.institutional_labels.values())
+    assert window.institutional_summary_label.text() == "Institutional sponsorship is N/A."
     assert all(label.text() == "N/A" for label in window.risk_labels.values())
     assert [label.text() for label in window.risk_warning_labels] == [
         "No active risks highlighted."
@@ -199,13 +238,15 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     assert window.bounce_history_table.rowCount() == 0
 
 
-def test_candidate_detail_window_institutional_outlook_can_be_weak(app):
+def test_candidate_detail_window_institutional_outlook_can_show_distribution(app):
     candidate = SimpleNamespace(
         ticker="WEAK",
         metrics={
             "institutional_ownership_pct": 20.0,
             "institutional_ownership_change_qoq": -2.0,
             "net_institutional_buying": -50000000,
+            "institutional_holders_change": -12,
+            "recent_13f_accumulation": "distribution",
             "insider_buying_flag": 0,
             "insider_selling_flag": 1,
         },
@@ -213,10 +254,16 @@ def test_candidate_detail_window_institutional_outlook_can_be_weak(app):
 
     window = CandidateDetailWindow(candidate)
 
-    assert window.institutional_outlook_label.text() == "Weak"
+    assert window.institutional_outlook_label.text() == "Distribution"
     assert window.institutional_outlook_label.property("status") == "negative"
     assert window.institutional_labels["net_buying"].text() == "-$50.00M"
+    assert window.institutional_labels["holder_change"].text() == "-12"
     assert window.institutional_labels["insider_selling"].text() == "Yes"
+    assert window.institutional_summary_label.text() == (
+        "Institutional sponsorship shows distribution risk. "
+        "ownership is below institutional leadership levels, holders declined last quarter, "
+        "recent 13F activity suggests distribution."
+    )
 
 
 def test_candidate_detail_window_accepts_explicit_reasons(app):
@@ -307,3 +354,151 @@ def test_candidate_detail_window_accepts_risk_detail_values(app):
         "* Debt Risk: 72.0",
         "* Overall Risk Score: 78.0",
     ]
+
+
+def test_candidate_detail_window_accepts_institutional_detail_values(app):
+    window = CandidateDetailWindow(
+        {"ticker": "INST"},
+        detail={
+            "institutional": {
+                "institutional_ownership": 48.5,
+                "ownership_change_qoq": 0.2,
+                "holders": 640,
+                "holder_change": 0,
+                "13f_net_change": 0,
+                "13f_status": "Filed",
+                "13f_accumulation": "neutral",
+                "top_buyers": ["State Street"],
+                "top_sellers": [],
+                "insider_buying": False,
+                "insider_selling": False,
+                "net_insider_activity": "Neutral",
+            }
+        },
+    )
+
+    assert window.institutional_outlook_label.text() == "Neutral"
+    assert window.institutional_outlook_label.property("status") == "watch"
+    assert window.institutional_labels["ownership"].text() == "48.5%"
+    assert window.institutional_labels["ownership_change_qoq"].text() == "+0.2%"
+    assert window.institutional_labels["holder_count"].text() == "640"
+    assert window.institutional_labels["holder_change"].text() == "+0"
+    assert window.institutional_labels["net_buying"].text() == "$0"
+    assert window.institutional_labels["recent_13f_activity"].text() == "Filed"
+    assert window.institutional_labels["recent_13f_accumulation"].text() == "neutral"
+    assert window.institutional_labels["major_buyers"].text() == "State Street"
+    assert window.institutional_labels["major_sellers"].text() == "N/A"
+    assert window.institutional_labels["insider_net_activity"].text() == "Neutral"
+    assert window.institutional_summary_label.text() == (
+        "Institutional sponsorship appears neutral. ownership is moderate, "
+        "holder count was flat last quarter, recent 13F activity suggests neutral."
+    )
+
+
+def test_candidate_detail_window_technical_badges_can_be_bearish(app):
+    window = CandidateDetailWindow(
+        SimpleNamespace(
+            ticker="BEAR",
+            price=90,
+            metrics={
+                "trend": "Bearish",
+                "market_structure": "Bearish",
+                "ema20": 100,
+                "ema50": 105,
+                "ema200": 110,
+                "rsi14": 34,
+                "macd": -1.2,
+                "macd_signal": -0.8,
+                "macd_histogram": -0.4,
+                "relative_strength_vs_spy": 42,
+                "distance_to_support_pct": 12,
+                "support_strength_score": 35,
+                "bounce_success_rate": 30,
+            },
+        )
+    )
+
+    assert window.technical_labels["trend"].property("status") == "negative"
+    assert window.technical_labels["market_structure"].property("status") == "negative"
+    assert window.technical_labels["rsi"].text() == "34.0 (Bearish)"
+    assert window.technical_labels["rsi"].property("status") == "negative"
+    assert window.technical_labels["macd"].text() == "-1.2 (Bearish)"
+    assert window.technical_labels["relative_strength"].property("status") == "negative"
+    assert window.technical_labels["distance_to_support"].property("status") == "negative"
+    assert window.technical_labels["support_strength"].property("status") == "negative"
+    assert window.technical_summary_label.text() == (
+        "The stock is trading below all major moving averages.\n"
+        "Momentum is weakening.\n"
+        "Price is trading within 12.0% of a developing support zone.\n"
+        "Historical bounce probability is weak."
+    )
+
+
+def test_candidate_detail_window_set_candidate_refreshes_technical_values(app):
+    window = CandidateDetailWindow(
+        SimpleNamespace(
+            ticker="OLD",
+            price=50,
+            metrics={
+                "trend": "Bearish",
+                "rsi14": 35,
+                "macd": -0.4,
+            },
+        )
+    )
+
+    assert window.technical_labels["trend"].text() == "Bearish"
+    assert window.technical_labels["rsi"].text() == "35.0 (Bearish)"
+
+    window.set_candidate(
+        SimpleNamespace(
+            ticker="NEW",
+            price=120,
+            metrics={
+                "trend": "Bullish",
+                "rsi14": 62,
+                "macd": 1.4,
+            },
+        )
+    )
+
+    assert window.windowTitle() == "NEW Candidate Detail"
+    assert window.technical_labels["trend"].text() == "Bullish"
+    assert window.technical_labels["trend"].property("status") == "positive"
+    assert window.technical_labels["rsi"].text() == "62.0 (Bullish)"
+    assert window.technical_labels["macd"].text() == "1.4 (Bullish)"
+
+
+def test_candidate_detail_window_set_candidate_refreshes_institutional_values(app):
+    window = CandidateDetailWindow(
+        SimpleNamespace(
+            ticker="OLD",
+            metrics={
+                "institutional_ownership_pct": 18,
+                "net_institutional_buying": -1000000,
+                "insider_selling_flag": 1,
+            },
+        )
+    )
+
+    assert window.institutional_outlook_label.text() == "Distribution"
+    assert window.institutional_labels["ownership"].text() == "18.0%"
+
+    window.set_candidate(
+        SimpleNamespace(
+            ticker="NEW",
+            metrics={
+                "institutional_ownership_pct": 68,
+                "institutional_holders_change": 15,
+                "net_institutional_buying": 2000000,
+                "recent_13f_accumulation": "accumulation",
+            },
+        )
+    )
+
+    assert window.windowTitle() == "NEW Candidate Detail"
+    assert window.institutional_outlook_label.text() == "Strong Accumulation"
+    assert window.institutional_outlook_label.property("status") == "positive"
+    assert window.institutional_labels["ownership"].text() == "68.0%"
+    assert window.institutional_labels["holder_change"].text() == "+15"
+    assert window.institutional_labels["net_buying"].text() == "$2.00M"
