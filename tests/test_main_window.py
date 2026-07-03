@@ -652,6 +652,72 @@ def test_main_window_market_universe_row_selection_updates_research_preview(patc
     assert window.research_preview.fundamental_labels["market_cap"].text() == "$3.20T"
 
 
+def test_main_window_open_detail_uses_candidate_detail_window(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    opened = []
+
+    class FakeCandidateDetailWindow:
+        def __init__(self, candidate=None, detail=None, parent=None):
+            self.candidate = candidate
+            self.detail = detail
+            self.parent = parent
+            self.shown = False
+            opened.append(self)
+
+        def show(self):
+            self.shown = True
+
+    monkeypatch.setattr(
+        main_window_module,
+        "CandidateDetailWindow",
+        FakeCandidateDetailWindow,
+    )
+    window.candidates_by_ticker = {
+        "AAPL": SimpleNamespace(ticker="AAPL", company_name="Apple Inc.")
+    }
+    window.candidates_table.populate(list(window.candidates_by_ticker.values()))
+    window.candidates_table.selectRow(0)
+
+    window.open_selected_stock_detail()
+
+    assert len(opened) == 1
+    assert opened[0].candidate.ticker == "AAPL"
+    assert opened[0].shown is True
+    assert window.detail_windows[-1] is opened[0]
+
+
+def test_main_window_open_detail_handles_partial_candidate(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    opened = []
+
+    class FakeCandidateDetailWindow:
+        def __init__(self, candidate=None, detail=None, parent=None):
+            self.candidate = candidate
+            opened.append(self)
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(
+        main_window_module,
+        "CandidateDetailWindow",
+        FakeCandidateDetailWindow,
+    )
+    window.candidates_by_ticker = {"PART": SimpleNamespace(ticker="PART")}
+    window.candidates_table.populate(list(window.candidates_by_ticker.values()))
+    window.candidates_table.selectRow(0)
+
+    window.open_selected_stock_detail()
+
+    assert opened[0].candidate.ticker == "PART"
+
+
 def test_main_window_dashboard_empty_market_universe_shows_empty_message(patched_window):
     window = patched_window
 

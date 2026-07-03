@@ -49,6 +49,7 @@ from ui.widgets.trade_card import TradeCard
 from ui.widgets.watchlist_panel import WatchlistPanel
 from ui.widgets.trade_journal_panel import TradeJournalPanel
 from ui.widgets.performance_dashboard import PerformanceDashboard
+from ui.candidate_detail_window import CandidateDetailWindow
 from ui.stock_detail_window import StockDetailWindow
 from ui.export_dialog import ExportDialog
 from ui.settings_dialog import SettingsDialog
@@ -222,6 +223,7 @@ class MainWindow(QMainWindow):
 
         self.candidates_table = CandidateTable()
         self.candidates_table.ticker_double_clicked.connect(self.open_stock_detail)
+        self.candidates_table.detail_requested.connect(self.open_stock_detail)
         self.candidates_table.selectionModel().selectionChanged.connect(
             self.update_open_detail_state
         )
@@ -1662,14 +1664,28 @@ class MainWindow(QMainWindow):
 
     def open_stock_detail(self, ticker):
 
-        detail = self.scoring_controller.get_candidate_detail(ticker)
-        window = StockDetailWindow(detail, self)
+        candidate = getattr(self, "candidates_by_ticker", {}).get(ticker)
+        detail = self.candidate_detail_for_ticker(ticker)
+
+        if candidate is None and detail:
+            window = StockDetailWindow(detail, self)
+        else:
+            window = CandidateDetailWindow(candidate=candidate, detail=detail, parent=self)
         window.show()
 
         if not hasattr(self, "detail_windows"):
             self.detail_windows = []
 
         self.detail_windows.append(window)
+
+    # ----------------------------------------------------------
+
+    def candidate_detail_for_ticker(self, ticker):
+
+        try:
+            return self.scoring_controller.get_candidate_detail(ticker) or {}
+        except Exception:
+            return {}
 
     # ----------------------------------------------------------
 

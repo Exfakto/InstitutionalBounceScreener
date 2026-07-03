@@ -166,6 +166,17 @@ def test_candidate_table_emits_ticker_on_double_click(app):
     assert emitted == ["MSFT"]
 
 
+def test_candidate_table_detail_column_emits_detail_request(app):
+    table = CandidateTable()
+    table.populate([make_candidate("AAPL", 88.0)])
+    emitted = []
+
+    table.detail_requested.connect(emitted.append)
+    table.emit_detail_requested(0, table.columnCount() - 1)
+
+    assert emitted == ["AAPL"]
+
+
 def test_candidate_table_professional_columns_display_existing_values(app):
     table = CandidateTable()
     opportunity = SimpleNamespace(rating_label="Elite Bounce", rating_score=93.2)

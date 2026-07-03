@@ -424,6 +424,18 @@ class Theme:
             font-weight: 600;
         }}
 
+        QLabel#CandidateDetailHeader {{
+            color: {cls.PRIMARY_TEXT};
+            font-size: 18pt;
+            font-weight: 800;
+        }}
+
+        QTabWidget#CandidateDetailTabs::pane {{
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.BORDER};
+            border-radius: {DesignSystem.Radius.MD}px;
+        }}
+
         QTableWidget#ActivityFeedTable {{
             background-color: {cls.PANEL_BACKGROUND};
             alternate-background-color: {cls.CARD_BACKGROUND};

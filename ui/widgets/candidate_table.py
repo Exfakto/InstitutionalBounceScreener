@@ -32,6 +32,7 @@ class CandidateTable(QTableWidget):
     ]
 
     ticker_double_clicked = Signal(str)
+    detail_requested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(0, len(self.COLUMNS), parent)
@@ -60,6 +61,7 @@ class CandidateTable(QTableWidget):
         self.apply_default_column_widths()
         self.setStyleSheet(self.grid_style())
         self.cellDoubleClicked.connect(self.emit_double_clicked_ticker)
+        self.cellClicked.connect(self.emit_detail_requested)
 
     def isSortingEnabled(self):
         return True
@@ -163,6 +165,19 @@ class CandidateTable(QTableWidget):
 
         if ticker is not None:
             self.ticker_double_clicked.emit(ticker)
+
+    def emit_detail_requested(self, row, column):
+        """
+        Emit the ticker when the detail action column is clicked.
+        """
+
+        if column != len(self.COLUMNS) - 1:
+            return
+
+        ticker = self.ticker_at_row(row)
+
+        if ticker is not None:
+            self.detail_requested.emit(ticker)
 
     def row_values(self, candidate, row=None):
         scores = getattr(candidate, "score_map", {}) or {}
