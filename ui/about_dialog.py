@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from controllers.diagnostics_controller import DiagnosticsController
 from services.app_config_service import AppConfigService
+from services.beta_validation_service import BetaValidationService
 from services.database_backup_service import DatabaseBackupService
 from services.release_checklist_service import ReleaseChecklistService
 from services.release_metadata_service import ReleaseMetadataService
@@ -44,6 +45,7 @@ class AboutDialog(QDialog):
         self.config_service = AppConfigService()
         self.release_metadata_service = ReleaseMetadataService()
         self.release_checklist_service = ReleaseChecklistService()
+        self.beta_validation_service = BetaValidationService()
 
         self.setWindowTitle("About & Diagnostics")
         self.setModal(True)
@@ -71,6 +73,8 @@ class AboutDialog(QDialog):
             ("release_channel", "Release Channel"),
             ("environment", "Environment"),
             ("checklist", "Checklist"),
+            ("beta_validation", "Beta Validation"),
+            ("beta_report", "Beta Report"),
         ]:
             label = QLabel("--")
             label.setWordWrap(True)
@@ -80,6 +84,8 @@ class AboutDialog(QDialog):
         self.backup_database_button.clicked.connect(self.backup_database)
         self.restore_database_button = QPushButton("Restore Database")
         self.restore_database_button.clicked.connect(self.restore_database)
+        self.run_beta_validation_button = QPushButton("Run Beta Validation")
+        self.run_beta_validation_button.clicked.connect(self.run_beta_validation)
 
         self.copy_button = QPushButton("Copy Diagnostics")
         self.copy_button.clicked.connect(self.copy_diagnostics)
@@ -98,6 +104,7 @@ class AboutDialog(QDialog):
         layout.addWidget(self.diagnostics_text)
         layout.addWidget(self.backup_database_button)
         layout.addWidget(self.restore_database_button)
+        layout.addWidget(self.run_beta_validation_button)
         layout.addWidget(self.refresh_button)
         layout.addWidget(self.copy_button)
         layout.addWidget(self.button_box)
@@ -171,6 +178,8 @@ class AboutDialog(QDialog):
             self.release_metadata_service.build_environment_summary()["platform"]
         )
         self.release_labels["checklist"].setText(checklist.summary)
+        self.release_labels["beta_validation"].setText("Not run")
+        self.release_labels["beta_report"].setText("--")
 
     def backup_database(self):
         config = self.config_service.load()
@@ -206,6 +215,24 @@ class AboutDialog(QDialog):
         ).restore(path)
         self.release_labels["checklist"].setText(result.message)
         return result
+
+    def run_beta_validation(self):
+        self.run_beta_validation_button.setEnabled(False)
+        self.release_labels["beta_validation"].setText("Running beta validation...")
+        try:
+            report = self.beta_validation_service.run()
+            export = self.beta_validation_service.export_report(report)
+            self.release_labels["beta_validation"].setText(report.summary)
+            self.release_labels["beta_report"].setText(export.get("json_path") or "--")
+            return report
+        except Exception as exc:
+            self.release_labels["beta_validation"].setText(
+                f"Beta validation failed: {exc}"
+            )
+            self.release_labels["beta_report"].setText("--")
+            return None
+        finally:
+            self.run_beta_validation_button.setEnabled(True)
 
     @staticmethod
     def report_text(title, report) -> str:

@@ -7,6 +7,9 @@ Use this checklist before tagging or distributing a build.
 - Confirm `python -m pytest -q` passes.
 - Confirm `python -m compileall app.py main.py app_entry.py controllers services database ui backtesting market_data` passes.
 - Run `scripts/run_release_checks.ps1`.
+- Run beta validation from `About & Diagnostics`.
+- Confirm beta validation JSON and CSV reports are exported.
+- Review warnings for the validation basket: AAPL, MSFT, NVDA, AMZN, META, GOOGL, JPM, XOM, UNH, COST.
 - Confirm app launches in dev mode with `python main.py`.
 - Create a database backup from the About & Diagnostics dialog.
 - Confirm export directory is writable.
