@@ -31,6 +31,7 @@ from controllers.watchlist_controller import WatchlistController
 from controllers.trade_journal_controller import TradeJournalController
 from controllers.screener_preset_controller import ScreenerPresetController
 from controllers.dashboard_controller import DashboardController
+from controllers.results_export_controller import ResultsExportController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
@@ -137,6 +138,7 @@ class MainWindow(QMainWindow):
         self.latest_statistics = {}
         self.candidates_by_ticker = {}
         self.active_workspace_layout = self.DEFAULT_WORKSPACE_LAYOUT
+        self.selected_results_run_id = None
 
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1600, 900)
@@ -266,6 +268,15 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.run_selected.connect(
             self.load_ranked_candidates_for_run
+        )
+        self.screening_results_panel.export_candidates_csv_requested.connect(
+            self.export_ranked_candidates_csv
+        )
+        self.screening_results_panel.export_candidates_json_requested.connect(
+            self.export_ranked_candidates_json
+        )
+        self.screening_results_panel.export_full_run_package_requested.connect(
+            self.export_full_run_package_json
         )
         self.screening_results_panel.run_screening_requested.connect(
             self.start_screening_from_input
@@ -2247,6 +2258,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "screening_results_panel"):
             return []
 
+        self.selected_results_run_id = None
         repository = self.screening_repository()
         candidates = []
 
@@ -2260,6 +2272,7 @@ class MainWindow(QMainWindow):
             candidates = []
 
         self.screening_results_panel.populate_ranked_candidates(candidates)
+        self.update_results_export_state(candidates)
         return candidates
 
     # ----------------------------------------------------------
@@ -2269,6 +2282,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "screening_results_panel"):
             return []
 
+        self.selected_results_run_id = run_id
         repository = self.screening_repository()
         candidates = []
 
@@ -2283,6 +2297,7 @@ class MainWindow(QMainWindow):
             self.screening_results_panel.show_ranked_empty_message(
                 "Run has no candidates"
             )
+        self.update_results_export_state(candidates)
         return candidates
 
     # ----------------------------------------------------------
@@ -2306,6 +2321,86 @@ class MainWindow(QMainWindow):
 
         self.screening_results_panel.populate_run_history(runs)
         return runs
+
+    # ----------------------------------------------------------
+
+    def update_results_export_state(self, candidates=None):
+
+        if not hasattr(self, "screening_results_panel"):
+            return False
+
+        exportable = bool(candidates if candidates is not None else getattr(
+            self.screening_results_panel,
+            "current_candidates",
+            [],
+        ))
+        self.screening_results_panel.set_export_enabled(exportable)
+        self.screening_results_panel.set_export_status(
+            "Ready to export" if exportable else "No exportable results"
+        )
+        return exportable
+
+    # ----------------------------------------------------------
+
+    def results_export_controller(self):
+
+        return ResultsExportController(
+            self.screening_repository(),
+            export_service=getattr(self, "_results_export_service", None),
+            output_dir=getattr(self, "_results_export_output_dir", None),
+        )
+
+    # ----------------------------------------------------------
+
+    def export_ranked_candidates_csv(self):
+
+        return self.export_results("csv")
+
+    # ----------------------------------------------------------
+
+    def export_ranked_candidates_json(self):
+
+        return self.export_results("json")
+
+    # ----------------------------------------------------------
+
+    def export_full_run_package_json(self):
+
+        return self.export_results("full_package")
+
+    # ----------------------------------------------------------
+
+    def export_results(self, export_kind):
+
+        controller = self.results_export_controller()
+        run_id = getattr(self, "selected_results_run_id", None)
+
+        try:
+            if export_kind == "csv":
+                result = controller.export_candidates_csv(run_id)
+            elif export_kind == "json":
+                result = controller.export_candidates_json(run_id)
+            else:
+                result = controller.export_full_run_package_json(run_id)
+        except Exception as exc:
+            result = {
+                "success": False,
+                "message": f"Export failed: {exc}",
+                "path": None,
+                "count": None,
+            }
+
+        message = result.get("message") or "Export failed."
+        if result.get("success"):
+            path = result.get("path")
+            status_text = f"Export saved: {path}" if path else message
+        else:
+            status_text = message
+
+        if hasattr(self, "screening_results_panel"):
+            self.screening_results_panel.set_export_status(status_text)
+            self.screening_results_panel.set_screening_status(status_text)
+        return result
 
     # ----------------------------------------------------------
 

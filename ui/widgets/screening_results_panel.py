@@ -27,6 +27,9 @@ class ScreeningResultsPanel(QWidget):
     scan_preset_changed = Signal(str)
     run_selected = Signal(str)
     candidate_selected = Signal(object)
+    export_candidates_csv_requested = Signal()
+    export_candidates_json_requested = Signal()
+    export_full_run_package_requested = Signal()
 
     RANKED_HEADERS = [
         "Rank",
@@ -66,6 +69,7 @@ class ScreeningResultsPanel(QWidget):
         layout.setSpacing(DesignSystem.Spacing.MD)
 
         layout.addWidget(self.build_screening_controls())
+        layout.addWidget(self.build_export_controls())
 
         ranked_section, self.ranked_candidates_table, self.ranked_empty_label = (
             self.build_table_section(
@@ -151,6 +155,50 @@ class ScreeningResultsPanel(QWidget):
         layout.addWidget(self.active_filter_summary_label, stretch=1)
         return section
 
+    def build_export_controls(self):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        section.setStyleSheet(DesignSystem.card_style())
+        layout = QHBoxLayout(section)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+        )
+        layout.setSpacing(DesignSystem.Spacing.SM)
+
+        label = QLabel("Exports")
+        label.setObjectName("ResearchPreviewFieldLabel")
+        self.export_candidates_csv_button = QPushButton("Export Candidates CSV")
+        self.export_candidates_csv_button.setObjectName("SecondaryButton")
+        self.export_candidates_csv_button.clicked.connect(
+            self.export_candidates_csv_requested.emit
+        )
+        self.export_candidates_json_button = QPushButton("Export Candidates JSON")
+        self.export_candidates_json_button.setObjectName("SecondaryButton")
+        self.export_candidates_json_button.clicked.connect(
+            self.export_candidates_json_requested.emit
+        )
+        self.export_full_run_package_button = QPushButton(
+            "Export Full Run Package JSON"
+        )
+        self.export_full_run_package_button.setObjectName("SecondaryButton")
+        self.export_full_run_package_button.clicked.connect(
+            self.export_full_run_package_requested.emit
+        )
+        self.export_status_label = QLabel("No exportable results")
+        self.export_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.export_status_label.setWordWrap(True)
+
+        layout.addWidget(label)
+        layout.addWidget(self.export_candidates_csv_button)
+        layout.addWidget(self.export_candidates_json_button)
+        layout.addWidget(self.export_full_run_package_button)
+        layout.addWidget(self.export_status_label, stretch=1)
+        self.set_export_enabled(False)
+        return section
+
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())
 
@@ -193,6 +241,17 @@ class ScreeningResultsPanel(QWidget):
 
     def set_screening_status(self, status_text):
         self.screening_status_label.setText(status_text)
+
+    def set_export_enabled(self, enabled):
+        for button in (
+            self.export_candidates_csv_button,
+            self.export_candidates_json_button,
+            self.export_full_run_package_button,
+        ):
+            button.setEnabled(bool(enabled))
+
+    def set_export_status(self, status_text):
+        self.export_status_label.setText(status_text or "")
 
     def build_table_section(self, title, empty_text, headers, signal):
         section = QFrame()

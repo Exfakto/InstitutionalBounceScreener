@@ -201,6 +201,8 @@ class FakeScreeningRepository:
         self.ranked_candidates = []
         self.run_history = []
         self.ranked_by_run = {}
+        self.runs_by_id = {}
+        self.latest_run = None
         self.ranked_calls = 0
         self.history_calls = 0
         self.run_candidate_calls = []
@@ -216,6 +218,59 @@ class FakeScreeningRepository:
     def fetch_ranked_candidates(self, run_id):
         self.run_candidate_calls.append(run_id)
         return list(self.ranked_by_run.get(run_id, []))
+
+    def fetch_screening_run(self, run_id):
+        if run_id in self.runs_by_id:
+            return self.runs_by_id[run_id]
+        for run in self.run_history:
+            value = run.get("run_id") if isinstance(run, dict) else getattr(run, "run_id", None)
+            if value == run_id:
+                return run
+        return None
+
+    def fetch_latest_screening_run(self):
+        if self.latest_run is not None:
+            return self.latest_run
+        return self.run_history[0] if self.run_history else None
+
+
+class FakeResultsExportService:
+    def __init__(self):
+        self.calls = []
+        self.fail = False
+
+    def export_ranked_candidates_csv(self, candidates, output_dir, filename):
+        return self.record("csv", candidates, output_dir, filename)
+
+    def export_ranked_candidates_json(self, candidates, output_dir, filename):
+        return self.record("json", candidates, output_dir, filename)
+
+    def export_full_run_package(self, run_metadata, candidates, output_dir, filename):
+        return self.record("full_package", candidates, output_dir, filename, run_metadata)
+
+    def record(self, kind, candidates, output_dir, filename, run_metadata=None):
+        self.calls.append(
+            {
+                "kind": kind,
+                "candidates": list(candidates or []),
+                "output_dir": output_dir,
+                "filename": filename,
+                "run_metadata": run_metadata,
+            }
+        )
+        if self.fail:
+            return {
+                "success": False,
+                "message": "Export failed: planned failure",
+                "path": None,
+                "count": None,
+            }
+        return {
+            "success": True,
+            "message": f"{kind} exported",
+            "path": f"C:/tmp/{filename}",
+            "count": len(candidates or []),
+        }
 
 
 class FakeScreeningWorker(QObject):
@@ -822,6 +877,11 @@ def test_main_window_screening_results_view_construction(patched_window):
         "Candidates",
     ]
     assert window.results_dock.widget() is panel
+    assert panel.export_candidates_csv_button.text() == "Export Candidates CSV"
+    assert panel.export_candidates_json_button.text() == "Export Candidates JSON"
+    assert panel.export_full_run_package_button.text() == (
+        "Export Full Run Package JSON"
+    )
 
 
 def test_main_window_loads_ranked_candidates_view(patched_window):
@@ -930,6 +990,156 @@ def test_main_window_screening_results_empty_states(patched_window):
     assert window.screening_results_panel.run_history_table.isHidden() is True
     assert window.screening_results_panel.run_history_empty_label.text() == "No screening runs available"
     assert window.screening_results_panel.run_history_empty_label.isHidden() is False
+    assert window.screening_results_panel.export_candidates_csv_button.isEnabled() is False
+    assert window.screening_results_panel.export_status_label.text() == "No exportable results"
+
+
+def test_main_window_selected_run_export_uses_selected_candidates(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    export_service = FakeResultsExportService()
+    repository.run_history = [
+        {"run_id": "run-a", "status": "COMPLETED", "candidate_count": 1},
+        {"run_id": "run-b", "status": "COMPLETED", "candidate_count": 1},
+    ]
+    repository.ranked_by_run = {
+        "run-b": [
+            SimpleNamespace(
+                rank=1,
+                ticker="MSFT",
+                final_score=88.0,
+                grade="A",
+                confidence_level="HIGH",
+                setup_label="High-Quality Bounce",
+                explanation=[],
+                warnings=[],
+                rejection_reasons=[],
+            )
+        ]
+    }
+    window._screening_repository = repository
+    window._results_export_service = export_service
+
+    window.refresh_screening_run_history_view()
+    table = window.screening_results_panel.run_history_table
+    run_b_row = next(
+        row for row in range(table.rowCount()) if table.item(row, 0).text() == "run-b"
+    )
+    table.selectRow(run_b_row)
+    window.screening_results_panel.export_candidates_csv_button.click()
+
+    assert export_service.calls[-1]["kind"] == "csv"
+    assert export_service.calls[-1]["filename"] == "ranked_candidates_run-b"
+    assert export_service.calls[-1]["candidates"][0].ticker == "MSFT"
+    assert window.screening_results_panel.export_status_label.text().startswith(
+        "Export saved:"
+    )
+
+
+def test_main_window_export_falls_back_to_latest_run(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    export_service = FakeResultsExportService()
+    repository.latest_run = {"run_id": "latest-run", "status": "COMPLETED"}
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=1,
+            ticker="AAPL",
+            final_score=91.0,
+            grade="A+",
+            confidence_level="HIGH",
+            setup_label="Elite Institutional Bounce",
+            explanation=[],
+            warnings=[],
+            rejection_reasons=[],
+        )
+    ]
+    repository.ranked_by_run = {"latest-run": list(repository.ranked_candidates)}
+    window._screening_repository = repository
+    window._results_export_service = export_service
+
+    window.refresh_ranked_candidates_view()
+    window.screening_results_panel.export_candidates_json_button.click()
+
+    assert export_service.calls[-1]["kind"] == "json"
+    assert export_service.calls[-1]["filename"] == "ranked_candidates_latest-run"
+    assert export_service.calls[-1]["candidates"][0].ticker == "AAPL"
+
+
+def test_main_window_export_no_data_shows_safe_message(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    export_service = FakeResultsExportService()
+    window._screening_repository = repository
+    window._results_export_service = export_service
+
+    result = window.export_ranked_candidates_csv()
+
+    assert result["success"] is False
+    assert result["message"] == "No screening run available."
+    assert export_service.calls == []
+    assert window.screening_results_panel.export_status_label.text() == (
+        "No screening run available."
+    )
+
+
+def test_main_window_json_export_button_calls_service(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    export_service = FakeResultsExportService()
+    repository.latest_run = {"run_id": "json-run", "status": "COMPLETED"}
+    repository.ranked_candidates = [
+        SimpleNamespace(rank=1, ticker="NVDA", final_score=95.0)
+    ]
+    repository.ranked_by_run = {"json-run": list(repository.ranked_candidates)}
+    window._screening_repository = repository
+    window._results_export_service = export_service
+
+    window.refresh_ranked_candidates_view()
+    window.screening_results_panel.export_candidates_json_button.click()
+
+    assert export_service.calls[-1]["kind"] == "json"
+
+
+def test_main_window_full_package_export_button_calls_service(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    export_service = FakeResultsExportService()
+    repository.latest_run = {"run_id": "package-run", "status": "COMPLETED"}
+    repository.ranked_candidates = [
+        SimpleNamespace(rank=1, ticker="TSLA", final_score=81.0)
+    ]
+    repository.ranked_by_run = {"package-run": list(repository.ranked_candidates)}
+    window._screening_repository = repository
+    window._results_export_service = export_service
+
+    window.refresh_ranked_candidates_view()
+    window.screening_results_panel.export_full_run_package_button.click()
+
+    assert export_service.calls[-1]["kind"] == "full_package"
+    assert export_service.calls[-1]["run_metadata"]["run_id"] == "package-run"
+
+
+def test_main_window_export_failure_message_handling(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    export_service = FakeResultsExportService()
+    export_service.fail = True
+    repository.latest_run = {"run_id": "fail-run", "status": "COMPLETED"}
+    repository.ranked_candidates = [
+        SimpleNamespace(rank=1, ticker="AMD", final_score=79.0)
+    ]
+    repository.ranked_by_run = {"fail-run": list(repository.ranked_candidates)}
+    window._screening_repository = repository
+    window._results_export_service = export_service
+
+    window.refresh_ranked_candidates_view()
+    result = window.export_ranked_candidates_csv()
+
+    assert result["success"] is False
+    assert window.screening_results_panel.export_status_label.text() == (
+        "Export failed: planned failure"
+    )
 
 
 def test_main_window_run_selection_loads_correct_candidates(patched_window):
