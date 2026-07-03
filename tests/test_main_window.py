@@ -200,8 +200,10 @@ class FakeScreeningRepository:
     def __init__(self):
         self.ranked_candidates = []
         self.run_history = []
+        self.ranked_by_run = {}
         self.ranked_calls = 0
         self.history_calls = 0
+        self.run_candidate_calls = []
 
     def fetch_latest_ranked_candidates(self):
         self.ranked_calls += 1
@@ -210,6 +212,10 @@ class FakeScreeningRepository:
     def fetch_screening_run_history(self, limit=25):
         self.history_calls += 1
         return list(self.run_history)[:limit]
+
+    def fetch_ranked_candidates(self, run_id):
+        self.run_candidate_calls.append(run_id)
+        return list(self.ranked_by_run.get(run_id, []))
 
 
 @pytest.fixture
@@ -892,6 +898,187 @@ def test_main_window_screening_results_empty_states(patched_window):
     assert window.screening_results_panel.run_history_table.isHidden() is True
     assert window.screening_results_panel.run_history_empty_label.text() == "No screening runs available"
     assert window.screening_results_panel.run_history_empty_label.isHidden() is False
+
+
+def test_main_window_run_selection_loads_correct_candidates(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.run_history = [
+        {
+            "run_id": "run-a",
+            "status": "COMPLETED",
+            "started_at": "2026-07-03T10:00:00+00:00",
+            "completed_at": "2026-07-03T10:01:00+00:00",
+            "tickers_requested": 2,
+            "tickers_processed": 2,
+            "candidate_count": 1,
+            "warnings": [],
+            "errors": [],
+        },
+        {
+            "run_id": "run-b",
+            "status": "PARTIAL",
+            "tickers_requested": 2,
+            "tickers_processed": 1,
+            "candidate_count": 1,
+            "warnings": ["run warning"],
+            "errors": ["BAD: support failed"],
+        },
+    ]
+    repository.ranked_by_run = {
+        "run-b": [
+            SimpleNamespace(
+                rank=1,
+                ticker="MSFT",
+                final_score=88.0,
+                grade="A",
+                confidence_level="HIGH",
+                setup_label="High-Quality Bounce",
+                explanation=["Strong setup"],
+                warnings=[],
+                rejection_reasons=[],
+            )
+        ]
+    }
+    window._screening_repository = repository
+
+    window.refresh_screening_run_history_view()
+    table = window.screening_results_panel.run_history_table
+    run_b_row = next(
+        row for row in range(table.rowCount()) if table.item(row, 0).text() == "run-b"
+    )
+    table.selectRow(run_b_row)
+
+    assert repository.run_candidate_calls == ["run-b"]
+    assert window.screening_results_panel.ranked_candidates_table.rowCount() == 1
+    assert window.screening_results_panel.ranked_candidates_table.item(0, 1).text() == "MSFT"
+    assert window.screening_results_panel.run_detail_labels["run_id"].text() == "run-b"
+    assert window.screening_results_panel.run_detail_labels["warnings"].text() == "run warning"
+    assert window.screening_results_panel.run_detail_labels["errors"].text() == "BAD: support failed"
+
+
+def test_main_window_candidate_selection_loads_detail_panel(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=2,
+            ticker="NVDA",
+            final_score=94.5,
+            grade="A+",
+            confidence_level="HIGH",
+            setup_label="Elite Institutional Bounce",
+            explanation=["Support quality is strong", "Institutional sponsorship is strong"],
+            warnings=["Minor warning"],
+            rejection_reasons=[],
+        )
+    ]
+    window._screening_repository = repository
+
+    window.refresh_ranked_candidates_view()
+    window.screening_results_panel.ranked_candidates_table.selectRow(0)
+
+    labels = window.screening_results_panel.candidate_detail_labels
+    assert labels["ticker"].text() == "NVDA"
+    assert labels["rank"].text() == "2"
+    assert labels["final_score"].text() == "94.50"
+    assert labels["grade"].text() == "A+"
+    assert labels["confidence_level"].text() == "HIGH"
+    assert labels["setup_label"].text() == "Elite Institutional Bounce"
+    assert "Support quality is strong" in labels["explanation"].text()
+    assert labels["warnings"].text() == "Minor warning"
+    assert labels["rejection_reasons"].text() == "N/A"
+    assert window.screening_results_panel.candidate_detail_empty_label.isHidden() is True
+
+
+def test_main_window_results_warning_and_error_display(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.run_history = [
+        {
+            "run_id": "warn-run",
+            "status": "PARTIAL",
+            "warnings": ["No price history", "Missing technical data"],
+            "errors": ["BAD: support failed"],
+        }
+    ]
+    repository.ranked_by_run = {
+        "warn-run": [
+            SimpleNamespace(
+                rank=0,
+                ticker="BAD",
+                final_score=45.0,
+                grade="REJECT",
+                confidence_level="LOW",
+                setup_label="Rejected",
+                explanation=["Limited evidence"],
+                warnings=["Missing institutional data"],
+                rejection_reasons=["Low confidence candidates are rejected"],
+            )
+        ]
+    }
+    window._screening_repository = repository
+
+    window.refresh_screening_run_history_view()
+    window.screening_results_panel.run_history_table.selectRow(0)
+    window.screening_results_panel.ranked_candidates_table.selectRow(0)
+
+    assert "No price history" in window.screening_results_panel.run_detail_labels["warnings"].text()
+    assert "BAD: support failed" in window.screening_results_panel.run_detail_labels["errors"].text()
+    assert window.screening_results_panel.candidate_detail_labels["warnings"].text() == "Missing institutional data"
+    assert (
+        window.screening_results_panel.candidate_detail_labels["rejection_reasons"].text()
+        == "Low confidence candidates are rejected"
+    )
+
+
+def test_main_window_empty_run_behavior(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.run_history = [
+        {
+            "run_id": "empty-candidates",
+            "status": "COMPLETED",
+            "candidate_count": 0,
+            "warnings": [],
+            "errors": [],
+        }
+    ]
+    window._screening_repository = repository
+
+    window.refresh_screening_run_history_view()
+    window.screening_results_panel.run_history_table.selectRow(0)
+
+    assert window.screening_results_panel.ranked_candidates_table.isHidden() is True
+    assert window.screening_results_panel.ranked_empty_label.text() == "Run has no candidates"
+    assert window.screening_results_panel.ranked_empty_label.isHidden() is False
+    assert window.screening_results_panel.candidate_detail_empty_label.text() == "No selected candidate"
+
+
+def test_main_window_no_selected_candidate_behavior(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=1,
+            ticker="AAPL",
+            final_score=91.0,
+            grade="A+",
+            confidence_level="HIGH",
+            setup_label="Elite Institutional Bounce",
+            explanation=[],
+            warnings=[],
+            rejection_reasons=[],
+        )
+    ]
+    window._screening_repository = repository
+
+    window.refresh_ranked_candidates_view()
+    window.screening_results_panel.ranked_candidates_table.clearSelection()
+
+    assert window.screening_results_panel.candidate_detail_empty_label.text() == "No selected candidate"
+    assert window.screening_results_panel.candidate_detail_empty_label.isHidden() is False
+    assert window.screening_results_panel.candidate_detail_content.isHidden() is True
 
 
 def test_main_window_dashboard_refresh_clears_old_rows_before_loading_new_rows(patched_window):

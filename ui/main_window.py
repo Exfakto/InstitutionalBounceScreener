@@ -259,6 +259,9 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.refresh_run_history_requested.connect(
             self.refresh_screening_run_history_view
         )
+        self.screening_results_panel.run_selected.connect(
+            self.load_ranked_candidates_for_run
+        )
         self.activity_panel = ActivityPanel()
 
         self.screener_filters_panel = self.build_screener_filters_panel()
@@ -1935,6 +1938,29 @@ class MainWindow(QMainWindow):
             candidates = []
 
         self.screening_results_panel.populate_ranked_candidates(candidates)
+        return candidates
+
+    # ----------------------------------------------------------
+
+    def load_ranked_candidates_for_run(self, run_id):
+
+        if not hasattr(self, "screening_results_panel"):
+            return []
+
+        repository = self.screening_repository()
+        candidates = []
+
+        try:
+            if repository is not None and hasattr(repository, "fetch_ranked_candidates"):
+                candidates = repository.fetch_ranked_candidates(run_id) or []
+        except Exception:
+            candidates = []
+
+        self.screening_results_panel.populate_ranked_candidates(candidates)
+        if not candidates:
+            self.screening_results_panel.show_ranked_empty_message(
+                "Run has no candidates"
+            )
         return candidates
 
     # ----------------------------------------------------------
