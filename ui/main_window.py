@@ -140,6 +140,7 @@ class MainWindow(QMainWindow):
 
         self.refresh_statistics()
         self.configure_live_refresh()
+        self.add_activity("Dashboard ready", status="success")
 
     # ----------------------------------------------------------
 
@@ -871,6 +872,14 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def add_activity(self, message, status="info"):
+
+        if hasattr(self, "dashboard"):
+            return self.dashboard.add_activity(message, status=status)
+        return None
+
+    # ----------------------------------------------------------
+
     def mark_pipeline_running(self, step_key):
 
         if hasattr(self, "pipeline_progress_panel"):
@@ -1039,6 +1048,10 @@ class MainWindow(QMainWindow):
             self.update_market_universe_statistics(len(candidates))
             self.refresh_dashboard()
             self.update_dashboard_result_state(candidates)
+            self.add_activity(
+                f"Dashboard results refreshed: {len(candidates):,} records",
+                status="success",
+            )
             return {
                 "success": True,
                 "records": len(candidates),
@@ -1049,6 +1062,8 @@ class MainWindow(QMainWindow):
             self.activity_panel.set_status("Refresh failed")
             self.update_screener_status(candidate_count=0)
             self.log(f"Dashboard refresh failed: {exc}")
+            self.mark_pipeline_error("screener")
+            self.add_activity("Unable to load dashboard data", status="error")
             return {"success": False, "error": str(exc)}
 
     # ----------------------------------------------------------
@@ -1425,6 +1440,10 @@ class MainWindow(QMainWindow):
 
         self.refresh_statistics()
         self.mark_pipeline_complete("universe")
+        self.add_activity(
+            f"Universe update complete: {imported:,} of {total:,} stocks imported",
+            status="success",
+        )
 
     # ----------------------------------------------------------
 
@@ -1450,6 +1469,10 @@ class MainWindow(QMainWindow):
 
         self.mark_refresh_completed()
         self.mark_pipeline_complete("prices")
+        self.add_activity(
+            f"Price download complete: {total:,} database rows",
+            status="success",
+        )
 
         self.log("")
         self.log(f"Database Rows: {total:,}")
@@ -1472,6 +1495,10 @@ class MainWindow(QMainWindow):
 
         self.refresh_statistics()
         self.mark_pipeline_complete("indicators")
+        self.add_activity(
+            f"Indicator calculation complete: {results['rows']:,} rows written",
+            status="success",
+        )
 
         self.log("Calculated indicators")
         self.log(f'Tickers: {results["tickers"]:,}')
@@ -1513,6 +1540,10 @@ class MainWindow(QMainWindow):
 
         self.refresh_statistics()
         self.mark_pipeline_complete("support")
+        self.add_activity(
+            f"Support detection complete: {results['zones']:,} zones found",
+            status="success",
+        )
 
         self.log("Detected support zones")
         self.log(f'Tickers: {results["tickers"]:,}')
@@ -1545,6 +1576,10 @@ class MainWindow(QMainWindow):
 
         self.refresh_statistics()
         self.mark_pipeline_complete("bounce_validation")
+        self.add_activity(
+            f"Bounce validation complete: {results['validated']:,} zones validated",
+            status="success",
+        )
 
         self.log("Validated support-zone bounces")
         self.log(f'Support zones: {results["support_levels"]:,}')
@@ -1613,6 +1648,10 @@ class MainWindow(QMainWindow):
         self.log(f"Average score: {average_score:.1f}")
         self.log(f'Elapsed time: {results["elapsed_seconds"]:.2f}s')
         self.mark_pipeline_complete("screener")
+        self.add_activity(
+            f"Screener run complete: {len(results['candidates']):,} candidates",
+            status="success",
+        )
 
     # ----------------------------------------------------------
 

@@ -223,6 +223,8 @@ def test_professional_screener_workspace_creation(patched_window):
     assert window.dashboard is not None
     assert window.dashboard_controller is not None
     assert window.pipeline_progress_panel is not None
+    assert window.dashboard.activity_feed_table is not None
+    assert window.dashboard.activity_count() >= 1
     assert window.screener_workspace_splitter.count() == 2
     assert set(window.filter_sections) == {
         "Universe",
@@ -395,6 +397,8 @@ def test_main_window_dashboard_exception_shows_error_and_clears_stale_rows(
     assert window.dashboard_status_label.text() == "Unable to load dashboard data"
     assert window.candidates_table.rowCount() == 0
     assert window.dashboard.best_opportunities_table.rowCount() == 0
+    assert window.dashboard.activity_entries[-1]["status"] == "error"
+    assert window.dashboard.activity_entries[-1]["message"] == "Unable to load dashboard data"
 
 
 def test_main_window_dashboard_valid_refresh_clears_state_message(patched_window):

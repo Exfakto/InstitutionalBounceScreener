@@ -1,9 +1,13 @@
+from datetime import datetime
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
@@ -21,6 +25,7 @@ class InstitutionalDashboard(QWidget):
         self.opportunity_labels = {}
         self.watchlist_labels = {}
         self.backtesting_labels = {}
+        self.activity_entries = []
         self._build_ui()
         self.clear()
 
@@ -137,6 +142,9 @@ class InstitutionalDashboard(QWidget):
         )
         layout.addWidget(backtesting, 5, 0, 1, 2)
 
+        activity_feed = self._create_activity_feed_section()
+        layout.addWidget(activity_feed, 6, 0, 1, 2)
+
     def _create_metric_section(self, title, fields, target):
         frame = self._create_section_frame(title)
         layout = frame.layout()
@@ -164,6 +172,42 @@ class InstitutionalDashboard(QWidget):
         layout = frame.layout()
         layout.addWidget(table)
         layout.addWidget(empty_label)
+        return frame
+
+    def _create_activity_feed_section(self):
+        frame = self._create_section_frame("Activity Feed")
+        layout = frame.layout()
+
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.addStretch()
+
+        self.clear_activity_button = QPushButton("Clear Log")
+        self.clear_activity_button.setObjectName("ActivityFeedClearButton")
+        self.clear_activity_button.setProperty("variant", "secondary")
+        self.clear_activity_button.clicked.connect(self.clear_activity)
+        header_layout.addWidget(self.clear_activity_button)
+
+        self.activity_feed_table = self._create_table(
+            ["Time", "Status", "Message"]
+        )
+        self.activity_feed_table.setObjectName("ActivityFeedTable")
+        self.activity_feed_table.setMinimumHeight(150)
+        self.activity_feed_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Interactive
+        )
+        self.activity_feed_table.setColumnWidth(0, 155)
+        self.activity_feed_table.setColumnWidth(1, 88)
+        self.activity_feed_table.horizontalHeader().setStretchLastSection(True)
+
+        self.activity_feed_empty = self._create_empty_label(
+            "No activity recorded yet."
+        )
+
+        layout.addLayout(header_layout)
+        layout.addWidget(self.activity_feed_table)
+        layout.addWidget(self.activity_feed_empty)
+
         return frame
 
     def _create_section_frame(self, title):
@@ -293,6 +337,48 @@ class InstitutionalDashboard(QWidget):
     def clear(self):
         self.set_dashboard_data({})
 
+    def add_activity(self, message, status="info", timestamp=None):
+        """
+        Append a dashboard activity feed entry.
+        """
+
+        timestamp_text = self._format_activity_timestamp(timestamp)
+        normalized_status = self._normalize_activity_status(status)
+        entry = {
+            "timestamp": timestamp_text,
+            "status": normalized_status,
+            "message": str(message or ""),
+        }
+        self.activity_entries.append(entry)
+        self._append_activity_row(entry)
+        self._toggle_table_empty(self.activity_feed_table, self.activity_feed_empty)
+        return entry
+
+    def clear_activity(self):
+        self.activity_entries = []
+        self.activity_feed_table.setRowCount(0)
+        self._toggle_table_empty(self.activity_feed_table, self.activity_feed_empty)
+
+    def activity_count(self):
+        return len(self.activity_entries)
+
+    def _append_activity_row(self, entry):
+        row = self.activity_feed_table.rowCount()
+        self.activity_feed_table.insertRow(row)
+
+        values = [
+            entry["timestamp"],
+            self._activity_status_label(entry["status"]),
+            entry["message"],
+        ]
+        for column, value in enumerate(values):
+            item = QTableWidgetItem(value)
+            item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            if column == 1:
+                item.setTextAlignment(Qt.AlignCenter)
+            self.activity_feed_table.setItem(row, column, item)
+        self.activity_feed_table.scrollToBottom()
+
     def _update_labels(self, labels, values, formatters):
         for key, label in labels.items():
             formatter = formatters.get(key, self._format_text)
@@ -316,6 +402,31 @@ class InstitutionalDashboard(QWidget):
         has_rows = table.rowCount() > 0
         table.setVisible(has_rows)
         empty_label.setVisible(not has_rows)
+
+    @staticmethod
+    def _format_activity_timestamp(timestamp):
+        timestamp = timestamp or datetime.now()
+        if isinstance(timestamp, datetime):
+            return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return str(timestamp)
+
+    @staticmethod
+    def _normalize_activity_status(status):
+        normalized = str(status or "info").lower()
+        if normalized in {"info", "success", "warning", "error", "running"}:
+            return normalized
+        return "info"
+
+    @staticmethod
+    def _activity_status_label(status):
+        labels = {
+            "info": "INFO",
+            "success": "OK",
+            "warning": "WARN",
+            "error": "ERROR",
+            "running": "RUN",
+        }
+        return labels.get(status, "INFO")
 
     @staticmethod
     def _row_value(row, key):

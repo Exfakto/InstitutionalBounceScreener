@@ -424,6 +424,23 @@ class Theme:
             font-weight: 600;
         }}
 
+        QTableWidget#ActivityFeedTable {{
+            background-color: {cls.PANEL_BACKGROUND};
+            alternate-background-color: {cls.CARD_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.MD}px;
+            color: {cls.PRIMARY_TEXT};
+            gridline-color: transparent;
+            selection-background-color: {cls.ACCENT_MUTED};
+            selection-color: {cls.PRIMARY_TEXT};
+        }}
+
+        QPushButton#ActivityFeedClearButton {{
+            padding: {DesignSystem.Spacing.XS}px {DesignSystem.Spacing.MD}px;
+            min-height: 24px;
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
+        }}
+
         QFrame#ToolbarSeparator {{
             background-color: {cls.BORDER};
             border: none;
