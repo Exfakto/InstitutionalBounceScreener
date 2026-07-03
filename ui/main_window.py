@@ -300,6 +300,12 @@ class MainWindow(QMainWindow):
             self.dashboard_summary_labels[key] = value
 
         layout.addStretch()
+
+        self.dashboard_status_label = QLabel("No results available")
+        self.dashboard_status_label.setObjectName("EmptyStateLabel")
+        self.dashboard_status_label.setAlignment(Qt.AlignCenter)
+        self.dashboard_status_label.setMinimumWidth(220)
+        layout.addWidget(self.dashboard_status_label)
         return panel
 
     # ----------------------------------------------------------
@@ -981,7 +987,7 @@ class MainWindow(QMainWindow):
             self.refresh_statistics()
             return result or {"success": True}
         except Exception as exc:
-            self.clear_screener_results()
+            self.clear_screener_results(message="Unable to load dashboard data")
             self.activity_panel.set_progress(0)
             self.activity_panel.set_status("Refresh failed")
             self.update_screener_status(candidate_count=0)
@@ -995,10 +1001,12 @@ class MainWindow(QMainWindow):
         for name, section in getattr(self, "filter_sections", {}).items():
             section.setChecked((filters or {}).get(name, {}).get("enabled", True))
         self.update_summary()
+        if not getattr(self, "candidates_by_ticker", {}):
+            self.set_dashboard_status_message("No stocks match the current filters")
 
     # ----------------------------------------------------------
 
-    def clear_screener_results(self):
+    def clear_screener_results(self, message="No results available"):
 
         if hasattr(self, "candidates_table"):
             self.candidates_table.populate([])
@@ -1010,6 +1018,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "price_chart"):
             self.price_chart.clear()
         self.refresh_dashboard()
+        self.set_dashboard_status_message(message)
 
     # ----------------------------------------------------------
 
@@ -1116,6 +1125,44 @@ class MainWindow(QMainWindow):
         )
         self.dashboard.set_dashboard_data(data)
         self.update_summary()
+
+    # ----------------------------------------------------------
+
+    def update_dashboard_result_state(self, candidates):
+
+        if candidates:
+            self.clear_dashboard_status_message()
+            return
+
+        if self.has_active_filter_selection():
+            self.set_dashboard_status_message("No stocks match the current filters")
+        else:
+            self.set_dashboard_status_message("No results available")
+
+    # ----------------------------------------------------------
+
+    def set_dashboard_status_message(self, message):
+
+        if not hasattr(self, "dashboard_status_label"):
+            return
+
+        self.dashboard_status_label.setText(message or "")
+        self.dashboard_status_label.setVisible(bool(message))
+
+    # ----------------------------------------------------------
+
+    def clear_dashboard_status_message(self):
+
+        self.set_dashboard_status_message("")
+
+    # ----------------------------------------------------------
+
+    def has_active_filter_selection(self):
+
+        for section in getattr(self, "filter_sections", {}).values():
+            if hasattr(section, "isChecked") and not section.isChecked():
+                return True
+        return False
 
     # ----------------------------------------------------------
 
@@ -1363,6 +1410,7 @@ class MainWindow(QMainWindow):
             last_screen_time=self.last_screen_time,
         )
         self.refresh_dashboard()
+        self.update_dashboard_result_state(results["candidates"])
 
         self.activity_panel.set_progress(100)
 

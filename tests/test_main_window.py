@@ -320,6 +320,60 @@ def test_main_window_dashboard_summary_missing_values_show_na(
     assert window.dashboard_summary_labels["database_name"].text() == "N/A"
 
 
+def test_main_window_dashboard_empty_data_shows_empty_message(patched_window):
+    window = patched_window
+    window.clear_screener_results()
+
+    assert window.dashboard_status_label.text() == "No results available"
+    assert window.dashboard_status_label.isHidden() is False
+    assert window.candidates_table.rowCount() == 0
+    assert window.dashboard.best_opportunities_table.rowCount() == 0
+
+
+def test_main_window_dashboard_zero_filtered_matches_shows_filter_message(patched_window):
+    window = patched_window
+    window.run_screener()
+    window.scoring_controller.candidate_sets = [[]]
+    window.apply_screener_filters({"Universe": {"enabled": False}})
+
+    window.refresh_dashboard_results()
+
+    assert window.dashboard_status_label.text() == "No stocks match the current filters"
+    assert window.candidates_table.rowCount() == 0
+    assert window.dashboard.best_opportunities_table.rowCount() == 0
+
+
+def test_main_window_dashboard_exception_shows_error_and_clears_stale_rows(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    window.run_screener()
+
+    def raise_error():
+        raise RuntimeError("load failed")
+
+    monkeypatch.setattr(window.scoring_controller, "run_screener", raise_error)
+    result = window.refresh_dashboard_results()
+
+    assert result["success"] is False
+    assert window.dashboard_status_label.text() == "Unable to load dashboard data"
+    assert window.candidates_table.rowCount() == 0
+    assert window.dashboard.best_opportunities_table.rowCount() == 0
+
+
+def test_main_window_dashboard_valid_refresh_clears_state_message(patched_window):
+    window = patched_window
+    window.clear_screener_results(message="Unable to load dashboard data")
+
+    window.refresh_dashboard_results()
+
+    assert window.dashboard_status_label.isHidden() is True
+    assert window.dashboard_status_label.text() == ""
+    assert window.candidates_table.rowCount() == 1
+    assert window.dashboard.best_opportunities_table.rowCount() == 1
+
+
 def test_main_window_creates_dock_widgets(patched_window):
     window = patched_window
 
