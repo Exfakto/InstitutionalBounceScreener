@@ -347,6 +347,83 @@ class Theme:
             padding-bottom: {DesignSystem.Spacing.XS}px;
         }}
 
+        QFrame#PipelineProgressPanel {{
+            background-color: {cls.CARD_BACKGROUND};
+            border: 1px solid {cls.BORDER};
+            border-radius: {DesignSystem.Radius.LG}px;
+        }}
+
+        QLabel#PipelineTitle {{
+            color: {cls.PRIMARY_TEXT};
+            font-size: {DesignSystem.Typography.SECTION_PT}pt;
+            font-weight: 800;
+        }}
+
+        QLabel#PipelineProgressLabel {{
+            color: {cls.SECONDARY_TEXT};
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
+            font-weight: 700;
+        }}
+
+        QProgressBar#PipelineProgressBar {{
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.SM}px;
+            min-height: 8px;
+            max-height: 8px;
+        }}
+
+        QProgressBar#PipelineProgressBar::chunk {{
+            background-color: {cls.ACCENT};
+            border-radius: {DesignSystem.Radius.SM}px;
+        }}
+
+        QWidget#PipelineStep {{
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.MD}px;
+        }}
+
+        QLabel#PipelineStepName {{
+            color: {cls.PRIMARY_TEXT};
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
+            font-weight: 800;
+        }}
+
+        QLabel#PipelineStepStatus {{
+            color: {cls.MUTED_TEXT};
+            background-color: {cls.ELEVATED_PANEL};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.SM}px;
+            padding: 3px 6px;
+            font-size: {DesignSystem.Typography.CAPTION_PT}pt;
+            font-weight: 800;
+        }}
+
+        QLabel#PipelineStepStatus[status="Running"] {{
+            color: {cls.ACCENT};
+            border-color: {cls.ACCENT};
+            background-color: {cls.ACCENT_MUTED};
+        }}
+
+        QLabel#PipelineStepStatus[status="Complete"] {{
+            color: {cls.POSITIVE};
+            border-color: {cls.POSITIVE};
+            background-color: #13261F;
+        }}
+
+        QLabel#PipelineStepStatus[status="Error"] {{
+            color: {cls.NEGATIVE};
+            border-color: {cls.NEGATIVE};
+            background-color: #2A1719;
+        }}
+
+        QLabel#PipelineStepTimestamp {{
+            color: {cls.MUTED_TEXT};
+            font-size: {DesignSystem.Typography.CAPTION_PT}pt;
+            font-weight: 600;
+        }}
+
         QFrame#ToolbarSeparator {{
             background-color: {cls.BORDER};
             border: none;

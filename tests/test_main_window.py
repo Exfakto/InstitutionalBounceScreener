@@ -222,6 +222,7 @@ def test_professional_screener_workspace_creation(patched_window):
 
     assert window.dashboard is not None
     assert window.dashboard_controller is not None
+    assert window.pipeline_progress_panel is not None
     assert window.screener_workspace_splitter.count() == 2
     assert set(window.filter_sections) == {
         "Universe",
@@ -525,6 +526,7 @@ def test_main_window_run_screen_updates_results_and_status(patched_window):
     assert window.dashboard.best_opportunities_table.rowCount() == 1
     assert window.dashboard.best_opportunities_table.item(0, 0).text() == "AAPL"
     assert window.dashboard.section_frames["institutional_activity"].isHidden() is False
+    assert window.pipeline_progress_panel.status_for("screener") == "Complete"
 
 
 def test_main_window_dashboard_refresh_handles_missing_data(patched_window):

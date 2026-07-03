@@ -42,6 +42,7 @@ from ui.widgets.dashboard import InstitutionalDashboard
 from ui.widgets.kpi_strip import KpiStrip
 from ui.widgets.operations_toolbar import OperationsToolbar
 from ui.widgets.header_bar import HeaderBar
+from ui.widgets.pipeline_progress_panel import PipelineProgressPanel
 from ui.widgets.price_chart import PriceChart
 from ui.widgets.research_preview import ResearchPreview
 from ui.widgets.trade_card import TradeCard
@@ -188,6 +189,9 @@ class MainWindow(QMainWindow):
         )
 
         main_layout.addWidget(self.operations_toolbar)
+
+        self.pipeline_progress_panel = PipelineProgressPanel()
+        main_layout.addWidget(self.pipeline_progress_panel)
 
         ##########################################################
         # Statistics
@@ -867,6 +871,27 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def mark_pipeline_running(self, step_key):
+
+        if hasattr(self, "pipeline_progress_panel"):
+            self.pipeline_progress_panel.mark_running(step_key)
+
+    # ----------------------------------------------------------
+
+    def mark_pipeline_complete(self, step_key):
+
+        if hasattr(self, "pipeline_progress_panel"):
+            self.pipeline_progress_panel.mark_complete(step_key, datetime.now())
+
+    # ----------------------------------------------------------
+
+    def mark_pipeline_error(self, step_key):
+
+        if hasattr(self, "pipeline_progress_panel"):
+            self.pipeline_progress_panel.mark_error(step_key, datetime.now())
+
+    # ----------------------------------------------------------
+
     def register_shortcuts(self):
 
         if hasattr(self, "shortcut_actions"):
@@ -1384,6 +1409,7 @@ class MainWindow(QMainWindow):
 
     def update_universe(self):
 
+        self.mark_pipeline_running("universe")
         self.activity_panel.set_status("Importing universe...")
         self.activity_panel.set_progress(20)
 
@@ -1398,11 +1424,13 @@ class MainWindow(QMainWindow):
         self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
+        self.mark_pipeline_complete("universe")
 
     # ----------------------------------------------------------
 
     def download_prices(self):
 
+        self.mark_pipeline_running("prices")
         self.activity_panel.set_status("Downloading prices...")
         self.activity_panel.set_progress(10)
 
@@ -1421,6 +1449,7 @@ class MainWindow(QMainWindow):
         self.refresh_statistics()
 
         self.mark_refresh_completed()
+        self.mark_pipeline_complete("prices")
 
         self.log("")
         self.log(f"Database Rows: {total:,}")
@@ -1429,6 +1458,7 @@ class MainWindow(QMainWindow):
 
     def calculate_indicators(self):
 
+        self.mark_pipeline_running("indicators")
         self.activity_panel.set_status("Calculating indicators...")
         self.activity_panel.set_progress(20)
 
@@ -1441,6 +1471,7 @@ class MainWindow(QMainWindow):
         self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
+        self.mark_pipeline_complete("indicators")
 
         self.log("Calculated indicators")
         self.log(f'Tickers: {results["tickers"]:,}')
@@ -1468,6 +1499,7 @@ class MainWindow(QMainWindow):
 
     def detect_support(self):
 
+        self.mark_pipeline_running("support")
         self.activity_panel.set_status("Detecting support...")
         self.activity_panel.set_progress(20)
 
@@ -1480,6 +1512,7 @@ class MainWindow(QMainWindow):
         self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
+        self.mark_pipeline_complete("support")
 
         self.log("Detected support zones")
         self.log(f'Tickers: {results["tickers"]:,}')
@@ -1498,6 +1531,7 @@ class MainWindow(QMainWindow):
 
     def validate_bounces(self):
 
+        self.mark_pipeline_running("bounce_validation")
         self.activity_panel.set_status("Validating bounces...")
         self.activity_panel.set_progress(20)
 
@@ -1510,6 +1544,7 @@ class MainWindow(QMainWindow):
         self.activity_panel.set_status("Ready")
 
         self.refresh_statistics()
+        self.mark_pipeline_complete("bounce_validation")
 
         self.log("Validated support-zone bounces")
         self.log(f'Support zones: {results["support_levels"]:,}')
@@ -1528,6 +1563,7 @@ class MainWindow(QMainWindow):
 
     def run_screener(self):
 
+        self.mark_pipeline_running("screener")
         self.activity_panel.set_status("Running screener...")
         self.activity_panel.set_progress(10)
 
@@ -1576,6 +1612,7 @@ class MainWindow(QMainWindow):
 
         self.log(f"Average score: {average_score:.1f}")
         self.log(f'Elapsed time: {results["elapsed_seconds"]:.2f}s')
+        self.mark_pipeline_complete("screener")
 
     # ----------------------------------------------------------
 
