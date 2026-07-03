@@ -33,6 +33,13 @@ class MarketService:
 
         return self.db.get_all_tickers()
 
+    def get_active_market_universe_records(self):
+        """
+        Return active records from the market universe table.
+        """
+
+        return self.db.get_active_market_universe_records()
+
     # --------------------------------------------------
     # Market Data
     # --------------------------------------------------

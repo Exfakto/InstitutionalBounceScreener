@@ -1,6 +1,7 @@
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
@@ -983,9 +984,29 @@ class MainWindow(QMainWindow):
 
         try:
             self.clear_screener_results()
-            result = self.run_screener()
-            self.refresh_statistics()
-            return result or {"success": True}
+            records = self.load_market_universe_records()
+            candidates = [
+                self.market_universe_record_to_candidate(record)
+                for record in records
+            ]
+            self.candidates_by_ticker = {
+                candidate.ticker: candidate
+                for candidate in candidates
+            }
+            self.candidates_table.populate(candidates)
+            self.update_open_detail_state()
+            self.last_screen_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.update_screener_status(
+                candidate_count=len(candidates),
+                last_screen_time=self.last_screen_time,
+            )
+            self.update_market_universe_statistics(len(candidates))
+            self.refresh_dashboard()
+            self.update_dashboard_result_state(candidates)
+            return {
+                "success": True,
+                "records": len(candidates),
+            }
         except Exception as exc:
             self.clear_screener_results(message="Unable to load dashboard data")
             self.activity_panel.set_progress(0)
@@ -993,6 +1014,71 @@ class MainWindow(QMainWindow):
             self.update_screener_status(candidate_count=0)
             self.log(f"Dashboard refresh failed: {exc}")
             return {"success": False, "error": str(exc)}
+
+    # ----------------------------------------------------------
+
+    def load_market_universe_records(self):
+
+        loader = getattr(self.controller, "get_active_market_universe_records", None)
+
+        if not callable(loader):
+            return []
+
+        return loader() or []
+
+    # ----------------------------------------------------------
+
+    def market_universe_record_to_candidate(self, record):
+
+        value = self.record_value
+        ticker = str(value(record, "ticker") or "").strip().upper()
+        metrics = {
+            "market_cap": value(record, "market_cap"),
+            "price": value(record, "price"),
+            "average_volume": value(record, "average_volume"),
+            "average_dollar_volume": value(record, "average_dollar_volume"),
+            "exchange": value(record, "exchange"),
+            "security_type": value(record, "security_type"),
+            "sector": value(record, "sector"),
+            "industry": value(record, "industry"),
+        }
+
+        return SimpleNamespace(
+            ticker=ticker,
+            company_name=value(record, "company_name") or value(record, "company"),
+            metrics=metrics,
+            score_map={},
+            scores=[],
+            warnings=[],
+        )
+
+    # ----------------------------------------------------------
+
+    def update_market_universe_statistics(self, stock_count):
+
+        try:
+            stats = self.controller.get_statistics()
+        except Exception:
+            stats = {}
+
+        stats = dict(stats or {})
+        stats.setdefault("rows", 0)
+        stats.setdefault("indicator_rows", 0)
+        stats.setdefault("support_levels", 0)
+        stats.setdefault("validated_zones", 0)
+        stats["stocks"] = stock_count
+        self.latest_statistics = stats
+        self.kpi_strip.update_statistics(stats)
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def record_value(record, key):
+
+        if isinstance(record, dict):
+            return record.get(key)
+
+        return getattr(record, key, None)
 
     # ----------------------------------------------------------
 

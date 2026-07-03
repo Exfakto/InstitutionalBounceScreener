@@ -24,6 +24,13 @@ class MarketController:
 
         return imported, total
 
+    def get_active_market_universe_records(self):
+        """
+        Return active records from the market universe table.
+        """
+
+        return self.market.get_active_market_universe_records()
+
     # --------------------------------------------------
     # Prices
     # --------------------------------------------------

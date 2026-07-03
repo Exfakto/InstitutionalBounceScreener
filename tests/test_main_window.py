@@ -25,12 +25,16 @@ class FakeMarketController:
             "support_levels": 0,
             "validated_zones": 0,
         }
+        self.market_universe_records = []
 
     def get_statistics(self):
         return dict(self.stats)
 
     def update_universe(self):
         return 0, 0
+
+    def get_active_market_universe_records(self):
+        return list(self.market_universe_records)
 
     def download_prices(self):
         return {}, 0
@@ -333,9 +337,13 @@ def test_main_window_dashboard_empty_data_shows_empty_message(patched_window):
 
 def test_main_window_dashboard_zero_filtered_matches_shows_filter_message(patched_window):
     window = patched_window
-    window.run_screener()
-    window.scoring_controller.candidate_sets = [[]]
+    window.controller.market_universe_records = [
+        {"ticker": "AAPL", "company_name": "Apple Inc.", "exchange": "NASDAQ"}
+    ]
+    window.refresh_dashboard_results()
+    assert window.candidates_table.rowCount() == 1
     window.apply_screener_filters({"Universe": {"enabled": False}})
+    window.controller.market_universe_records = []
 
     window.refresh_dashboard_results()
 
@@ -349,12 +357,16 @@ def test_main_window_dashboard_exception_shows_error_and_clears_stale_rows(
     monkeypatch,
 ):
     window = patched_window
-    window.run_screener()
+    window.controller.market_universe_records = [
+        {"ticker": "AAPL", "company_name": "Apple Inc.", "exchange": "NASDAQ"}
+    ]
+    window.refresh_dashboard_results()
+    assert window.candidates_table.rowCount() == 1
 
     def raise_error():
         raise RuntimeError("load failed")
 
-    monkeypatch.setattr(window.scoring_controller, "run_screener", raise_error)
+    monkeypatch.setattr(window.controller, "get_active_market_universe_records", raise_error)
     result = window.refresh_dashboard_results()
 
     assert result["success"] is False
@@ -366,6 +378,9 @@ def test_main_window_dashboard_exception_shows_error_and_clears_stale_rows(
 def test_main_window_dashboard_valid_refresh_clears_state_message(patched_window):
     window = patched_window
     window.clear_screener_results(message="Unable to load dashboard data")
+    window.controller.market_universe_records = [
+        {"ticker": "AAPL", "company_name": "Apple Inc.", "exchange": "NASDAQ"}
+    ]
 
     window.refresh_dashboard_results()
 
@@ -514,11 +529,14 @@ def test_main_window_dashboard_clear_reset_behavior(patched_window):
 
 def test_main_window_refresh_results_reuses_run_screen(patched_window):
     window = patched_window
+    window.controller.market_universe_records = [
+        {"ticker": "AAPL", "company_name": "Apple Inc.", "exchange": "NASDAQ"}
+    ]
 
     window.refresh_screener_results()
     window.refresh_screener_results()
 
-    assert window.scoring_controller.calls == 2
+    assert window.scoring_controller.calls == 0
     assert window.candidates_table.rowCount() == 1
 
 
@@ -528,21 +546,73 @@ def test_main_window_dashboard_refresh_method_exists(patched_window):
     assert callable(window.refresh_dashboard_results)
 
 
+def test_main_window_dashboard_loads_rows_from_market_universe(patched_window):
+    window = patched_window
+    window.controller.market_universe_records = [
+        {
+            "ticker": "MSFT",
+            "company_name": "Microsoft Corporation",
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+            "sector": "Technology",
+            "industry": "Software Infrastructure",
+            "market_cap": 3200000000000,
+            "price": 450.0,
+            "average_volume": 22000000,
+            "average_dollar_volume": 9900000000,
+        },
+        {
+            "ticker": "JPM",
+            "company_name": "JPMorgan Chase & Co.",
+            "exchange": "NYSE",
+            "security_type": "Common Stock",
+            "sector": "Financial Services",
+            "industry": "Banks Diversified",
+        },
+    ]
+
+    result = window.refresh_dashboard_results()
+
+    assert result == {"success": True, "records": 2}
+    assert window.scoring_controller.calls == 0
+    assert window.candidates_table.rowCount() == 2
+    assert window.candidates_table.item(0, 0).text() == "MSFT"
+    assert window.candidates_table.item(1, 0).text() == "JPM"
+    assert window.dashboard.best_opportunities_table.rowCount() == 2
+    assert window.dashboard.best_opportunities_table.item(0, 0).text() == "MSFT"
+    assert window.dashboard.best_opportunities_table.item(0, 1).text() == "Microsoft Corporation"
+    assert window.dashboard_summary_labels["stocks_passing_filters"].text() == "2"
+
+
+def test_main_window_dashboard_empty_market_universe_shows_empty_message(patched_window):
+    window = patched_window
+
+    result = window.refresh_dashboard_results()
+
+    assert result == {"success": True, "records": 0}
+    assert window.scoring_controller.calls == 0
+    assert window.candidates_table.rowCount() == 0
+    assert window.dashboard.best_opportunities_table.rowCount() == 0
+    assert window.dashboard_status_label.text() == "No results available"
+    assert window.dashboard_status_label.isHidden() is False
+
+
 def test_main_window_dashboard_refresh_clears_old_rows_before_loading_new_rows(patched_window):
     window = patched_window
-    old_candidates = [
-        FakeScoringController.make_candidate("OLD1", "Old One", 82.0),
-        FakeScoringController.make_candidate("OLD2", "Old Two", 81.0),
+    old_records = [
+        {"ticker": "OLD1", "company_name": "Old One", "exchange": "NYSE"},
+        {"ticker": "OLD2", "company_name": "Old Two", "exchange": "NASDAQ"},
     ]
-    new_candidates = [
-        FakeScoringController.make_candidate("NEW", "New Corp", 93.0)
+    new_records = [
+        {"ticker": "NEW", "company_name": "New Corp", "exchange": "NYSE"}
     ]
-    window.scoring_controller.candidate_sets = [old_candidates, new_candidates]
 
+    window.controller.market_universe_records = old_records
     window.refresh_dashboard_results()
     assert window.candidates_table.rowCount() == 2
     assert window.dashboard.best_opportunities_table.rowCount() == 2
 
+    window.controller.market_universe_records = new_records
     window.refresh_dashboard_results()
 
     assert window.candidates_table.rowCount() == 1
@@ -553,10 +623,13 @@ def test_main_window_dashboard_refresh_clears_old_rows_before_loading_new_rows(p
 
 def test_main_window_refresh_results_action_is_wired_to_dashboard_refresh(patched_window):
     window = patched_window
+    window.controller.market_universe_records = [
+        {"ticker": "AAPL", "company_name": "Apple Inc.", "exchange": "NASDAQ"}
+    ]
 
     window.operations_toolbar.buttons["refresh_results"].click()
 
-    assert window.scoring_controller.calls == 1
+    assert window.scoring_controller.calls == 0
     assert window.candidates_table.rowCount() == 1
     assert window.dashboard.best_opportunities_table.rowCount() == 1
 
