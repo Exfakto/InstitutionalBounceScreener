@@ -3,7 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from config.app_metadata import APPLICATION_NAME, BUILD_DATE, SCHEMA_VERSION, VERSION
+from config.app_metadata import (
+    APPLICATION_NAME,
+    BUILD_DATE,
+    BUILD_TIMESTAMP,
+    RELEASE_CHANNEL,
+    SCHEMA_VERSION,
+    VERSION,
+)
 from config.settings import DATABASE_FOLDER, DATABASE_NAME
 
 
@@ -12,6 +19,8 @@ class AppConfig:
     application_name: str = APPLICATION_NAME
     version: str = VERSION
     build_date: str = BUILD_DATE
+    build_timestamp: str = BUILD_TIMESTAMP
+    release_channel: str = RELEASE_CHANNEL
     schema_version: str = SCHEMA_VERSION
     database_path: Path = Path(DATABASE_FOLDER) / DATABASE_NAME
     export_directory: Path = Path("exports/results")

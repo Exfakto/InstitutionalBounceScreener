@@ -1,60 +1,28 @@
 # Release Checklist
 
-Use this checklist before tagging a beta release.
+Use this checklist before tagging or distributing a build.
 
-## Environment
+## Required Checks
 
-- Activate the virtual environment:
-  ```powershell
-  .venv\Scripts\Activate.ps1
-  ```
-- Confirm dependencies are installed:
-  ```powershell
-  python -m pip install -r requirements.txt
-  ```
+- Confirm `python -m pytest -q` passes.
+- Confirm `python -m compileall app.py main.py app_entry.py controllers services database ui backtesting market_data` passes.
+- Run `scripts/run_release_checks.ps1`.
+- Confirm app launches in dev mode with `python main.py`.
+- Create a database backup from the About & Diagnostics dialog.
+- Confirm export directory is writable.
+- Confirm provider configuration is present for the selected provider.
+- Confirm local/offline mode still works without API keys.
 
-## Verification
+## Build Checks
 
-- Run the full test suite:
-  ```powershell
-  python -m pytest
-  ```
-- Run the compile check:
-  ```powershell
-  python -m compileall app.py main.py controllers services support bounce analysis fundamentals institutional earnings database ui market providers tests
-  ```
-- Run the app:
-  ```powershell
-  python app.py
-  ```
+- Run `scripts/build_release.ps1 -Clean`.
+- Confirm output appears in `dist/`.
+- Confirm bundled config/data/docs/resources are present.
+- Launch packaged executable on a clean workstation profile if possible.
 
-## Manual Smoke Tests
+## Common Release Risks
 
-- Dashboard smoke test: launch the app, verify header, KPI strip, candidate table, operations toolbar, and activity panel render.
-- Chart smoke test: select a candidate and verify the price chart area handles available or missing chart data safely.
-- Watchlist smoke test: add a selected candidate, refresh the watchlist panel, remove an item, and verify live quote cells do not clear existing rows on failure.
-- Trade journal smoke test: create, close, delete, and refresh paper trade records.
-- Decision dashboard smoke test: select a candidate and verify Research Preview and Trade Card show clean available or unavailable states.
-- Refresh smoke test: verify market status and auto-refresh indicators display in the header.
-
-## Provider And Secrets
-
-- Verify `config/providers.json` contains no API keys or secrets.
-- Verify paid provider keys are supplied only through environment variables when needed.
-- Verify tests do not require live provider subscriptions.
-
-## Git And Release
-
-- Verify working tree is clean:
-  ```powershell
-  git status
-  ```
-- Review release notes and known limitations.
-- Tag the release:
-  ```powershell
-  git tag v3.0.0-beta
-  ```
-- Push the tag when ready:
-  ```powershell
-  git push origin v3.0.0-beta
-  ```
+- Missing API keys should show safe messages, not crashes.
+- Empty databases should show empty states, not sample data.
+- Backups must pass SQLite `PRAGMA integrity_check`.
+- Large universe scans should respect configured guardrails.

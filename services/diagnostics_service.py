@@ -5,7 +5,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from config.app_metadata import APPLICATION_NAME, BUILD_DATE, SCHEMA_VERSION, VERSION
+from config.app_metadata import (
+    APPLICATION_NAME,
+    BUILD_DATE,
+    BUILD_TIMESTAMP,
+    RELEASE_CHANNEL,
+    SCHEMA_VERSION,
+    VERSION,
+)
 from config.settings import DATABASE_FOLDER, DATABASE_NAME
 from providers.provider_config import ProviderConfig
 from services.health_check_service import HealthCheckService
@@ -44,6 +51,8 @@ class DiagnosticsService:
             "app_name": APPLICATION_NAME,
             "version": self._version(),
             "build_date": BUILD_DATE,
+            "build_timestamp": BUILD_TIMESTAMP,
+            "release_channel": RELEASE_CHANNEL,
             "schema_version": SCHEMA_VERSION,
             "python_version": sys.version.split()[0],
             "qt_version": self.qt_version(),
@@ -55,6 +64,7 @@ class DiagnosticsService:
             "working_directory": str(Path.cwd()),
             "log_path": str(self.log_path),
             "test_build_mode": "Unavailable",
+            "build_environment": self.build_environment_summary(),
             "warnings": list(provider_config.warnings),
         }
 
@@ -74,6 +84,8 @@ class DiagnosticsService:
             "app_name": "Application",
             "version": "Version",
             "build_date": "Build Date",
+            "build_timestamp": "Build Timestamp",
+            "release_channel": "Release Channel",
             "schema_version": "Schema Version",
             "python_version": "Python",
             "qt_version": "Qt/PySide",
@@ -84,6 +96,7 @@ class DiagnosticsService:
             "working_directory": "Working Directory",
             "log_path": "Log Path",
             "test_build_mode": "Test/Build Mode",
+            "build_environment": "Build Environment",
         }
         lines = [
             f"{label}: {diagnostics.get(key) or '--'}"
@@ -99,6 +112,11 @@ class DiagnosticsService:
 
     def _version(self) -> str:
         return VERSION
+
+    @staticmethod
+    def build_environment_summary() -> str:
+        mode = "packaged" if getattr(sys, "frozen", False) else "dev"
+        return f"{mode} | {platform.platform()} | Python {sys.version.split()[0]}"
 
     @staticmethod
     def qt_version() -> str:

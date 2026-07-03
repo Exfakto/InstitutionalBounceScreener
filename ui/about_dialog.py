@@ -10,12 +10,18 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QPushButton,
+    QFileDialog,
+    QMessageBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from controllers.diagnostics_controller import DiagnosticsController
+from services.app_config_service import AppConfigService
+from services.database_backup_service import DatabaseBackupService
+from services.release_checklist_service import ReleaseChecklistService
+from services.release_metadata_service import ReleaseMetadataService
 
 
 class AboutDialog(QDialog):
@@ -35,6 +41,9 @@ class AboutDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.controller = controller or DiagnosticsController()
+        self.config_service = AppConfigService()
+        self.release_metadata_service = ReleaseMetadataService()
+        self.release_checklist_service = ReleaseChecklistService()
 
         self.setWindowTitle("About & Diagnostics")
         self.setModal(True)
@@ -53,6 +62,24 @@ class AboutDialog(QDialog):
         self.diagnostics_text = QTextEdit()
         self.diagnostics_text.setReadOnly(True)
         self.diagnostics_text.setMinimumHeight(150)
+        self.release_group = QGroupBox("Release Readiness")
+        self.release_layout = QFormLayout(self.release_group)
+        self.release_labels: dict[str, QLabel] = {}
+        for key, label_text in [
+            ("version", "Version"),
+            ("build_timestamp", "Build Timestamp"),
+            ("release_channel", "Release Channel"),
+            ("environment", "Environment"),
+            ("checklist", "Checklist"),
+        ]:
+            label = QLabel("--")
+            label.setWordWrap(True)
+            self.release_layout.addRow(label_text, label)
+            self.release_labels[key] = label
+        self.backup_database_button = QPushButton("Backup Database")
+        self.backup_database_button.clicked.connect(self.backup_database)
+        self.restore_database_button = QPushButton("Restore Database")
+        self.restore_database_button.clicked.connect(self.restore_database)
 
         self.copy_button = QPushButton("Copy Diagnostics")
         self.copy_button.clicked.connect(self.copy_diagnostics)
@@ -67,7 +94,10 @@ class AboutDialog(QDialog):
         layout.addWidget(self.version_label)
         layout.addWidget(self.description_label)
         layout.addWidget(self.diagnostics_group)
+        layout.addWidget(self.release_group)
         layout.addWidget(self.diagnostics_text)
+        layout.addWidget(self.backup_database_button)
+        layout.addWidget(self.restore_database_button)
         layout.addWidget(self.refresh_button)
         layout.addWidget(self.copy_button)
         layout.addWidget(self.button_box)
@@ -83,6 +113,7 @@ class AboutDialog(QDialog):
             f" | Schema: {diagnostics.get('schema_version') or '--'}"
         )
         self._render_diagnostics(diagnostics)
+        self._render_release_readiness()
         self.diagnostics_text.setPlainText(self.full_diagnostics_text())
 
     def full_diagnostics_text(self) -> str:
@@ -103,6 +134,8 @@ class AboutDialog(QDialog):
             ("python_version", "Python"),
             ("qt_version", "Qt/PySide"),
             ("build_date", "Build Date"),
+            ("build_timestamp", "Build Timestamp"),
+            ("release_channel", "Release Channel"),
             ("schema_version", "Schema Version"),
             ("operating_system", "Operating System"),
             ("active_provider", "Active Provider"),
@@ -111,6 +144,7 @@ class AboutDialog(QDialog):
             ("working_directory", "Working Directory"),
             ("log_path", "Log Path"),
             ("test_build_mode", "Test/Build Mode"),
+            ("build_environment", "Build Environment"),
         ]
 
         for key, label_text in labels:
@@ -123,6 +157,55 @@ class AboutDialog(QDialog):
                 self.diagnostic_labels[key] = label
 
             label.setText(str(diagnostics.get(key) or "--"))
+
+    def _render_release_readiness(self) -> None:
+        metadata = self.release_metadata_service.metadata()
+        checklist = self.release_checklist_service.run(
+            include_build_checks=False,
+            include_test_checks=False,
+        )
+        self.release_labels["version"].setText(metadata.version)
+        self.release_labels["build_timestamp"].setText(metadata.build_timestamp)
+        self.release_labels["release_channel"].setText(metadata.release_channel)
+        self.release_labels["environment"].setText(
+            self.release_metadata_service.build_environment_summary()["platform"]
+        )
+        self.release_labels["checklist"].setText(checklist.summary)
+
+    def backup_database(self):
+        config = self.config_service.load()
+        result = DatabaseBackupService(
+            config.database_path,
+            config.data_directory / "backups",
+        ).backup()
+        self.release_labels["checklist"].setText(result.message)
+        return result
+
+    def restore_database(self):
+        config = self.config_service.load()
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Restore Database Backup",
+            str(config.data_directory / "backups"),
+            "SQLite Database (*.db);;All Files (*)",
+        )
+        if not path:
+            self.release_labels["checklist"].setText("Restore cancelled")
+            return None
+        answer = QMessageBox.question(
+            self,
+            "Restore Database",
+            "Restore the database from this backup?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self.release_labels["checklist"].setText("Restore cancelled")
+            return None
+        result = DatabaseBackupService(
+            config.database_path,
+            config.data_directory / "backups",
+        ).restore(path)
+        self.release_labels["checklist"].setText(result.message)
+        return result
 
     @staticmethod
     def report_text(title, report) -> str:
