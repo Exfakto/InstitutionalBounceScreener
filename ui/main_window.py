@@ -1,5 +1,6 @@
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
@@ -8,7 +9,9 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDockWidget,
     QFormLayout,
+    QFrame,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QSplitter,
@@ -121,6 +124,7 @@ class MainWindow(QMainWindow):
         )
         self.last_refresh_at = None
         self.next_refresh_at = None
+        self.latest_statistics = {}
         self.candidates_by_ticker = {}
         self.active_workspace_layout = self.DEFAULT_WORKSPACE_LAYOUT
 
@@ -185,6 +189,9 @@ class MainWindow(QMainWindow):
         self.kpi_strip = KpiStrip()
 
         main_layout.addWidget(self.kpi_strip)
+
+        self.dashboard_summary_panel = self.build_dashboard_summary_panel()
+        main_layout.addWidget(self.dashboard_summary_panel)
 
         ##########################################################
         # Institutional Dashboard
@@ -257,6 +264,43 @@ class MainWindow(QMainWindow):
         self.refresh_dashboard()
         self.refresh_watchlist()
         self.refresh_trade_journal()
+
+    # ----------------------------------------------------------
+
+    def build_dashboard_summary_panel(self):
+
+        panel = QFrame()
+        panel.setObjectName("ResearchPreviewSection")
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(18)
+
+        self.dashboard_summary_labels = {}
+
+        for key, title in [
+            ("total_stocks_loaded", "Total Stocks Loaded"),
+            ("stocks_passing_filters", "Stocks Passing Current Filters"),
+            ("last_refresh_time", "Last Refresh Time"),
+            ("database_name", "Current Database Name"),
+        ]:
+            container = QWidget()
+            item_layout = QVBoxLayout(container)
+            item_layout.setContentsMargins(0, 0, 0, 0)
+            item_layout.setSpacing(3)
+
+            label = QLabel(title)
+            label.setObjectName("ResearchPreviewFieldLabel")
+            value = QLabel("N/A")
+            value.setObjectName("ResearchPreviewFieldValue")
+            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+            item_layout.addWidget(label)
+            item_layout.addWidget(value)
+            layout.addWidget(container)
+            self.dashboard_summary_labels[key] = value
+
+        layout.addStretch()
+        return panel
 
     # ----------------------------------------------------------
 
@@ -950,6 +994,7 @@ class MainWindow(QMainWindow):
 
         for name, section in getattr(self, "filter_sections", {}).items():
             section.setChecked((filters or {}).get(name, {}).get("enabled", True))
+        self.update_summary()
 
     # ----------------------------------------------------------
 
@@ -1053,6 +1098,7 @@ class MainWindow(QMainWindow):
     def refresh_statistics(self):
 
         stats = self.controller.get_statistics()
+        self.latest_statistics = stats
 
         self.kpi_strip.update_statistics(stats)
         self.refresh_dashboard()
@@ -1069,6 +1115,82 @@ class MainWindow(QMainWindow):
             last_refresh=self.last_refresh_at,
         )
         self.dashboard.set_dashboard_data(data)
+        self.update_summary()
+
+    # ----------------------------------------------------------
+
+    def update_summary(self, stats=None):
+
+        if not hasattr(self, "dashboard_summary_labels"):
+            return
+
+        summary = self.dashboard_summary_values(stats)
+
+        for key, label in self.dashboard_summary_labels.items():
+            label.setText(summary.get(key, "N/A"))
+
+    # ----------------------------------------------------------
+
+    def dashboard_summary_values(self, stats=None):
+
+        stats = stats if isinstance(stats, dict) else getattr(self, "latest_statistics", {})
+
+        if not stats:
+            try:
+                stats = self.controller.get_statistics()
+                self.latest_statistics = stats
+            except Exception:
+                stats = {}
+
+        return {
+            "total_stocks_loaded": self.summary_int(stats.get("stocks")),
+            "stocks_passing_filters": self.summary_int(
+                len(getattr(self, "candidates_by_ticker", {}) or {})
+            ),
+            "last_refresh_time": self.summary_text(
+                self.last_refresh_at or getattr(self, "last_screen_time", None)
+            ),
+            "database_name": self.current_database_name(),
+        }
+
+    # ----------------------------------------------------------
+
+    def current_database_name(self):
+
+        try:
+            settings = self.settings_service.load()
+        except Exception:
+            return "N/A"
+
+        path = ((settings or {}).get("paths") or {}).get("database_path")
+        if not path:
+            return "N/A"
+
+        name = Path(str(path)).name
+        return name or "N/A"
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def summary_int(value):
+
+        if value in (None, ""):
+            return "N/A"
+        try:
+            return f"{int(value):,}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def summary_text(value):
+
+        if value in (None, ""):
+            return "N/A"
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return str(value)
 
     # ----------------------------------------------------------
 

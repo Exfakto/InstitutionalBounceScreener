@@ -16,14 +16,17 @@ def app():
 
 
 class FakeMarketController:
-    def get_statistics(self):
-        return {
+    def __init__(self):
+        self.stats = {
             "stocks": 0,
             "rows": 0,
             "indicator_rows": 0,
             "support_levels": 0,
             "validated_zones": 0,
         }
+
+    def get_statistics(self):
+        return dict(self.stats)
 
     def update_universe(self):
         return 0, 0
@@ -235,6 +238,86 @@ def test_main_window_dashboard_starts_with_empty_sections(patched_window):
     assert window.dashboard.section_frames["institutional_activity"].isHidden() is True
     assert window.dashboard.section_frames["recent_research"].isHidden() is True
     assert window.dashboard.section_frames["backtesting_snapshot"].isHidden() is True
+
+
+def test_main_window_dashboard_summary_widgets_are_created(patched_window):
+    window = patched_window
+
+    assert window.dashboard_summary_panel is not None
+    assert set(window.dashboard_summary_labels) == {
+        "total_stocks_loaded",
+        "stocks_passing_filters",
+        "last_refresh_time",
+        "database_name",
+    }
+
+
+def test_main_window_update_summary_executes_without_exceptions(patched_window):
+    window = patched_window
+
+    window.update_summary()
+
+    assert window.dashboard_summary_labels["total_stocks_loaded"].text() == "0"
+    assert window.dashboard_summary_labels["stocks_passing_filters"].text() == "0"
+
+
+def test_main_window_dashboard_summary_values_change_after_data_updates(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    monkeypatch.setattr(
+        window.settings_service,
+        "load",
+        lambda: {"paths": {"database_path": "data/MockDashboard.db"}},
+    )
+    window.controller.stats = {
+        "stocks": 125,
+        "rows": 10,
+        "indicator_rows": 0,
+        "support_levels": 0,
+        "validated_zones": 0,
+    }
+    window.latest_statistics = window.controller.get_statistics()
+    window.candidates_by_ticker = {
+        "AAPL": SimpleNamespace(ticker="AAPL"),
+        "MSFT": SimpleNamespace(ticker="MSFT"),
+    }
+    window.last_refresh_at = "2026-07-03 12:30:00"
+
+    window.update_summary()
+
+    assert window.dashboard_summary_labels["total_stocks_loaded"].text() == "125"
+    assert window.dashboard_summary_labels["stocks_passing_filters"].text() == "2"
+    assert window.dashboard_summary_labels["last_refresh_time"].text() == "2026-07-03 12:30:00"
+    assert window.dashboard_summary_labels["database_name"].text() == "MockDashboard.db"
+
+    window.controller.stats["stocks"] = 300
+    window.latest_statistics = window.controller.get_statistics()
+    window.candidates_by_ticker = {"NVDA": SimpleNamespace(ticker="NVDA")}
+
+    window.update_summary()
+
+    assert window.dashboard_summary_labels["total_stocks_loaded"].text() == "300"
+    assert window.dashboard_summary_labels["stocks_passing_filters"].text() == "1"
+
+
+def test_main_window_dashboard_summary_missing_values_show_na(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    monkeypatch.setattr(window.settings_service, "load", lambda: {"paths": {}})
+    window.latest_statistics = {"stocks": None}
+    window.last_refresh_at = None
+    window.last_screen_time = None
+    window.candidates_by_ticker = {}
+
+    window.update_summary()
+
+    assert window.dashboard_summary_labels["total_stocks_loaded"].text() == "N/A"
+    assert window.dashboard_summary_labels["last_refresh_time"].text() == "N/A"
+    assert window.dashboard_summary_labels["database_name"].text() == "N/A"
 
 
 def test_main_window_creates_dock_widgets(patched_window):
