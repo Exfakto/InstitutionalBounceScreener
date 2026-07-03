@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QComboBox,
     QLineEdit,
     QPushButton,
     QTableWidget,
@@ -22,6 +23,7 @@ class ScreeningResultsPanel(QWidget):
     refresh_run_history_requested = Signal()
     run_screening_requested = Signal(str)
     cancel_screening_requested = Signal()
+    screening_mode_changed = Signal(str)
     run_selected = Signal(str)
     candidate_selected = Signal(object)
 
@@ -108,6 +110,10 @@ class ScreeningResultsPanel(QWidget):
 
         label = QLabel("Tickers")
         label.setObjectName("ResearchPreviewFieldLabel")
+        self.screening_mode_combo = QComboBox()
+        self.screening_mode_combo.setObjectName("ScreeningModeCombo")
+        self.screening_mode_combo.addItems(["Manual ticker input", "Universe scan mode"])
+        self.screening_mode_combo.currentTextChanged.connect(self.handle_mode_changed)
         self.ticker_input = QLineEdit()
         self.ticker_input.setObjectName("ScreeningTickerInput")
         self.ticker_input.setPlaceholderText("AAPL, MSFT, NVDA")
@@ -120,16 +126,30 @@ class ScreeningResultsPanel(QWidget):
         self.cancel_screening_button.clicked.connect(self.cancel_screening_requested.emit)
         self.screening_status_label = QLabel("Ready")
         self.screening_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.universe_count_label = QLabel("Universe: --")
+        self.universe_count_label.setObjectName("ResearchPreviewFieldValue")
 
+        layout.addWidget(self.screening_mode_combo)
         layout.addWidget(label)
         layout.addWidget(self.ticker_input, stretch=1)
         layout.addWidget(self.run_screening_button)
         layout.addWidget(self.cancel_screening_button)
+        layout.addWidget(self.universe_count_label)
         layout.addWidget(self.screening_status_label)
         return section
 
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())
+
+    def handle_mode_changed(self, mode):
+        self.ticker_input.setEnabled(not self.is_universe_scan_mode())
+        self.screening_mode_changed.emit(mode)
+
+    def is_universe_scan_mode(self):
+        return self.screening_mode_combo.currentText() == "Universe scan mode"
+
+    def set_universe_count(self, count):
+        self.universe_count_label.setText(f"Universe: {count}")
 
     def set_screening_active(self, active, status_text=None):
         self.run_screening_button.setEnabled(not active)

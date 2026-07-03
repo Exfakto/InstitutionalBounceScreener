@@ -34,6 +34,7 @@ from controllers.dashboard_controller import DashboardController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
+from services.universe_scan_adapter import UniverseScanAdapter
 from services.workspace_state_service import WorkspaceStateService
 
 from ui.widgets.activity_panel import ActivityPanel
@@ -62,6 +63,7 @@ from ui.design_system import DashboardDesignSystem as DesignSystem
 class MainWindow(QMainWindow):
 
     DEFAULT_WORKSPACE_LAYOUT = "Default"
+    MAX_UNIVERSE_SCAN_TICKERS = 250
 
     LIVE_REFRESH_INTERVALS = {
         "Open": 300,
@@ -268,6 +270,9 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.cancel_screening_requested.connect(
             self.cancel_screening
+        )
+        self.screening_results_panel.screening_mode_changed.connect(
+            self.handle_screening_mode_changed
         )
         self.activity_panel = ActivityPanel()
 
@@ -1938,19 +1943,98 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
-    def start_screening_from_input(self, ticker_text=None):
+    def universe_scan_adapter(self):
+
+        explicit = getattr(self, "_universe_scan_adapter", None)
+        if explicit is not None:
+            return explicit
+        return UniverseScanAdapter(self.controller)
+
+    # ----------------------------------------------------------
+
+    def universe_scan_tickers(self):
+
+        return self.universe_scan_adapter().load_tickers(
+            self.current_screener_filters()
+        )
+
+    # ----------------------------------------------------------
+
+    def handle_screening_mode_changed(self, mode=None):
 
         if not hasattr(self, "screening_results_panel"):
-            return None
+            return []
+
+        if self.screening_results_panel.is_universe_scan_mode():
+            tickers = self.universe_scan_tickers()
+            self.screening_results_panel.set_universe_count(len(tickers))
+            if not tickers:
+                self.screening_results_panel.set_screening_status(
+                    "No eligible universe tickers"
+                )
+            else:
+                self.screening_results_panel.set_screening_status(
+                    f"Universe scan ready: {len(tickers)} ticker(s)"
+                )
+            return tickers
+
+        self.screening_results_panel.set_universe_count("--")
+        self.screening_results_panel.set_screening_status("Ready")
+        return []
+
+    # ----------------------------------------------------------
+
+    def selected_screening_tickers(self, ticker_text=None):
+
+        if (
+            hasattr(self, "screening_results_panel")
+            and self.screening_results_panel.is_universe_scan_mode()
+        ):
+            tickers = self.universe_scan_tickers()
+            self.screening_results_panel.set_universe_count(len(tickers))
+            return tickers
 
         text = (
             ticker_text
             if ticker_text is not None
             else self.screening_results_panel.ticker_input.text()
         )
-        tickers = self.parse_screening_tickers(text)
+        return self.parse_screening_tickers(text)
+
+    # ----------------------------------------------------------
+
+    def apply_screening_ticker_guardrails(self, tickers):
+
+        self.last_screening_guardrail_message = None
         if not tickers:
-            self.screening_results_panel.set_screening_status("Enter at least one ticker")
+            self.last_screening_guardrail_message = "No eligible tickers"
+            self.screening_results_panel.set_screening_status(
+                self.last_screening_guardrail_message
+            )
+            return []
+
+        if len(tickers) > self.MAX_UNIVERSE_SCAN_TICKERS:
+            limited = tickers[: self.MAX_UNIVERSE_SCAN_TICKERS]
+            self.last_screening_guardrail_message = (
+                f"Large scan limited to {self.MAX_UNIVERSE_SCAN_TICKERS} ticker(s)"
+            )
+            self.screening_results_panel.set_screening_status(
+                self.last_screening_guardrail_message
+            )
+            return limited
+
+        return tickers
+
+    # ----------------------------------------------------------
+
+    def start_screening_from_input(self, ticker_text=None):
+
+        if not hasattr(self, "screening_results_panel"):
+            return None
+
+        tickers = self.selected_screening_tickers(ticker_text)
+        tickers = self.apply_screening_ticker_guardrails(tickers)
+        if not tickers:
             return None
 
         if getattr(self, "screening_worker", None) is not None:
@@ -1959,9 +2043,13 @@ class MainWindow(QMainWindow):
 
         worker = self.create_screening_worker(tickers)
         self.screening_worker = worker
+        start_message = (
+            self.last_screening_guardrail_message
+            or f"Starting screening for {len(tickers)} ticker(s)..."
+        )
         self.screening_results_panel.set_screening_active(
             True,
-            f"Starting screening for {len(tickers)} ticker(s)...",
+            start_message,
         )
         worker.started_signal.connect(self.handle_screening_started)
         worker.progress_signal.connect(self.handle_screening_progress)

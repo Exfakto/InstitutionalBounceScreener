@@ -1123,6 +1123,111 @@ def test_main_window_screening_ticker_parsing(patched_window):
     ]
 
 
+def test_main_window_manual_screening_mode_still_uses_ticker_input(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+    window.controller.market_universe_records = [{"ticker": "SHOULDNOTUSE"}]
+    window.screening_results_panel.screening_mode_combo.setCurrentText(
+        "Manual ticker input"
+    )
+
+    window.start_screening_from_input("aapl, msft")
+
+    assert window.screening_results_panel.ticker_input.isEnabled() is True
+    assert FakeScreeningWorker.instances[0].tickers == ["AAPL", "MSFT"]
+
+
+def test_main_window_universe_mode_disables_ticker_input_and_shows_count(
+    patched_window,
+):
+    window = patched_window
+    window.controller.market_universe_records = [
+        {"ticker": "aapl"},
+        {"ticker": "msft"},
+    ]
+
+    window.screening_results_panel.screening_mode_combo.setCurrentText(
+        "Universe scan mode"
+    )
+
+    assert window.screening_results_panel.ticker_input.isEnabled() is False
+    assert window.screening_results_panel.universe_count_label.text() == "Universe: 2"
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Universe scan ready: 2 ticker(s)"
+    )
+
+
+def test_main_window_universe_scan_mode_uses_adapter_tickers(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+    window.controller.market_universe_records = [
+        {"ticker": "aapl"},
+        {"ticker": "AAPL"},
+        {"ticker": "nvda"},
+    ]
+    window.screening_results_panel.ticker_input.setText("manual")
+    window.screening_results_panel.screening_mode_combo.setCurrentText(
+        "Universe scan mode"
+    )
+
+    window.start_screening_from_input()
+
+    assert FakeScreeningWorker.instances[0].tickers == ["AAPL", "NVDA"]
+
+
+def test_main_window_universe_scan_empty_universe_shows_safe_message(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+    window.controller.market_universe_records = []
+    window.screening_results_panel.screening_mode_combo.setCurrentText(
+        "Universe scan mode"
+    )
+
+    worker = window.start_screening_from_input()
+
+    assert worker is None
+    assert FakeScreeningWorker.instances == []
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "No eligible tickers"
+    )
+
+
+def test_main_window_universe_scan_max_ticker_limit_behavior(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+    window.MAX_UNIVERSE_SCAN_TICKERS = 3
+    window.controller.market_universe_records = [
+        {"ticker": f"T{i}"}
+        for i in range(5)
+    ]
+    window.screening_results_panel.screening_mode_combo.setCurrentText(
+        "Universe scan mode"
+    )
+
+    window.start_screening_from_input()
+
+    assert FakeScreeningWorker.instances[0].tickers == ["T0", "T1", "T2"]
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Large scan limited to 3 ticker(s)"
+    )
+
+
 def test_main_window_run_screening_button_starts_worker(
     patched_window,
     monkeypatch,
