@@ -94,6 +94,9 @@ class CandidateChartPanel(QWidget):
                 ("technical_overlays", "Technical Overlays"),
                 ("institutional_badges", "Institutional Badges"),
                 ("candidate_score", "Candidate Score"),
+                ("trade_markers", "Trade Markers"),
+                ("price_overlays", "Price Overlays"),
+                ("volume_bars", "Volume Bars"),
                 ("warnings", "Warnings"),
             ],
             start=1,
@@ -132,6 +135,9 @@ class CandidateChartPanel(QWidget):
             self.institutional_text(model)
         )
         self.overlay_labels["candidate_score"].setText(self.annotation_text(model))
+        self.overlay_labels["trade_markers"].setText(self.trade_marker_text(model))
+        self.overlay_labels["price_overlays"].setText(self.price_overlay_text(model))
+        self.overlay_labels["volume_bars"].setText(str(len(getattr(model, "volume_bars", []) or [])))
         self.overlay_labels["warnings"].setText(self.list_text(model.warnings))
         self.empty_label.hide()
         self.content.show()
@@ -150,7 +156,8 @@ class CandidateChartPanel(QWidget):
         return (
             f"Chart placeholder: {len(model.candles)} candle(s), "
             f"{len(model.support_zones)} support zone(s), "
-            f"{len(model.bounce_markers)} bounce marker(s)."
+            f"{len(model.bounce_markers)} bounce marker(s), "
+            f"{len(getattr(model, 'volume_bars', []) or [])} volume bar(s)."
         )
 
     @classmethod
@@ -206,6 +213,26 @@ class CandidateChartPanel(QWidget):
             cls.display_value(annotation.setup_label),
         ]
         return " | ".join(piece for piece in pieces if piece != "N/A") or "N/A"
+
+    @classmethod
+    def trade_marker_text(cls, model):
+        markers = getattr(model, "trade_markers", []) or []
+        if not markers:
+            return "N/A"
+        return "\n".join(
+            f"{cls.display_value(marker.date)}: {marker.marker_type} @ {cls.display_value(marker.price)}"
+            for marker in markers
+        )
+
+    @classmethod
+    def price_overlay_text(cls, model):
+        overlays = getattr(model, "price_overlays", []) or []
+        if not overlays:
+            return "N/A"
+        return "\n".join(
+            f"{overlay.label}: {cls.display_value(overlay.price)}"
+            for overlay in overlays
+        )
 
     @staticmethod
     def display_value(value):

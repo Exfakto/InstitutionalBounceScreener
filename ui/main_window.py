@@ -38,6 +38,7 @@ from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
 from services.app_settings_service import AppSettingsService
+from services.chart_analytics_service import ChartAnalyticsService
 from services.data_quality_service import DataQualityService
 from services.market_data_cache_service import MarketDataCacheService
 from services.market_data_refresh_service import MarketDataRefreshService
@@ -2219,6 +2220,19 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def chart_analytics_service(self):
+
+        explicit = getattr(self, "_chart_analytics_service", None)
+        if explicit is not None:
+            return explicit
+        chart_data_service = getattr(self.chart_controller, "chart_data_service", None)
+        return ChartAnalyticsService(
+            chart_data_service=chart_data_service,
+            repository=self.screening_repository(),
+        )
+
+    # ----------------------------------------------------------
+
     def run_backtest_from_results(self, config_values=None):
 
         if not hasattr(self, "screening_results_panel"):
@@ -2246,6 +2260,8 @@ class MainWindow(QMainWindow):
                     source_run_id=getattr(self, "selected_results_run_id", None),
                 )
             self.screening_results_panel.populate_backtest_results(result)
+            analytics = self.chart_analytics_service().build_backtest_analytics(result)
+            self.screening_results_panel.set_backtest_analytics_model(analytics)
             self.screening_results_panel.set_backtest_status(
                 f"Backtest complete: {len(result.trades)} trade(s)"
             )
@@ -2983,16 +2999,30 @@ class MainWindow(QMainWindow):
             else getattr(candidate, "ticker", None)
         )
         try:
-            chart_service = getattr(self.chart_controller, "chart_data_service", None)
-            if chart_service is None or not hasattr(
-                chart_service,
-                "build_candidate_chart_data",
+            if (
+                not hasattr(self.chart_controller, "chart_data_service")
+                and hasattr(self.chart_controller, "get_chart_data")
             ):
-                return None
-            chart_model = chart_service.build_candidate_chart_data(
-                ticker=ticker,
-                candidate=candidate,
-            )
+                chart_data = self.chart_controller.get_chart_data(ticker)
+                chart_model = self.chart_analytics_service().build_candidate_view(
+                    ticker=ticker,
+                    candidate=candidate,
+                    price_rows=chart_data.get("prices", []),
+                    support_zones=chart_data.get("support_zones", []),
+                    technical_indicators=chart_data.get("indicators", []),
+                )
+                if chart_data.get("warnings"):
+                    from dataclasses import replace
+
+                    chart_model = replace(
+                        chart_model,
+                        warnings=self.unique([*chart_model.warnings, *chart_data.get("warnings", [])]),
+                    )
+            else:
+                chart_model = self.chart_analytics_service().build_candidate_view(
+                    ticker=ticker,
+                    candidate=candidate,
+                )
             self.screening_results_panel.set_candidate_chart_model(chart_model)
             return chart_model
         except Exception:

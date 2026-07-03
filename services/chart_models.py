@@ -34,6 +34,28 @@ class BounceMarker:
 
 
 @dataclass(frozen=True)
+class TradeMarker:
+    date: object | None = None
+    price: float | None = None
+    marker_type: str = "entry"
+    label: str = ""
+
+
+@dataclass(frozen=True)
+class PriceLevelOverlay:
+    price: float | None = None
+    label: str = ""
+    overlay_type: str = "level"
+
+
+@dataclass(frozen=True)
+class VolumeBar:
+    date: object | None = None
+    volume: float | None = None
+    direction: str | None = None
+
+
+@dataclass(frozen=True)
 class TechnicalIndicatorOverlay:
     name: str
     values: list[tuple[object | None, float | None]] = field(default_factory=list)
@@ -68,4 +90,30 @@ class CandidateChartModel:
     technical_overlays: list[TechnicalIndicatorOverlay] = field(default_factory=list)
     institutional_badges: list[InstitutionalScoreBadge] = field(default_factory=list)
     candidate_annotation: CandidateScoreAnnotation | None = None
+    trade_markers: list[TradeMarker] = field(default_factory=list)
+    price_overlays: list[PriceLevelOverlay] = field(default_factory=list)
+    volume_bars: list[VolumeBar] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class EquityCurvePoint:
+    date: object | None = None
+    equity: float = 0.0
+    cumulative_return_pct: float = 0.0
+
+
+@dataclass(frozen=True)
+class DrawdownPoint:
+    date: object | None = None
+    drawdown_pct: float = 0.0
+
+
+@dataclass(frozen=True)
+class BacktestAnalyticsModel:
+    equity_curve: list[EquityCurvePoint] = field(default_factory=list)
+    drawdown_curve: list[DrawdownPoint] = field(default_factory=list)
+    summary: dict = field(default_factory=dict)
+    top_winners: list = field(default_factory=list)
+    top_losers: list = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)

@@ -176,6 +176,60 @@ class ResultsExportService:
         except OSError as exc:
             return self.result(False, f"Export failed: {exc}", path=destination)
 
+    def export_chart_data_json(self, chart_model, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "json")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        return self.write_json(
+            self.normalize_run_metadata(chart_model),
+            destination,
+            "Chart data exported.",
+        )
+
+    def export_equity_curve_csv(self, equity_curve, output_dir, filename):
+        return self.export_series_csv(
+            equity_curve,
+            output_dir,
+            filename,
+            ["date", "equity", "cumulative_return_pct"],
+            "Equity curve exported.",
+        )
+
+    def export_drawdown_curve_csv(self, drawdown_curve, output_dir, filename):
+        return self.export_series_csv(
+            drawdown_curve,
+            output_dir,
+            filename,
+            ["date", "drawdown_pct"],
+            "Drawdown curve exported.",
+        )
+
+    def export_backtest_analytics_json(self, analytics_model, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "json")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        return self.write_json(
+            self.normalize_run_metadata(analytics_model),
+            destination,
+            "Backtest analytics exported.",
+        )
+
+    def export_series_csv(self, rows, output_dir, filename, fields, message):
+        destination = self.destination_path(output_dir, filename, "csv")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        normalized = [self.normalize_run_metadata(row) for row in (rows or [])]
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                for row in normalized:
+                    writer.writerow({field: row.get(field) for field in fields})
+            return self.result(True, message, path=destination, count=len(normalized))
+        except OSError as exc:
+            return self.result(False, f"Export failed: {exc}", path=destination)
+
     def write_json(self, payload, destination, message, count=None):
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)

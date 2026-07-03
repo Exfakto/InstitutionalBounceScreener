@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.design_system import DashboardDesignSystem as DesignSystem
+from ui.widgets.backtest_analytics_panel import BacktestAnalyticsPanel
 from ui.widgets.candidate_chart_panel import CandidateChartPanel
 
 
@@ -136,6 +137,8 @@ class ScreeningResultsPanel(QWidget):
         content_layout.addWidget(self.build_run_detail_section(), stretch=1)
         content_layout.addWidget(self.build_candidate_detail_section(), stretch=2)
         content_layout.addWidget(self.build_backtest_section(), stretch=2)
+        self.backtest_analytics_panel = BacktestAnalyticsPanel()
+        content_layout.addWidget(self.backtest_analytics_panel, stretch=2)
         self.candidate_chart_panel = CandidateChartPanel()
         content_layout.addWidget(self.candidate_chart_panel, stretch=2)
         content_layout.addStretch(1)
@@ -523,6 +526,9 @@ class ScreeningResultsPanel(QWidget):
             self.backtest_empty_label,
             not trades,
         )
+
+    def set_backtest_analytics_model(self, model):
+        self.backtest_analytics_panel.set_analytics_model(model)
 
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())
