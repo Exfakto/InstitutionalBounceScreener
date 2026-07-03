@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
+from ui.design_system import DashboardDesignSystem as DesignSystem
+
 
 class CandidateTable(QTableWidget):
     """
@@ -14,16 +16,19 @@ class CandidateTable(QTableWidget):
     """
 
     COLUMNS = [
+        "Rank",
         "Ticker",
-        "Overall (Gen 2)",
-        "Opportunity",
+        "Overall Score",
+        "Signal",
         "Quality",
-        "Technical",
         "Institutional",
-        "Risk/Reward",
-        "Confidence",
+        "Technical",
         "Support",
         "Bounce",
+        "Distance to Support",
+        "Support Strength",
+        "Last Bounce",
+        "Detail",
     ]
 
     ticker_double_clicked = Signal(str)
@@ -33,7 +38,7 @@ class CandidateTable(QTableWidget):
 
         self._display_candidates = []
         self._populating = False
-        self._sort_column = 1
+        self._sort_column = 2
         self._sort_order = Qt.DescendingOrder
         self.setObjectName("CandidateTable")
         self.setHorizontalHeaderLabels(self.COLUMNS)
@@ -46,7 +51,7 @@ class CandidateTable(QTableWidget):
         self.setSortingEnabled(False)
         self.setWordWrap(False)
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(40)
+        self.verticalHeader().setDefaultSectionSize(46)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setMinimumSectionSize(104)
@@ -75,9 +80,11 @@ class CandidateTable(QTableWidget):
         for row, candidate in enumerate(candidates or []):
             self.insertRow(row)
 
-            for column, (value, role) in enumerate(self.row_values(candidate)):
+            for column, (value, role) in enumerate(self.row_values(candidate, row)):
                 item = QTableWidgetItem(value)
                 sort_value = self.sort_value_for_column(candidate, column)
+                if column == 0:
+                    sort_value = row + 1
                 if sort_value is not None:
                     item.setData(Qt.UserRole, sort_value)
                 item.setTextAlignment(self.alignment_for_column(column))
@@ -128,7 +135,7 @@ class CandidateTable(QTableWidget):
         if not selected_rows:
             return None
 
-        ticker_item = self.item(selected_rows[0].row(), 0)
+        ticker_item = self.item(selected_rows[0].row(), 1)
 
         if ticker_item is None:
             return None
@@ -140,7 +147,7 @@ class CandidateTable(QTableWidget):
         Return the ticker displayed at a row.
         """
 
-        ticker_item = self.item(row, 0)
+        ticker_item = self.item(row, 1)
 
         if ticker_item is None:
             return None
@@ -157,28 +164,44 @@ class CandidateTable(QTableWidget):
         if ticker is not None:
             self.ticker_double_clicked.emit(ticker)
 
-    def row_values(self, candidate):
+    def row_values(self, candidate, row=None):
         scores = getattr(candidate, "score_map", {}) or {}
         metrics = getattr(candidate, "metrics", {}) or {}
         overall = self.number_value(getattr(candidate, "primary_score_value", None))
-        opportunity = self.opportunity_display(candidate, overall)
-        risk_reward = self.first_existing(
-            metrics.get("risk_reward"),
-            getattr(candidate, "risk_reward", None),
+        signal = self.opportunity_display(candidate, overall)
+        distance_to_support = self.first_existing(
+            metrics.get("distance_to_support"),
+            metrics.get("distance_from_support"),
+            metrics.get("support_distance"),
+            getattr(candidate, "distance_to_support", None),
+            getattr(candidate, "distance_from_support", None),
         )
-        confidence = self.confidence_display(candidate)
+        support_strength = self.first_existing(
+            metrics.get("support_strength"),
+            metrics.get("strength_score"),
+            getattr(candidate, "support_strength", None),
+        )
+        last_bounce = self.first_existing(
+            metrics.get("last_bounce"),
+            metrics.get("last_bounce_date"),
+            getattr(candidate, "last_bounce", None),
+            getattr(candidate, "last_bounce_date", None),
+        )
 
         return [
+            (str((row or 0) + 1), "rank"),
             (str(getattr(candidate, "ticker", "--") or "--"), "text"),
             (self.format_score(overall), self.score_role(overall)),
-            (opportunity, self.opportunity_role(opportunity, overall)),
+            (signal, self.opportunity_role(signal, overall)),
             (self.format_score(scores.get("quality_score")), self.score_role(scores.get("quality_score"))),
-            (self.format_score(scores.get("technical_score")), self.score_role(scores.get("technical_score"))),
             (self.format_score(scores.get("institutional_score")), self.score_role(scores.get("institutional_score"))),
-            (self.format_risk_reward(risk_reward), self.risk_reward_role(risk_reward)),
-            (confidence, self.confidence_role(confidence)),
+            (self.format_score(scores.get("technical_score")), self.score_role(scores.get("technical_score"))),
             (self.format_score(scores.get("support_score")), self.score_role(scores.get("support_score"))),
             (self.format_score(scores.get("bounce_score")), self.score_role(scores.get("bounce_score"))),
+            (self.format_percent(distance_to_support), self.distance_role(distance_to_support)),
+            (self.format_score(support_strength), self.score_role(support_strength)),
+            (self.format_text(last_bounce), "text" if last_bounce else "missing"),
+            ("View", "detail"),
         ]
 
     @classmethod
@@ -186,9 +209,13 @@ class CandidateTable(QTableWidget):
         scores = getattr(candidate, "score_map", {}) or {}
         metrics = getattr(candidate, "metrics", {}) or {}
 
+        if column == 0:
+            return None
         if column == 1:
-            return cls.number_value(getattr(candidate, "primary_score_value", None))
+            return None
         if column == 2:
+            return cls.number_value(getattr(candidate, "primary_score_value", None))
+        if column == 3:
             opportunity = getattr(candidate, "opportunity_rating", None)
             return cls.number_value(
                 cls.first_existing(
@@ -196,20 +223,34 @@ class CandidateTable(QTableWidget):
                     getattr(candidate, "primary_score_value", None),
                 )
             )
-        if column == 3:
-            return cls.number_value(scores.get("quality_score"))
         if column == 4:
-            return cls.number_value(scores.get("technical_score"))
+            return cls.number_value(scores.get("quality_score"))
         if column == 5:
             return cls.number_value(scores.get("institutional_score"))
         if column == 6:
-            return cls.number_value(
-                cls.first_existing(metrics.get("risk_reward"), getattr(candidate, "risk_reward", None))
-            )
-        if column == 8:
+            return cls.number_value(scores.get("technical_score"))
+        if column == 7:
             return cls.number_value(scores.get("support_score"))
-        if column == 9:
+        if column == 8:
             return cls.number_value(scores.get("bounce_score"))
+        if column == 9:
+            return cls.number_value(
+                cls.first_existing(
+                    metrics.get("distance_to_support"),
+                    metrics.get("distance_from_support"),
+                    metrics.get("support_distance"),
+                    getattr(candidate, "distance_to_support", None),
+                    getattr(candidate, "distance_from_support", None),
+                )
+            )
+        if column == 10:
+            return cls.number_value(
+                cls.first_existing(
+                    metrics.get("support_strength"),
+                    metrics.get("strength_score"),
+                    getattr(candidate, "support_strength", None),
+                )
+            )
         return None
 
     @classmethod
@@ -227,7 +268,7 @@ class CandidateTable(QTableWidget):
         value = cls.number_value(score)
 
         if value is None:
-            return "--"
+            return "N/A"
 
         return f"{value:.1f}"
 
@@ -236,9 +277,24 @@ class CandidateTable(QTableWidget):
         number = cls.number_value(value)
 
         if number is None:
-            return "--"
+            return "N/A"
 
         return f"{number:.2f}:1"
+
+    @classmethod
+    def format_percent(cls, value):
+        number = cls.number_value(value)
+
+        if number is None:
+            return "N/A"
+
+        return f"{number:.1f}%"
+
+    @staticmethod
+    def format_text(value):
+        if value in (None, ""):
+            return "N/A"
+        return str(value)
 
     @classmethod
     def opportunity_display(cls, candidate, overall):
@@ -252,7 +308,7 @@ class CandidateTable(QTableWidget):
             return str(label)
         if overall is not None:
             return cls.setup_badge(overall)
-        return "--"
+        return "N/A"
 
     @staticmethod
     def setup_badge(score):
@@ -274,7 +330,7 @@ class CandidateTable(QTableWidget):
 
         metrics = getattr(candidate, "metrics", {}) or {}
         confidence = metrics.get("confidence")
-        return str(confidence) if confidence else "--"
+        return str(confidence) if confidence else "N/A"
 
     @classmethod
     def score_role(cls, score):
@@ -320,8 +376,20 @@ class CandidateTable(QTableWidget):
             return "positive"
         if normalized in {"moderate", "medium"}:
             return "watch"
-        if normalized == "--":
+        if normalized in {"--", "n/a"}:
             return "missing"
+        return "negative"
+
+    @classmethod
+    def distance_role(cls, value):
+        number = cls.number_value(value)
+
+        if number is None:
+            return "missing"
+        if abs(number) <= 3:
+            return "positive"
+        if abs(number) <= 8:
+            return "watch"
         return "negative"
 
     @staticmethod
@@ -354,24 +422,27 @@ class CandidateTable(QTableWidget):
 
     @staticmethod
     def alignment_for_column(column):
-        if column == 0:
-            return Qt.AlignLeft | Qt.AlignVCenter
-        if column == 2:
+        if column in {0, 3, 12}:
             return Qt.AlignCenter
+        if column in {1, 11}:
+            return Qt.AlignLeft | Qt.AlignVCenter
         return Qt.AlignRight | Qt.AlignVCenter
 
     def apply_default_column_widths(self):
         widths = {
-            0: 108,
-            1: 132,
-            2: 150,
-            3: 112,
-            4: 112,
-            5: 132,
-            6: 124,
-            7: 120,
-            8: 112,
-            9: 112,
+            0: 68,
+            1: 104,
+            2: 126,
+            3: 148,
+            4: 104,
+            5: 122,
+            6: 108,
+            7: 104,
+            8: 104,
+            9: 144,
+            10: 132,
+            11: 116,
+            12: 92,
         }
 
         for column, width in widths.items():
@@ -380,50 +451,59 @@ class CandidateTable(QTableWidget):
     @staticmethod
     def apply_item_style(item, role):
         colors = {
-            "positive": QColor("#35B779"),
-            "watch": QColor("#D6A23A"),
-            "negative": QColor("#E05A5A"),
-            "missing": QColor("#7F8C99"),
-            "text": QColor("#F4F7FA"),
+            "positive": QColor(DesignSystem.Colors.SUCCESS),
+            "watch": QColor(DesignSystem.Colors.WARNING),
+            "negative": QColor(DesignSystem.Colors.DANGER),
+            "missing": QColor(DesignSystem.Colors.TEXT_MUTED),
+            "text": QColor(DesignSystem.Colors.TEXT_PRIMARY),
+            "rank": QColor(DesignSystem.Colors.TEXT_SECONDARY),
+            "detail": QColor(DesignSystem.Colors.ACCENT),
         }
         item.setForeground(colors.get(role, colors["text"]))
 
-        if role in {"positive", "watch", "negative"}:
+        if role in {"positive", "watch", "negative", "detail"}:
             font = item.font()
             font.setBold(True)
             item.setFont(font)
+
+        if role == "positive":
+            item.setBackground(QColor("#13261F"))
+        elif role == "watch":
+            item.setBackground(QColor("#2A2314"))
+        elif role == "negative":
+            item.setBackground(QColor("#2A1719"))
 
     @staticmethod
     def grid_style():
         return """
         QTableWidget#CandidateTable {
-            border: 1px solid #34404D;
-            border-radius: 8px;
-            background-color: #171D24;
-            alternate-background-color: #1B232C;
-            selection-background-color: #1E3A56;
-            selection-color: #F4F7FA;
+            border: 1px solid #3A4654;
+            border-radius: 9px;
+            background-color: #141B23;
+            alternate-background-color: #1A232D;
+            selection-background-color: #244C73;
+            selection-color: #F3F7FA;
             gridline-color: transparent;
             outline: none;
         }
         QTableWidget#CandidateTable::item {
-            padding: 9px 11px;
-            border-bottom: 1px solid #26313B;
+            padding: 10px 12px;
+            border-bottom: 1px solid #273340;
         }
         QTableWidget#CandidateTable::item:hover {
-            background-color: #202833;
+            background-color: #202B36;
         }
         QTableWidget#CandidateTable::item:selected {
-            background-color: #1E3A56;
-            color: #F4F7FA;
+            background-color: #244C73;
+            color: #F3F7FA;
         }
         QHeaderView::section {
-            background-color: #151C24;
-            color: #B9C4D0;
+            background-color: #111922;
+            color: #D7E0EA;
             border: none;
-            border-right: 1px solid #26313B;
-            border-bottom: 1px solid #34404D;
-            padding: 10px 11px;
-            font-weight: 700;
+            border-right: 1px solid #273340;
+            border-bottom: 1px solid #3A4654;
+            padding: 11px 12px;
+            font-weight: 800;
         }
         """

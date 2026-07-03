@@ -1,5 +1,6 @@
 import pytest
 from types import SimpleNamespace
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QAbstractItemView
 
 from analysis.candidate_score import CandidateScore
@@ -48,6 +49,9 @@ def make_professional_candidate(
     opportunity=None,
     risk_reward=None,
     confidence=None,
+    distance_to_support=None,
+    support_strength=None,
+    last_bounce=None,
 ):
     candidate = make_gen2_candidate(ticker, overall, overall)
     metrics = {}
@@ -55,6 +59,12 @@ def make_professional_candidate(
         metrics["risk_reward"] = risk_reward
     if confidence is not None:
         metrics["confidence"] = confidence
+    if distance_to_support is not None:
+        metrics["distance_to_support"] = distance_to_support
+    if support_strength is not None:
+        metrics["support_strength"] = support_strength
+    if last_bounce is not None:
+        metrics["last_bounce"] = last_bounce
 
     return CandidateScore(
         ticker=candidate.ticker,
@@ -78,17 +88,35 @@ def test_candidate_table_populates_sorted_by_overall_score(app):
     )
 
     assert table.rowCount() == 3
-    assert table.item(0, 0).text() == "HIGH"
-    assert table.item(1, 0).text() == "MID"
-    assert table.item(2, 0).text() == "LOW"
-    assert table.item(0, 1).text() == "90.0"
-    assert table.item(0, 2).text() == "High Conviction"
+    assert table.item(0, 0).text() == "1"
+    assert table.item(0, 1).text() == "HIGH"
+    assert table.item(1, 1).text() == "MID"
+    assert table.item(2, 1).text() == "LOW"
+    assert table.item(0, 2).text() == "90.0"
+    assert table.item(0, 3).text() == "High Conviction"
 
 
-def test_candidate_table_labels_overall_as_gen2_score(app):
+def test_candidate_table_uses_professional_headers(app):
     table = CandidateTable()
 
-    assert table.horizontalHeaderItem(1).text() == "Overall (Gen 2)"
+    assert [
+        table.horizontalHeaderItem(column).text()
+        for column in range(table.columnCount())
+    ] == [
+        "Rank",
+        "Ticker",
+        "Overall Score",
+        "Signal",
+        "Quality",
+        "Institutional",
+        "Technical",
+        "Support",
+        "Bounce",
+        "Distance to Support",
+        "Support Strength",
+        "Last Bounce",
+        "Detail",
+    ]
 
 
 def test_candidate_table_uses_gen2_score_for_overall_when_available(app):
@@ -102,8 +130,8 @@ def test_candidate_table_uses_gen2_score_for_overall_when_available(app):
     )
 
     assert table.rowCount() == 2
-    assert table.item(0, 0).text() == "GEN2_HIGH"
-    assert table.item(0, 1).text() == "99.0"
+    assert table.item(0, 1).text() == "GEN2_HIGH"
+    assert table.item(0, 2).text() == "99.0"
 
 
 def test_candidate_table_is_read_only_and_uses_single_row_selection(app):
@@ -150,16 +178,45 @@ def test_candidate_table_professional_columns_display_existing_values(app):
                 opportunity=opportunity,
                 risk_reward=2.35,
                 confidence="High",
+                distance_to_support=2.8,
+                support_strength=88.0,
+                last_bounce="2026-07-01",
             )
         ]
     )
 
-    assert table.horizontalHeaderItem(2).text() == "Opportunity"
-    assert table.horizontalHeaderItem(6).text() == "Risk/Reward"
-    assert table.horizontalHeaderItem(7).text() == "Confidence"
-    assert table.item(0, 2).text() == "Elite Bounce 93.2"
-    assert table.item(0, 6).text() == "2.35:1"
-    assert table.item(0, 7).text() == "High"
+    assert table.horizontalHeaderItem(3).text() == "Signal"
+    assert table.horizontalHeaderItem(9).text() == "Distance to Support"
+    assert table.horizontalHeaderItem(12).text() == "Detail"
+    assert table.item(0, 3).text() == "Elite Bounce 93.2"
+    assert table.item(0, 9).text() == "2.8%"
+    assert table.item(0, 9).data(Qt.UserRole) == 2.8
+    assert table.item(0, 10).text() == "88.0"
+    assert table.item(0, 11).text() == "2026-07-01"
+    assert table.item(0, 12).text() == "View"
+
+
+def test_candidate_table_color_codes_scores_and_signal(app):
+    table = CandidateTable()
+
+    table.populate(
+        [
+            make_professional_candidate(
+                "AAPL",
+                91.0,
+                opportunity=SimpleNamespace(
+                    rating_label="High Conviction",
+                    rating_score=91.0,
+                ),
+                distance_to_support=2.0,
+            )
+        ]
+    )
+
+    assert table.item(0, 2).font().bold() is True
+    assert table.item(0, 3).font().bold() is True
+    assert table.item(0, 9).font().bold() is True
+    assert table.item(0, 3).foreground().color().isValid()
 
 
 def test_candidate_table_missing_values_display_safely(app):
@@ -173,11 +230,11 @@ def test_candidate_table_missing_values_display_safely(app):
 
     table.populate([candidate])
 
-    assert table.item(0, 1).text() == "0.0"
-    assert table.item(0, 2).text() == "Avoid"
-    assert table.item(0, 3).text() == "--"
-    assert table.item(0, 6).text() == "--"
-    assert table.item(0, 7).text() == "--"
+    assert table.item(0, 2).text() == "0.0"
+    assert table.item(0, 3).text() == "Avoid"
+    assert table.item(0, 4).text() == "N/A"
+    assert table.item(0, 9).text() == "N/A"
+    assert table.item(0, 11).text() == "N/A"
 
 
 def test_candidate_table_empty_and_repeated_refresh_do_not_duplicate_rows(app):
@@ -192,7 +249,7 @@ def test_candidate_table_empty_and_repeated_refresh_do_not_duplicate_rows(app):
     table.populate([make_candidate("MSFT", 80.0)])
 
     assert table.rowCount() == 1
-    assert table.item(0, 0).text() == "MSFT"
+    assert table.item(0, 1).text() == "MSFT"
 
 
 def test_candidate_table_public_methods_preserved(app):
@@ -202,4 +259,4 @@ def test_candidate_table_public_methods_preserved(app):
     assert callable(table.selected_ticker)
     assert callable(table.ticker_at_row)
     assert callable(table.format_score)
-    assert table.format_score(None) == "--"
+    assert table.format_score(None) == "N/A"

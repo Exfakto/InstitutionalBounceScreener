@@ -466,16 +466,19 @@ def test_main_window_dashboard_results_table_expected_headers(patched_window):
     ]
 
     assert headers == [
+        "Rank",
         "Ticker",
-        "Overall (Gen 2)",
-        "Opportunity",
+        "Overall Score",
+        "Signal",
         "Quality",
-        "Technical",
         "Institutional",
-        "Risk/Reward",
-        "Confidence",
+        "Technical",
         "Support",
         "Bounce",
+        "Distance to Support",
+        "Support Strength",
+        "Last Bounce",
+        "Detail",
     ]
     assert len(headers) == len(set(headers))
 
@@ -489,12 +492,12 @@ def test_main_window_dashboard_results_table_numeric_sort_values(patched_window)
     ]
 
     window.candidates_table.populate(candidates)
-    window.candidates_table.sortItems(1, Qt.AscendingOrder)
+    window.candidates_table.sortItems(2, Qt.AscendingOrder)
 
-    assert window.candidates_table.item(0, 0).text() == "LOW"
-    assert window.candidates_table.item(1, 0).text() == "MID"
-    assert window.candidates_table.item(2, 0).text() == "HIGH"
-    assert window.candidates_table.item(2, 1).data(Qt.UserRole) == 100.0
+    assert window.candidates_table.item(0, 1).text() == "LOW"
+    assert window.candidates_table.item(1, 1).text() == "MID"
+    assert window.candidates_table.item(2, 1).text() == "HIGH"
+    assert window.candidates_table.item(2, 2).data(Qt.UserRole) == 100.0
 
 
 def test_main_window_preset_actions_update_status(patched_window):
@@ -597,8 +600,8 @@ def test_main_window_dashboard_loads_rows_from_market_universe(patched_window):
     assert result == {"success": True, "records": 2}
     assert window.scoring_controller.calls == 0
     assert window.candidates_table.rowCount() == 2
-    assert window.candidates_table.item(0, 0).text() == "MSFT"
-    assert window.candidates_table.item(1, 0).text() == "JPM"
+    assert window.candidates_table.item(0, 1).text() == "MSFT"
+    assert window.candidates_table.item(1, 1).text() == "JPM"
     assert window.dashboard.best_opportunities_table.rowCount() == 2
     assert window.dashboard.best_opportunities_table.item(0, 0).text() == "MSFT"
     assert window.dashboard.best_opportunities_table.item(0, 1).text() == "Microsoft Corporation"
@@ -658,7 +661,7 @@ def test_main_window_dashboard_refresh_clears_old_rows_before_loading_new_rows(p
     window.refresh_dashboard_results()
 
     assert window.candidates_table.rowCount() == 1
-    assert window.candidates_table.item(0, 0).text() == "NEW"
+    assert window.candidates_table.item(0, 1).text() == "NEW"
     assert window.dashboard.best_opportunities_table.rowCount() == 1
     assert window.dashboard.best_opportunities_table.item(0, 0).text() == "NEW"
 
