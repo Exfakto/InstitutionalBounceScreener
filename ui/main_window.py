@@ -269,6 +269,9 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.run_selected.connect(
             self.load_ranked_candidates_for_run
         )
+        self.screening_results_panel.candidate_selected.connect(
+            self.update_results_candidate_chart
+        )
         self.screening_results_panel.export_candidates_csv_requested.connect(
             self.export_ranked_candidates_csv
         )
@@ -2401,6 +2404,34 @@ class MainWindow(QMainWindow):
             self.screening_results_panel.set_export_status(status_text)
             self.screening_results_panel.set_screening_status(status_text)
         return result
+
+    # ----------------------------------------------------------
+
+    def update_results_candidate_chart(self, candidate):
+
+        if not hasattr(self, "screening_results_panel"):
+            return None
+
+        ticker = (
+            candidate.get("ticker")
+            if isinstance(candidate, dict)
+            else getattr(candidate, "ticker", None)
+        )
+        try:
+            chart_service = getattr(self.chart_controller, "chart_data_service", None)
+            if chart_service is None or not hasattr(
+                chart_service,
+                "build_candidate_chart_data",
+            ):
+                return None
+            chart_model = chart_service.build_candidate_chart_data(
+                ticker=ticker,
+                candidate=candidate,
+            )
+            self.screening_results_panel.set_candidate_chart_model(chart_model)
+            return chart_model
+        except Exception:
+            return None
 
     # ----------------------------------------------------------
 

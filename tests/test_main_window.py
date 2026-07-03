@@ -1231,6 +1231,56 @@ def test_main_window_candidate_selection_loads_detail_panel(patched_window):
     assert labels["warnings"].text() == "Minor warning"
     assert labels["rejection_reasons"].text() == "N/A"
     assert window.screening_results_panel.candidate_detail_empty_label.isHidden() is True
+    assert (
+        window.screening_results_panel.candidate_chart_panel.overlay_labels[
+            "ticker"
+        ].text()
+        == "NVDA"
+    )
+
+
+def test_main_window_candidate_selection_updates_chart_panel(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=1,
+            ticker="AAPL",
+            final_score=91.0,
+            grade="A+",
+            confidence_level="HIGH",
+            setup_label="Elite Institutional Bounce",
+            explanation=["Strong institutional support"],
+            warnings=[],
+            rejection_reasons=[],
+        )
+    ]
+    window._screening_repository = repository
+
+    window.refresh_ranked_candidates_view()
+    window.screening_results_panel.ranked_candidates_table.selectRow(0)
+
+    chart_panel = window.screening_results_panel.candidate_chart_panel
+    assert chart_panel.empty_label.isHidden() is True
+    assert chart_panel.overlay_labels["ticker"].text() == "AAPL"
+    assert "91.00" in chart_panel.overlay_labels["candidate_score"].text()
+    assert "Missing price history" in chart_panel.overlay_labels["warnings"].text()
+
+
+def test_main_window_candidate_chart_panel_empty_state(patched_window):
+    window = patched_window
+    chart_panel = window.screening_results_panel.candidate_chart_panel
+
+    assert chart_panel.empty_label.isHidden() is False
+    assert chart_panel.content.isHidden() is True
+    assert chart_panel.empty_label.text() == "Select a candidate to view chart context."
+
+
+def test_main_window_candidate_chart_panel_is_compact_resizable(patched_window):
+    panel = patched_window.screening_results_panel.candidate_chart_panel
+
+    assert panel.minimumWidth() <= 0
+    assert panel.maximumWidth() > 1000
 
 
 def test_main_window_results_warning_and_error_display(patched_window):

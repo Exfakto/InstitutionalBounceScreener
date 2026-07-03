@@ -2,6 +2,7 @@ import unittest
 
 import pandas as pd
 
+from services.chart_models import CandidateChartModel, OhlcvCandle
 from services.chart_data_service import ChartDataService
 
 
@@ -361,6 +362,103 @@ class ChartDataServiceTest(unittest.TestCase):
         service.close()
 
         self.assertTrue(service.db.closed)
+
+    def test_candidate_chart_model_creation(self):
+        service = self.build_service()
+
+        model = service.build_candidate_chart_data(
+            ticker="AAA",
+            candidate={
+                "ticker": "AAA",
+                "final_score": 91.5,
+                "grade": "A+",
+                "confidence_level": "HIGH",
+                "setup_label": "Elite Institutional Bounce",
+                "explanation": ["Strong support"],
+            },
+            price_rows=[
+                {
+                    "date": "2026-01-01",
+                    "open": 100.0,
+                    "high": 105.0,
+                    "low": 99.0,
+                    "close": 104.0,
+                    "volume": 1000,
+                }
+            ],
+        )
+
+        self.assertIsInstance(model, CandidateChartModel)
+        self.assertIsInstance(model.candles[0], OhlcvCandle)
+        self.assertEqual(model.ticker, "AAA")
+        self.assertEqual(model.candidate_annotation.final_score, 91.5)
+        self.assertEqual(model.candidate_annotation.grade, "A+")
+
+    def test_candidate_chart_data_with_complete_data(self):
+        service = self.build_service()
+
+        model = service.build_candidate_chart_data(
+            ticker="AAA",
+            candidate={"ticker": "AAA", "final_score": 88.0},
+            price_rows=[
+                {
+                    "date": "2026-01-01",
+                    "open": 100.0,
+                    "high": 105.0,
+                    "low": 99.0,
+                    "close": 104.0,
+                    "volume": 1000,
+                }
+            ],
+            support_zones=[
+                {
+                    "zone_low": 98.0,
+                    "zone_high": 101.0,
+                    "support_strength_score": 84.0,
+                    "confidence_score": 80.0,
+                    "touch_count": 4,
+                }
+            ],
+            bounce_markers=[
+                {
+                    "touch_date": "2026-01-01",
+                    "support_price": 99.0,
+                    "bounce_percentage": 12.5,
+                    "successful": True,
+                }
+            ],
+            technical_indicators=[
+                {"date": "2026-01-01", "ema20": 101.0, "rsi14": 62.0}
+            ],
+            institutional_signal={
+                "ticker": "AAA",
+                "score_result": {"overall_score": 87.0},
+                "source": "local",
+                "as_of_date": "2026-01-01",
+            },
+        )
+
+        self.assertEqual(len(model.candles), 1)
+        self.assertEqual(model.support_zones[0].zone_low, 98.0)
+        self.assertEqual(model.bounce_markers[0].bounce_percentage, 12.5)
+        self.assertEqual(model.technical_overlays[0].name, "EMA 20")
+        self.assertEqual(model.institutional_badges[0].score, 87.0)
+        self.assertNotIn("Missing price history", model.warnings)
+        self.assertNotIn("Missing institutional data", model.warnings)
+
+    def test_candidate_chart_data_with_missing_data(self):
+        service = self.build_service()
+
+        model = service.build_candidate_chart_data(candidate={})
+
+        self.assertIsNone(model.ticker)
+        self.assertEqual(model.candles, [])
+        self.assertIn("Missing ticker", model.warnings)
+        self.assertIn("Missing price history", model.warnings)
+        self.assertIn("Missing support zones", model.warnings)
+        self.assertIn("Missing bounce markers", model.warnings)
+        self.assertIn("Missing technical indicators", model.warnings)
+        self.assertIn("Missing institutional data", model.warnings)
 
 
 if __name__ == "__main__":

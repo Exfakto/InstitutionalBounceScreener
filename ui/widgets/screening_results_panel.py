@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.design_system import DashboardDesignSystem as DesignSystem
+from ui.widgets.candidate_chart_panel import CandidateChartPanel
 
 
 class ScreeningResultsPanel(QWidget):
@@ -92,6 +93,8 @@ class ScreeningResultsPanel(QWidget):
         layout.addWidget(history_section, stretch=2)
         layout.addWidget(self.build_run_detail_section(), stretch=1)
         layout.addWidget(self.build_candidate_detail_section(), stretch=2)
+        self.candidate_chart_panel = CandidateChartPanel()
+        layout.addWidget(self.candidate_chart_panel, stretch=2)
 
         self.ranked_candidates_table.itemSelectionChanged.connect(
             self.handle_candidate_selection
@@ -502,6 +505,8 @@ class ScreeningResultsPanel(QWidget):
         self.candidate_detail_empty_label.setText(message)
         self.candidate_detail_empty_label.show()
         self.candidate_detail_content.hide()
+        if hasattr(self, "candidate_chart_panel"):
+            self.candidate_chart_panel.clear()
 
     def handle_run_selection(self):
         row = self.selected_row(self.run_history_table)
@@ -526,8 +531,12 @@ class ScreeningResultsPanel(QWidget):
         item = self.ranked_candidates_table.item(row, 1)
         candidate = item.data(self.SOURCE_ROLE) if item is not None else None
         self.set_candidate_detail(candidate)
+        self.candidate_chart_panel.set_candidate(candidate)
         if candidate is not None:
             self.candidate_selected.emit(candidate)
+
+    def set_candidate_chart_model(self, chart_model):
+        self.candidate_chart_panel.set_chart_model(chart_model)
 
     @staticmethod
     def selected_row(table):
