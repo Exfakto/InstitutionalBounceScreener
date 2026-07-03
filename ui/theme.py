@@ -426,8 +426,9 @@ class Theme:
 
         QLabel#CandidateDetailHeader {{
             color: {cls.PRIMARY_TEXT};
-            font-size: 18pt;
+            font-size: 20pt;
             font-weight: 800;
+            padding: 2px 4px 10px 4px;
         }}
 
         QFrame#CandidateDetailScoreCard,
@@ -441,16 +442,24 @@ class Theme:
             border-radius: {DesignSystem.Radius.LG}px;
         }}
 
+        QFrame#CandidateDetailScoreCard,
+        QFrame#CandidateDetailInstitutionalOutlookCard {{
+            border-color: {cls.MUTED_BORDER};
+            background-color: {cls.ELEVATED_PANEL};
+        }}
+
         QLabel#CandidateDetailCardTitle {{
             color: {cls.MUTED_TEXT};
             font-size: {DesignSystem.Typography.SMALL_PT}pt;
             font-weight: 800;
+            letter-spacing: 0px;
         }}
 
         QLabel#CandidateDetailCardValue {{
             color: {cls.PRIMARY_TEXT};
             font-size: {DesignSystem.Typography.SECTION_PT}pt;
             font-weight: 800;
+            padding-top: 2px;
         }}
 
         QLabel#CandidateDetailCardValue[status="positive"] {{
@@ -467,6 +476,7 @@ class Theme:
 
         QLabel#CandidateDetailCardValue[status="missing"] {{
             color: {cls.MUTED_TEXT};
+            font-weight: 700;
         }}
 
         QLabel#CandidateDetailScoreValue {{
@@ -512,6 +522,7 @@ class Theme:
             color: {cls.PRIMARY_TEXT};
             font-size: {DesignSystem.Typography.SECTION_PT}pt;
             font-weight: 800;
+            padding: 0 0 4px 0;
         }}
 
         QLabel#CandidateDetailWhyItem {{
@@ -526,12 +537,77 @@ class Theme:
             border: 1px solid {cls.MUTED_BORDER};
             border-radius: {DesignSystem.Radius.MD}px;
             color: {cls.SECONDARY_TEXT};
+            padding: 10px;
+            selection-background-color: {cls.PRIMARY_SOFT};
+        }}
+
+        QScrollArea#CandidateDetailScrollArea {{
+            background-color: transparent;
+            border: none;
+        }}
+
+        QScrollArea#CandidateDetailScrollArea > QWidget > QWidget {{
+            background-color: transparent;
         }}
 
         QTabWidget#CandidateDetailTabs::pane {{
             background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.BORDER};
             border-radius: {DesignSystem.Radius.MD}px;
+            top: -1px;
+        }}
+
+        QTabWidget#CandidateDetailTabs QTabBar::tab {{
+            background-color: {cls.SECONDARY};
+            color: {cls.SECONDARY_TEXT};
+            border: 1px solid {cls.BORDER};
+            border-bottom: none;
+            border-top-left-radius: {DesignSystem.Radius.MD}px;
+            border-top-right-radius: {DesignSystem.Radius.MD}px;
+            padding: 9px 16px;
+            margin-right: 3px;
+            font-weight: 800;
+        }}
+
+        QTabWidget#CandidateDetailTabs QTabBar::tab:selected {{
+            background-color: {cls.PANEL_BACKGROUND};
+            color: {cls.PRIMARY_TEXT};
+            border-color: {cls.ACCENT};
+        }}
+
+        QTabWidget#CandidateDetailTabs QTabBar::tab:hover {{
+            color: {cls.PRIMARY_TEXT};
+            background-color: {cls.ELEVATED_PANEL};
+        }}
+
+        QTableWidget#CandidateDetailBounceTable {{
+            background-color: {cls.PANEL_BACKGROUND};
+            alternate-background-color: {cls.CARD_BACKGROUND};
+            color: {cls.SECONDARY_TEXT};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.MD}px;
+            gridline-color: transparent;
+            selection-background-color: {cls.PRIMARY_SOFT};
+            selection-color: {cls.PRIMARY_TEXT};
+        }}
+
+        QTableWidget#CandidateDetailBounceTable::item {{
+            padding: 7px 10px;
+            border: none;
+        }}
+
+        QTableWidget#CandidateDetailBounceTable::item:selected {{
+            color: {cls.PRIMARY_TEXT};
+            background-color: {cls.PRIMARY_SOFT};
+        }}
+
+        QTableWidget#CandidateDetailBounceTable QHeaderView::section {{
+            background-color: {cls.ELEVATED_PANEL};
+            color: {cls.MUTED_TEXT};
+            border: none;
+            border-bottom: 1px solid {cls.BORDER};
+            padding: 8px 10px;
+            font-weight: 800;
         }}
 
         QTableWidget#ActivityFeedTable {{

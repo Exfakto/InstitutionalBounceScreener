@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHeaderView,
     QLabel,
+    QScrollArea,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -32,7 +33,8 @@ class CandidateDetailWindow(QDialog):
 
         ticker = self.ticker_text()
         self.setWindowTitle(f"{ticker} Candidate Detail")
-        self.resize(860, 720)
+        self.resize(1120, 820)
+        self.setMinimumSize(900, 640)
 
         self.build_ui()
 
@@ -49,12 +51,21 @@ class CandidateDetailWindow(QDialog):
 
         self.tabs = QTabWidget()
         self.tabs.setObjectName("CandidateDetailTabs")
-        self.tabs.addTab(self.overview_tab(), "Overview")
-        self.tabs.addTab(self.technicals_tab(), "Technicals")
-        self.tabs.addTab(self.institutional_tab(), "Institutional")
-        self.tabs.addTab(self.bounce_history_tab(), "Bounce History")
-        self.tabs.addTab(self.risk_tab(), "Risk")
+        self.tabs.addTab(self.scrollable_tab(self.overview_tab()), "Overview")
+        self.tabs.addTab(self.scrollable_tab(self.technicals_tab()), "Technicals")
+        self.tabs.addTab(self.scrollable_tab(self.institutional_tab()), "Institutional")
+        self.tabs.addTab(self.scrollable_tab(self.bounce_history_tab()), "Bounce History")
+        self.tabs.addTab(self.scrollable_tab(self.risk_tab()), "Risk")
         layout.addWidget(self.tabs)
+
+    def scrollable_tab(self, content):
+        scroll = QScrollArea()
+        scroll.setObjectName("CandidateDetailScrollArea")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(content)
+        return scroll
 
     def set_candidate(self, candidate=None, detail=None):
         self.candidate = candidate
@@ -125,6 +136,7 @@ class CandidateDetailWindow(QDialog):
         self.summary_text.setReadOnly(True)
         self.summary_text.setPlainText(self.summary_body_text())
         self.summary_text.setObjectName("CandidateDetailSummaryText")
+        self.summary_text.setMinimumHeight(120)
         layout.addWidget(self.summary_text)
         return tab
 
@@ -168,6 +180,8 @@ class CandidateDetailWindow(QDialog):
         value_label.setObjectName("CandidateDetailCardValue")
         value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         value_label.setWordWrap(True)
+        if value == "N/A":
+            value_label.setProperty("status", "missing")
 
         layout.addWidget(title_label)
         layout.addWidget(value_label)
@@ -1091,9 +1105,13 @@ class CandidateDetailWindow(QDialog):
         self.bounce_history_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.bounce_history_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.bounce_history_table.setAlternatingRowColors(True)
+        self.bounce_history_table.setShowGrid(False)
+        self.bounce_history_table.setMinimumHeight(220)
+        self.bounce_history_table.verticalHeader().setDefaultSectionSize(34)
         self.bounce_history_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.Stretch
         )
+        self.bounce_history_table.horizontalHeader().setHighlightSections(False)
         layout.addWidget(self.bounce_history_table)
 
         rows = self.bounce_history_rows()
