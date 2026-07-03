@@ -363,3 +363,46 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 
 );
 """
+
+
+RANKED_CANDIDATES_TABLE = """
+CREATE TABLE IF NOT EXISTS ranked_candidates (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    ticker TEXT NOT NULL,
+
+    rank INTEGER NOT NULL,
+
+    final_score REAL NOT NULL,
+
+    grade TEXT,
+
+    confidence_level TEXT,
+
+    setup_label TEXT,
+
+    explanation_json TEXT,
+
+    warnings_json TEXT,
+
+    rejection_reasons_json TEXT,
+
+    run_id TEXT NOT NULL,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""
+
+
+RANKED_CANDIDATES_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_ranked_candidates_run_id
+    ON ranked_candidates(run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_ranked_candidates_created_at
+    ON ranked_candidates(created_at);
+    """,
+]

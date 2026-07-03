@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sqlite3
 import pandas as pd
 
@@ -12,11 +13,14 @@ from database.schema import (
     MARKET_UNIVERSE_TABLE,
     PAPER_TRADES_TABLE,
     PRICE_HISTORY_TABLE,
+    RANKED_CANDIDATES_INDEXES,
+    RANKED_CANDIDATES_TABLE,
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
     TECHNICAL_INDICATORS_TABLE,
     WATCHLIST_TABLE,
 )
+from services.candidate_ranking_engine import RankedCandidate
 
 DATABASE_NAME = "InstitutionalBounce.db"
 DATABASE_PATH = Path("data") / DATABASE_NAME
@@ -69,6 +73,9 @@ class DatabaseManager:
         self.cursor.execute(EARNINGS_TABLE)
         self.cursor.execute(WATCHLIST_TABLE)
         self.cursor.execute(PAPER_TRADES_TABLE)
+        self.cursor.execute(RANKED_CANDIDATES_TABLE)
+        for index_statement in RANKED_CANDIDATES_INDEXES:
+            self.cursor.execute(index_statement)
 
         self.connection.commit()
 
@@ -1109,6 +1116,125 @@ class DatabaseManager:
         return self.cursor.fetchone()[0]
 
     # ==========================================================
+    # Ranked Candidates
+    # ==========================================================
+
+    def save_ranked_candidates(self, run_id, candidates):
+        """
+        Replace and persist ranked candidate rows for a run.
+        """
+
+        if run_id in (None, ""):
+            return 0
+
+        self.clear_ranked_candidates(run_id)
+        rows = []
+
+        for candidate in candidates or []:
+            ticker = self._normalize_ticker(self.record_value(candidate, "ticker"))
+            if ticker is None:
+                continue
+
+            rows.append(
+                (
+                    ticker,
+                    self._sqlite_int(self.record_value(candidate, "rank")) or 0,
+                    self._sqlite_float(self.record_value(candidate, "final_score")) or 0.0,
+                    self.record_value(candidate, "grade"),
+                    self.record_value(candidate, "confidence_level"),
+                    self.record_value(candidate, "setup_label"),
+                    self._json_text(self.record_value(candidate, "explanation")),
+                    self._json_text(self.record_value(candidate, "warnings")),
+                    self._json_text(self.record_value(candidate, "rejection_reasons")),
+                    str(run_id),
+                )
+            )
+
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT INTO ranked_candidates
+                (
+                    ticker,
+                    rank,
+                    final_score,
+                    grade,
+                    confidence_level,
+                    setup_label,
+                    explanation_json,
+                    warnings_json,
+                    rejection_reasons_json,
+                    run_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            self.connection.commit()
+
+        return len(rows)
+
+    def fetch_ranked_candidates(self, run_id):
+        if run_id in (None, ""):
+            return []
+
+        self.cursor.execute(
+            """
+            SELECT
+                ticker,
+                rank,
+                final_score,
+                grade,
+                confidence_level,
+                setup_label,
+                explanation_json,
+                warnings_json,
+                rejection_reasons_json,
+                run_id,
+                created_at
+            FROM ranked_candidates
+            WHERE run_id = ?
+            ORDER BY
+                CASE WHEN rank <= 0 THEN 1 ELSE 0 END,
+                rank ASC,
+                final_score DESC,
+                ticker ASC
+            """,
+            (str(run_id),),
+        )
+
+        return [self._row_to_ranked_candidate(row) for row in self.cursor.fetchall()]
+
+    def fetch_latest_ranked_candidates(self):
+        self.cursor.execute(
+            """
+            SELECT run_id
+            FROM ranked_candidates
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            return []
+        return self.fetch_ranked_candidates(row["run_id"])
+
+    def clear_ranked_candidates(self, run_id):
+        if run_id in (None, ""):
+            return 0
+
+        self.cursor.execute(
+            """
+            DELETE FROM ranked_candidates
+            WHERE run_id = ?
+            """,
+            (str(run_id),),
+        )
+        deleted = self.cursor.rowcount
+        self.connection.commit()
+        return deleted
+
+    # ==========================================================
     # Earnings
     # ==========================================================
 
@@ -1812,6 +1938,53 @@ class DatabaseManager:
             as_of_date=row["as_of_date"],
             updated_at=row["updated_at"],
         )
+
+    @staticmethod
+    def _row_to_ranked_candidate(row):
+        if row is None:
+            return None
+
+        return RankedCandidate(
+            rank=row["rank"],
+            ticker=row["ticker"],
+            final_score=row["final_score"],
+            explanation=DatabaseManager._json_list(row["explanation_json"]),
+            warnings=DatabaseManager._json_list(row["warnings_json"]),
+            grade=row["grade"] or "REJECT",
+            confidence_level=row["confidence_level"] or "LOW",
+            setup_label=row["setup_label"] or "Rejected",
+            rejection_reasons=DatabaseManager._json_list(
+                row["rejection_reasons_json"]
+            ),
+            source={
+                "run_id": row["run_id"],
+                "created_at": row["created_at"],
+            },
+        )
+
+    @staticmethod
+    def _json_text(value):
+        if value in (None, ""):
+            payload = []
+        elif isinstance(value, list):
+            payload = value
+        elif isinstance(value, tuple):
+            payload = list(value)
+        else:
+            payload = [str(value)]
+        return json.dumps(payload)
+
+    @staticmethod
+    def _json_list(value):
+        if value in (None, ""):
+            return []
+        try:
+            payload = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return [str(value)]
+        if isinstance(payload, list):
+            return payload
+        return [payload]
 
     @staticmethod
     def _format_date(value):
