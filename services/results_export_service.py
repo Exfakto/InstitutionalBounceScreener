@@ -82,6 +82,7 @@ class ResultsExportService:
         output_dir,
         filename,
         provider_metadata=None,
+        coverage_metadata=None,
     ):
         destination = self.destination_path(output_dir, filename, "json")
         if destination is None:
@@ -93,6 +94,7 @@ class ResultsExportService:
                 self.candidate_row(candidate) for candidate in (candidates or [])
             ],
             "provider_metadata": self.normalize_run_metadata(provider_metadata),
+            "coverage_metadata": self.normalize_run_metadata(coverage_metadata),
         }
         return self.write_json(
             package,
@@ -213,6 +215,68 @@ class ResultsExportService:
             destination,
             "Backtest analytics exported.",
         )
+
+    def export_universe_list_csv(self, records, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "csv")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        fields = [
+            "ticker",
+            "company_name",
+            "exchange",
+            "security_type",
+            "sector",
+            "industry",
+            "market_cap",
+            "active",
+            "source",
+            "updated_at",
+        ]
+        rows = [self.normalize_run_metadata(record) for record in (records or [])]
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow({field: row.get(field) for field in fields})
+            return self.result(True, "Universe list exported.", path=destination, count=len(rows))
+        except OSError as exc:
+            return self.result(False, f"Export failed: {exc}", path=destination)
+
+    def export_coverage_readiness_report_json(self, report, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "json")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        return self.write_json(
+            self.normalize_run_metadata(report),
+            destination,
+            "Coverage readiness report exported.",
+        )
+
+    def export_coverage_readiness_report_csv(self, report, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "csv")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        payload = self.normalize_run_metadata(report)
+        rows = []
+        for key in [
+            "missing_ohlcv",
+            "missing_fundamentals",
+            "missing_institutional",
+            "stale_data",
+        ]:
+            for ticker in payload.get(key, []) or []:
+                rows.append({"category": key, "ticker": ticker})
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["category", "ticker"])
+                writer.writeheader()
+                writer.writerows(rows)
+            return self.result(True, "Coverage readiness CSV exported.", path=destination, count=len(rows))
+        except OSError as exc:
+            return self.result(False, f"Export failed: {exc}", path=destination)
 
     def export_series_csv(self, rows, output_dir, filename, fields, message):
         destination = self.destination_path(output_dir, filename, "csv")

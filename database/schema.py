@@ -138,6 +138,53 @@ MARKET_UNIVERSE_INDEXES = [
     """,
 ]
 
+
+UNIVERSE_SYMBOLS_TABLE = """
+CREATE TABLE IF NOT EXISTS universe_symbols (
+
+    ticker TEXT PRIMARY KEY,
+
+    company_name TEXT,
+
+    exchange TEXT,
+
+    security_type TEXT,
+
+    sector TEXT,
+
+    industry TEXT,
+
+    market_cap REAL,
+
+    active INTEGER DEFAULT 1,
+
+    source TEXT,
+
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""
+
+
+UNIVERSE_SYMBOLS_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_universe_symbols_exchange
+    ON universe_symbols(exchange);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_universe_symbols_security_type
+    ON universe_symbols(security_type);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_universe_symbols_active
+    ON universe_symbols(active);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_universe_symbols_market_cap
+    ON universe_symbols(market_cap);
+    """,
+]
+
 TECHNICAL_INDICATORS_TABLE = """
 CREATE TABLE IF NOT EXISTS technical_indicators (
 

@@ -44,6 +44,16 @@ from services.data_quality_service import DataQualityService
 from services.market_data_cache_service import MarketDataCacheService
 from services.market_data_refresh_service import MarketDataRefreshService
 from services.provider_diagnostics_service import ProviderDiagnosticsService
+from services.full_market_pipeline import (
+    DataCoverageReadinessService,
+    FullMarketRefreshOrchestrator,
+    FullMarketScanRunner,
+    FundamentalDownloaderService,
+    HistoricalDataUpdateService,
+    InstitutionalDataRefreshService,
+    UniverseDownloaderService,
+)
+from market_data.provider_factory import ProviderFactory
 from services.scan_preset_service import ScanPresetService
 from services.universe_scan_adapter import UniverseScanAdapter
 from services.workspace_state_service import WorkspaceStateService
@@ -350,6 +360,18 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.cancel_backtest_requested.connect(
             self.cancel_backtest
         )
+        self.screening_results_panel.update_full_market_universe_requested.connect(
+            self.update_full_market_universe
+        )
+        self.screening_results_panel.refresh_full_market_data_requested.connect(
+            self.refresh_full_market_data
+        )
+        self.screening_results_panel.run_full_market_scan_requested.connect(
+            self.run_full_market_scan
+        )
+        self.screening_results_panel.cancel_full_market_requested.connect(
+            self.cancel_full_market_operation
+        )
         self.screening_results_panel.set_scan_presets(
             self.scan_preset_service.list_presets()
         )
@@ -390,6 +412,7 @@ class MainWindow(QMainWindow):
         self.refresh_ranked_candidates_view()
         self.refresh_screening_run_history_view()
         self.refresh_cache_coverage_summary()
+        self.refresh_full_market_coverage_report()
         self.center_on_screen()
 
     # ----------------------------------------------------------
@@ -2132,6 +2155,212 @@ class MainWindow(QMainWindow):
         if explicit is not None:
             return explicit
         return ProviderDiagnosticsService(settings_service=self.app_settings_service)
+
+    # ----------------------------------------------------------
+
+    def provider_factory(self):
+
+        explicit = getattr(self, "_provider_factory", None)
+        if explicit is not None:
+            return explicit
+        return ProviderFactory(settings_service=self.app_settings_service)
+
+    # ----------------------------------------------------------
+
+    def universe_downloader_service(self):
+
+        explicit = getattr(self, "_universe_downloader_service", None)
+        if explicit is not None:
+            return explicit
+        return UniverseDownloaderService(
+            repository=self.screening_repository(),
+            provider_factory=self.provider_factory(),
+        )
+
+    # ----------------------------------------------------------
+
+    def historical_data_update_service(self):
+
+        explicit = getattr(self, "_historical_data_update_service", None)
+        if explicit is not None:
+            return explicit
+        return HistoricalDataUpdateService(
+            repository=self.screening_repository(),
+            refresh_service=self.market_data_refresh_service(),
+        )
+
+    # ----------------------------------------------------------
+
+    def fundamental_downloader_service(self):
+
+        explicit = getattr(self, "_fundamental_downloader_service", None)
+        if explicit is not None:
+            return explicit
+        return FundamentalDownloaderService(
+            repository=self.screening_repository(),
+            provider_factory=self.provider_factory(),
+        )
+
+    # ----------------------------------------------------------
+
+    def institutional_data_refresh_service(self):
+
+        explicit = getattr(self, "_institutional_data_refresh_service", None)
+        if explicit is not None:
+            return explicit
+        return InstitutionalDataRefreshService(
+            repository=self.screening_repository(),
+            provider_factory=self.provider_factory(),
+        )
+
+    # ----------------------------------------------------------
+
+    def full_market_refresh_orchestrator(self):
+
+        explicit = getattr(self, "_full_market_refresh_orchestrator", None)
+        if explicit is not None:
+            return explicit
+        return FullMarketRefreshOrchestrator(
+            repository=self.screening_repository(),
+            universe_service=self.universe_downloader_service(),
+            historical_service=self.historical_data_update_service(),
+            fundamental_service=self.fundamental_downloader_service(),
+            institutional_service=self.institutional_data_refresh_service(),
+        )
+
+    # ----------------------------------------------------------
+
+    def full_market_scan_runner(self):
+
+        explicit = getattr(self, "_full_market_scan_runner", None)
+        if explicit is not None:
+            return explicit
+        return FullMarketScanRunner(repository=self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def data_coverage_readiness_service(self):
+
+        explicit = getattr(self, "_data_coverage_readiness_service", None)
+        if explicit is not None:
+            return explicit
+        return DataCoverageReadinessService(repository=self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def update_full_market_universe(self):
+
+        self.full_market_cancel_requested = False
+        self.screening_results_panel.set_full_market_active(True, "Updating universe")
+        try:
+            result = self.universe_downloader_service().update_universe()
+            self.screening_results_panel.set_full_market_status(
+                f"Universe updated: {result.persisted} symbol(s)"
+            )
+            self.refresh_full_market_coverage_report()
+            return result
+        except Exception as exc:
+            self.screening_results_panel.set_full_market_status(
+                f"Universe update failed: {exc}"
+            )
+            return None
+        finally:
+            self.screening_results_panel.set_full_market_active(False)
+
+    # ----------------------------------------------------------
+
+    def refresh_full_market_data(self):
+
+        self.full_market_cancel_requested = False
+        self.screening_results_panel.set_full_market_active(
+            True,
+            "Refreshing full market data",
+        )
+
+        def progress(event):
+            current = event.get("current_ticker") or "--"
+            processed = event.get("processed", event.get("processed_tickers", 0))
+            total = event.get("total", event.get("total_tickers", 0))
+            stage = event.get("stage") or "market data"
+            self.screening_results_panel.set_full_market_status(
+                f"{stage}: {current} ({processed}/{total})"
+            )
+
+        try:
+            result = self.full_market_refresh_orchestrator().refresh_all(
+                progress_callback=progress,
+                cancellation_callback=lambda: getattr(
+                    self,
+                    "full_market_cancel_requested",
+                    False,
+                ),
+            )
+            self.screening_results_panel.set_full_market_status(
+                f"Market refresh complete: {result.persisted} persisted, "
+                f"{len(result.warnings)} warning(s), {len(result.errors)} error(s)"
+            )
+            self.refresh_full_market_coverage_report()
+            return result
+        except Exception as exc:
+            self.screening_results_panel.set_full_market_status(
+                f"Market refresh failed: {exc}"
+            )
+            return None
+        finally:
+            self.screening_results_panel.set_full_market_active(False)
+
+    # ----------------------------------------------------------
+
+    def run_full_market_scan(self):
+
+        self.full_market_cancel_requested = False
+        self.screening_results_panel.set_full_market_active(True, "Running full market scan")
+        try:
+            result = self.full_market_scan_runner().run_scan(
+                cancellation_callback=lambda: getattr(
+                    self,
+                    "full_market_cancel_requested",
+                    False,
+                ),
+            )
+            self.screening_results_panel.set_full_market_status(
+                f"Full market scan complete: {result.persisted} ranked candidate(s)"
+            )
+            self.refresh_screening_run_history_view()
+            self.refresh_ranked_candidates_view()
+            self.refresh_full_market_coverage_report()
+            return result
+        except Exception as exc:
+            self.screening_results_panel.set_full_market_status(
+                f"Full market scan failed: {exc}"
+            )
+            return None
+        finally:
+            self.screening_results_panel.set_full_market_active(False)
+
+    # ----------------------------------------------------------
+
+    def cancel_full_market_operation(self):
+
+        self.full_market_cancel_requested = True
+        self.screening_results_panel.set_full_market_active(
+            False,
+            "Full market operation cancelled",
+        )
+        return True
+
+    # ----------------------------------------------------------
+
+    def refresh_full_market_coverage_report(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return {}
+        try:
+            report = self.data_coverage_readiness_service().report()
+        except Exception:
+            report = {}
+        self.screening_results_panel.set_full_market_coverage_report(report)
+        return report
 
     # ----------------------------------------------------------
 

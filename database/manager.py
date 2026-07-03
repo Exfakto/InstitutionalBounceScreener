@@ -26,6 +26,8 @@ from database.schema import (
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
     TECHNICAL_INDICATORS_TABLE,
+    UNIVERSE_SYMBOLS_INDEXES,
+    UNIVERSE_SYMBOLS_TABLE,
     WATCHLIST_TABLE,
 )
 from services.candidate_ranking_engine import RankedCandidate
@@ -70,6 +72,9 @@ class DatabaseManager:
         self.cursor.execute(MARKET_UNIVERSE_TABLE)
         for index_statement in MARKET_UNIVERSE_INDEXES:
             self.cursor.execute(index_statement)
+        self.cursor.execute(UNIVERSE_SYMBOLS_TABLE)
+        for index_statement in UNIVERSE_SYMBOLS_INDEXES:
+            self.cursor.execute(index_statement)
         self.cursor.execute(PRICE_HISTORY_TABLE)
         self.cursor.execute(HISTORICAL_OHLCV_CACHE_TABLE)
         for index_statement in HISTORICAL_OHLCV_CACHE_INDEXES:
@@ -79,6 +84,7 @@ class DatabaseManager:
         self.cursor.execute(BOUNCE_VALIDATIONS_TABLE)
         self.cursor.execute(FUNDAMENTALS_TABLE)
         self.ensure_fundamentals_profile_columns()
+        self.ensure_v7_fundamentals_columns()
         self.cursor.execute(INSTITUTIONAL_METRICS_TABLE)
         self.ensure_institutional_metrics_columns()
         self.cursor.execute(EARNINGS_TABLE)
@@ -905,6 +911,20 @@ class DatabaseManager:
                 f"ALTER TABLE fundamentals ADD COLUMN {column} TEXT"
             )
 
+    def ensure_v7_fundamentals_columns(self):
+
+        self.cursor.execute("PRAGMA table_info(fundamentals)")
+        existing_columns = {row[1] for row in self.cursor.fetchall()}
+        migrations = {
+            "bankruptcy_risk": "ALTER TABLE fundamentals ADD COLUMN bankruptcy_risk REAL",
+            "going_concern_warning": "ALTER TABLE fundamentals ADD COLUMN going_concern_warning INTEGER DEFAULT 0",
+            "last_earnings_date": "ALTER TABLE fundamentals ADD COLUMN last_earnings_date TEXT",
+            "source": "ALTER TABLE fundamentals ADD COLUMN source TEXT",
+        }
+        for column, statement in migrations.items():
+            if column not in existing_columns:
+                self.cursor.execute(statement)
+
     def fundamentals_count(self):
 
         self.cursor.execute(
@@ -915,6 +935,108 @@ class DatabaseManager:
         )
 
         return self.cursor.fetchone()[0]
+
+    def upsert_fundamental_data(self, records):
+
+        rows = []
+        for record in records or []:
+            ticker = self._normalize_ticker(self.record_value(record, "ticker"))
+            if ticker is None:
+                continue
+            rows.append(
+                (
+                    ticker,
+                    self.record_value(record, "company_name"),
+                    self.record_value(record, "sector"),
+                    self.record_value(record, "industry"),
+                    self._sqlite_float(self.record_value(record, "market_cap")),
+                    self._sqlite_float(self.record_value(record, "revenue_growth_ttm")),
+                    self._sqlite_float(self.record_value(record, "eps_growth_ttm")),
+                    self._sqlite_float(self.record_value(record, "roe")),
+                    self._sqlite_float(self.record_value(record, "gross_margin")),
+                    self._sqlite_float(self.record_value(record, "free_cash_flow")),
+                    self._sqlite_float(self.record_value(record, "debt_to_equity")),
+                    self._sqlite_float(self.record_value(record, "current_ratio")),
+                    self._sqlite_float(self.record_value(record, "quality_score")),
+                    self._sqlite_float(self.record_value(record, "bankruptcy_risk")),
+                    self._sqlite_int(self.record_value(record, "going_concern_warning")),
+                    self._format_date(self.record_value(record, "last_earnings_date")),
+                    self.record_value(record, "source"),
+                )
+            )
+        if not rows:
+            return 0
+        self.cursor.executemany(
+            """
+            INSERT INTO fundamentals
+            (
+                ticker, company_name, sector, industry, market_cap,
+                revenue_growth_ttm, eps_growth_ttm, roe, gross_margin,
+                free_cash_flow, debt_to_equity, current_ratio, quality_score,
+                bankruptcy_risk, going_concern_warning, last_earnings_date,
+                source, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(ticker) DO UPDATE SET
+                company_name = excluded.company_name,
+                sector = excluded.sector,
+                industry = excluded.industry,
+                market_cap = excluded.market_cap,
+                revenue_growth_ttm = excluded.revenue_growth_ttm,
+                eps_growth_ttm = excluded.eps_growth_ttm,
+                roe = excluded.roe,
+                gross_margin = excluded.gross_margin,
+                free_cash_flow = excluded.free_cash_flow,
+                debt_to_equity = excluded.debt_to_equity,
+                current_ratio = excluded.current_ratio,
+                quality_score = excluded.quality_score,
+                bankruptcy_risk = excluded.bankruptcy_risk,
+                going_concern_warning = excluded.going_concern_warning,
+                last_earnings_date = excluded.last_earnings_date,
+                source = excluded.source,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            rows,
+        )
+        self.connection.commit()
+        return len(rows)
+
+    def fetch_fundamental_data(self, ticker):
+
+        normalized = self._normalize_ticker(ticker)
+        if normalized is None:
+            return None
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM fundamentals
+            WHERE ticker = ?
+            """,
+            (normalized,),
+        )
+        row = self.cursor.fetchone()
+        return None if row is None else dict(row)
+
+    def fetch_missing_fundamental_tickers(self, tickers):
+
+        normalized = [
+            ticker
+            for ticker in (self._normalize_ticker(value) for value in (tickers or []))
+            if ticker is not None
+        ]
+        if not normalized:
+            return []
+        placeholders = ", ".join("?" for _ in normalized)
+        self.cursor.execute(
+            f"""
+            SELECT ticker
+            FROM fundamentals
+            WHERE ticker IN ({placeholders})
+            """,
+            normalized,
+        )
+        present = {row["ticker"] for row in self.cursor.fetchall()}
+        return [ticker for ticker in normalized if ticker not in present]
 
     def upsert_market_universe_records(self, records):
 
@@ -1057,6 +1179,163 @@ class DatabaseManager:
             average_dollar_volume,
             1 if cls.record_value(record, "is_active") not in (False, 0, "0") else 0,
             cls.record_value(record, "last_updated"),
+        )
+
+    # ==========================================================
+    # Universe Symbols Master
+    # ==========================================================
+
+    def upsert_universe_symbols(self, records):
+
+        rows = []
+        for record in records or []:
+            normalized = self.normalize_universe_symbol(record)
+            if normalized is not None:
+                rows.append(normalized)
+
+        if not rows:
+            return 0
+
+        self.cursor.executemany(
+            """
+            INSERT INTO universe_symbols
+            (
+                ticker,
+                company_name,
+                exchange,
+                security_type,
+                sector,
+                industry,
+                market_cap,
+                active,
+                source,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(ticker) DO UPDATE SET
+                company_name = excluded.company_name,
+                exchange = excluded.exchange,
+                security_type = excluded.security_type,
+                sector = excluded.sector,
+                industry = excluded.industry,
+                market_cap = excluded.market_cap,
+                active = excluded.active,
+                source = excluded.source,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            rows,
+        )
+        self.connection.commit()
+        return len(rows)
+
+    def fetch_universe_symbols(
+        self,
+        active_only=True,
+        exchange=None,
+        security_type=None,
+        min_market_cap=None,
+    ):
+
+        filters = []
+        params = []
+        if active_only:
+            filters.append("active = 1")
+        if exchange not in (None, ""):
+            filters.append("UPPER(exchange) = ?")
+            params.append(str(exchange).strip().upper())
+        if security_type not in (None, ""):
+            filters.append("UPPER(security_type) = ?")
+            params.append(str(security_type).strip().upper())
+        if min_market_cap is not None:
+            filters.append("market_cap >= ?")
+            params.append(self._sqlite_float(min_market_cap))
+
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        self.cursor.execute(
+            f"""
+            SELECT ticker, company_name, exchange, security_type, sector, industry,
+                   market_cap, active, source, updated_at
+            FROM universe_symbols
+            {where_clause}
+            ORDER BY ticker
+            """,
+            params,
+        )
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def fetch_eligible_universe_tickers(self):
+
+        return [
+            row["ticker"]
+            for row in self.fetch_universe_symbols(
+                active_only=True,
+                security_type="COMMON STOCK",
+            )
+        ]
+
+    def deactivate_stale_universe_symbols(self, active_tickers):
+
+        tickers = [
+            str(ticker).strip().upper()
+            for ticker in (active_tickers or [])
+            if str(ticker or "").strip()
+        ]
+
+        if not tickers:
+            self.cursor.execute("UPDATE universe_symbols SET active = 0")
+            self.connection.commit()
+            return self.cursor.rowcount
+
+        placeholders = ", ".join("?" for _ in tickers)
+        self.cursor.execute(
+            f"""
+            UPDATE universe_symbols
+            SET active = 0
+            WHERE ticker NOT IN ({placeholders})
+            """,
+            tickers,
+        )
+        self.connection.commit()
+        return self.cursor.rowcount
+
+    @classmethod
+    def normalize_universe_symbol(cls, record):
+
+        if record is None:
+            return None
+
+        ticker = (
+            cls.record_value(record, "ticker")
+            or cls.record_value(record, "symbol")
+        )
+        ticker = str(ticker or "").strip().upper()
+        exchange = str(cls.record_value(record, "exchange") or "").strip().upper()
+
+        if not ticker or not exchange:
+            return None
+
+        company_name = (
+            cls.record_value(record, "company_name")
+            or cls.record_value(record, "company")
+            or cls.record_value(record, "name")
+            or ""
+        )
+        security_type = (
+            cls.record_value(record, "security_type")
+            or cls.record_value(record, "type")
+            or "Common Stock"
+        )
+
+        return (
+            ticker,
+            company_name,
+            exchange,
+            str(security_type or "").strip(),
+            cls.record_value(record, "sector") or "",
+            cls.record_value(record, "industry") or "",
+            cls._sqlite_float(cls.record_value(record, "market_cap")),
+            1 if cls.record_value(record, "active") not in (False, 0, "0") else 0,
+            cls.record_value(record, "source"),
         )
 
     @staticmethod

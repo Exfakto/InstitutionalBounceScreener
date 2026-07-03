@@ -49,6 +49,10 @@ class ScreeningResultsPanel(QWidget):
     data_quality_report_requested = Signal(str)
     run_backtest_requested = Signal(dict)
     cancel_backtest_requested = Signal()
+    update_full_market_universe_requested = Signal()
+    refresh_full_market_data_requested = Signal()
+    run_full_market_scan_requested = Signal()
+    cancel_full_market_requested = Signal()
 
     RANKED_HEADERS = [
         "Rank",
@@ -110,6 +114,7 @@ class ScreeningResultsPanel(QWidget):
         content_layout.setSpacing(DesignSystem.Spacing.MD)
 
         content_layout.addWidget(self.build_screening_controls())
+        content_layout.addWidget(self.build_full_market_controls())
         content_layout.addWidget(self.build_market_data_controls())
         content_layout.addWidget(self.build_export_controls())
 
@@ -254,6 +259,87 @@ class ScreeningResultsPanel(QWidget):
         layout.addWidget(self.export_status_label, stretch=1)
         self.set_export_enabled(False)
         return section
+
+    def build_full_market_controls(self):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        section.setStyleSheet(DesignSystem.card_style())
+        layout = QHBoxLayout(section)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+        )
+        layout.setSpacing(DesignSystem.Spacing.SM)
+
+        label = QLabel("Full Market")
+        label.setObjectName("ResearchPreviewFieldLabel")
+        self.update_full_market_universe_button = QPushButton("Update Universe")
+        self.update_full_market_universe_button.setObjectName("SecondaryButton")
+        self.update_full_market_universe_button.clicked.connect(
+            self.update_full_market_universe_requested.emit
+        )
+        self.refresh_full_market_data_button = QPushButton("Refresh Market Data")
+        self.refresh_full_market_data_button.setObjectName("SecondaryButton")
+        self.refresh_full_market_data_button.clicked.connect(
+            self.refresh_full_market_data_requested.emit
+        )
+        self.run_full_market_scan_button = QPushButton("Run Full Market Scan")
+        self.run_full_market_scan_button.setObjectName("PrimaryButton")
+        self.run_full_market_scan_button.clicked.connect(
+            self.run_full_market_scan_requested.emit
+        )
+        self.cancel_full_market_button = QPushButton("Cancel")
+        self.cancel_full_market_button.setObjectName("SecondaryButton")
+        self.cancel_full_market_button.setEnabled(False)
+        self.cancel_full_market_button.clicked.connect(self.cancel_full_market_requested.emit)
+        self.full_market_status_label = QLabel("Full market ready")
+        self.full_market_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.full_market_status_label.setWordWrap(True)
+        self.full_market_coverage_label = QLabel("Coverage: --")
+        self.full_market_coverage_label.setObjectName("ResearchPreviewFieldValue")
+        self.full_market_coverage_label.setWordWrap(True)
+        self.full_market_issues_label = QLabel("Warnings: --")
+        self.full_market_issues_label.setObjectName("ResearchPreviewFieldValue")
+        self.full_market_issues_label.setWordWrap(True)
+
+        layout.addWidget(label)
+        layout.addWidget(self.update_full_market_universe_button)
+        layout.addWidget(self.refresh_full_market_data_button)
+        layout.addWidget(self.run_full_market_scan_button)
+        layout.addWidget(self.cancel_full_market_button)
+        layout.addWidget(self.full_market_status_label, stretch=1)
+        layout.addWidget(self.full_market_coverage_label, stretch=1)
+        layout.addWidget(self.full_market_issues_label, stretch=1)
+        return section
+
+    def set_full_market_active(self, active, status_text=None):
+        for button in (
+            self.update_full_market_universe_button,
+            self.refresh_full_market_data_button,
+            self.run_full_market_scan_button,
+        ):
+            button.setEnabled(not active)
+        self.cancel_full_market_button.setEnabled(bool(active))
+        if status_text is not None:
+            self.set_full_market_status(status_text)
+
+    def set_full_market_status(self, status_text):
+        self.full_market_status_label.setText(status_text or "")
+        self.apply_status_property(self.full_market_status_label, status_text)
+
+    def set_full_market_coverage_report(self, report):
+        report = report or {}
+        self.full_market_coverage_label.setText(
+            "Coverage: "
+            f"{report.get('scan_ready_count', 0)}/{report.get('ticker_count', 0)} scan-ready, "
+            f"{report.get('ohlcv_covered_count', 0)} with OHLCV"
+        )
+        warnings = report.get("warnings") or []
+        self.full_market_issues_label.setText(
+            "Warnings: " + ("; ".join(str(item) for item in warnings) if warnings else "None")
+        )
 
     def build_market_data_controls(self):
         section = QFrame()
