@@ -4,8 +4,11 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QGridLayout,
+    QHeaderView,
     QLabel,
     QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QHBoxLayout,
     QVBoxLayout,
@@ -45,12 +48,9 @@ class CandidateDetailWindow(QDialog):
         self.tabs = QTabWidget()
         self.tabs.setObjectName("CandidateDetailTabs")
         self.tabs.addTab(self.overview_tab(), "Overview")
-        self.tabs.addTab(self.metrics_tab("Technicals", "technical"), "Technicals")
-        self.tabs.addTab(
-            self.metrics_tab("Institutional", "institutional"),
-            "Institutional",
-        )
-        self.tabs.addTab(self.metrics_tab("Bounce History", "bounce"), "Bounce History")
+        self.tabs.addTab(self.technicals_tab(), "Technicals")
+        self.tabs.addTab(self.institutional_tab(), "Institutional")
+        self.tabs.addTab(self.bounce_history_tab(), "Bounce History")
         self.tabs.addTab(self.risk_tab(), "Risk")
         layout.addWidget(self.tabs)
 
@@ -174,6 +174,645 @@ class CandidateDetailWindow(QDialog):
 
         return section
 
+    def technicals_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        header = QLabel("Technical Analysis Summary")
+        header.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(header)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+
+        self.technical_labels = {}
+        for index, (key, title, value, role) in enumerate(self.technical_items()):
+            card, value_label = self.create_summary_card(title, value)
+            card.setObjectName("CandidateDetailTechnicalCard")
+            value_label.setProperty("status", role)
+            value_label.style().unpolish(value_label)
+            value_label.style().polish(value_label)
+            self.technical_labels[key] = value_label
+            grid.addWidget(card, index // 3, index % 3)
+
+        layout.addLayout(grid)
+        layout.addStretch()
+        return tab
+
+    def technical_items(self):
+        return [
+            self.technical_item("rsi", "RSI", ("rsi", "rsi14"), value_type="score"),
+            self.technical_item("macd", "MACD", ("macd", "macd_value")),
+            self.technical_item("atr", "ATR", ("atr", "atr14"), value_type="price"),
+            self.technical_item("ema20", "EMA 20", ("ema20", "ema_20", "ema20_price"), value_type="price"),
+            self.technical_item("ema50", "EMA 50", ("ema50", "ema_50", "ema50_price"), value_type="price"),
+            self.technical_item("ema200", "EMA 200", ("ema200", "ema_200", "ema200_price"), value_type="price"),
+            self.technical_item("vwap", "VWAP", ("vwap",), value_type="price"),
+            self.technical_item("trend", "Trend", ("trend", "trend_score"), value_type="trend"),
+            self.technical_item(
+                "relative_strength",
+                "Relative Strength",
+                ("relative_strength", "relative_strength_score"),
+                value_type="score",
+            ),
+            self.technical_item(
+                "distance_to_support",
+                "Distance to Support",
+                ("distance_to_support", "distance_to_support_pct", "support_distance"),
+                value_type="percent",
+            ),
+            self.technical_item(
+                "support_strength",
+                "Support Strength",
+                ("support_strength", "support_strength_score", "support_score"),
+                value_type="score",
+            ),
+            self.technical_item(
+                "bounce_probability",
+                "Bounce Probability",
+                ("bounce_probability", "bounce_success_rate", "bounce_score"),
+                value_type="percent_high_good",
+            ),
+        ]
+
+    def technical_item(self, key, title, aliases, value_type="number"):
+        raw_value = self.first_existing(
+            *[self.technical_value(alias) for alias in aliases]
+        )
+        display = self.format_technical_value(raw_value, value_type)
+        return key, title, display, self.technical_role(raw_value, value_type)
+
+    def technical_value(self, key):
+        technical = self.detail.get("technical")
+        if isinstance(technical, dict) and key in technical:
+            return technical.get(key)
+
+        metrics = self.metrics()
+        if key in metrics:
+            return metrics.get(key)
+
+        return self.candidate_value(key)
+
+    def format_technical_value(self, value, value_type):
+        if value in (None, ""):
+            return "N/A"
+        if value_type == "trend" and isinstance(value, str):
+            return value
+
+        number = self.number_value(value)
+        if number is None:
+            return str(value)
+
+        if value_type == "price":
+            return f"${number:,.2f}"
+        if value_type in {"percent", "percent_high_good"}:
+            return f"{number:.1f}%"
+        return f"{number:.1f}"
+
+    def technical_role(self, value, value_type):
+        if value in (None, ""):
+            return "missing"
+
+        if value_type == "trend" and isinstance(value, str):
+            normalized = value.lower()
+            if "bull" in normalized or "up" in normalized or "positive" in normalized:
+                return "positive"
+            if "bear" in normalized or "down" in normalized or "weak" in normalized:
+                return "negative"
+            return "watch"
+
+        number = self.number_value(value)
+        if number is None:
+            return "neutral"
+
+        if value_type == "percent":
+            if number <= 3:
+                return "positive"
+            if number <= 8:
+                return "watch"
+            return "negative"
+
+        if value_type == "percent_high_good":
+            if number >= 70:
+                return "positive"
+            if number >= 50:
+                return "watch"
+            return "negative"
+
+        if value_type == "price":
+            return "neutral"
+
+        if 45 <= number <= 70 and value_type == "score":
+            return "positive"
+        if number >= 70:
+            return "positive"
+        if number >= 50:
+            return "watch"
+        return "negative"
+
+    def institutional_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        outlook_card = QFrame()
+        outlook_card.setObjectName("CandidateDetailInstitutionalOutlookCard")
+        outlook_layout = QVBoxLayout(outlook_card)
+        outlook_layout.setContentsMargins(16, 14, 16, 14)
+        outlook_layout.setSpacing(6)
+
+        outlook_title = QLabel("Institutional Outlook")
+        outlook_title.setObjectName("CandidateDetailCardTitle")
+        self.institutional_outlook_label = QLabel(self.institutional_outlook_text())
+        self.institutional_outlook_label.setObjectName("CandidateDetailScoreRating")
+        self.institutional_outlook_label.setAlignment(Qt.AlignCenter)
+        self.institutional_outlook_label.setProperty(
+            "status",
+            self.institutional_outlook_role(),
+        )
+        self.institutional_outlook_label.style().unpolish(
+            self.institutional_outlook_label
+        )
+        self.institutional_outlook_label.style().polish(
+            self.institutional_outlook_label
+        )
+
+        outlook_layout.addWidget(outlook_title)
+        outlook_layout.addWidget(self.institutional_outlook_label)
+        layout.addWidget(outlook_card)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+
+        self.institutional_labels = {}
+        for index, (key, title, value, role) in enumerate(self.institutional_items()):
+            card, value_label = self.create_summary_card(title, value)
+            card.setObjectName("CandidateDetailInstitutionalCard")
+            value_label.setProperty("status", role)
+            value_label.style().unpolish(value_label)
+            value_label.style().polish(value_label)
+            self.institutional_labels[key] = value_label
+            grid.addWidget(card, index // 2, index % 2)
+
+        layout.addLayout(grid)
+        layout.addStretch()
+        return tab
+
+    def institutional_items(self):
+        return [
+            self.institutional_item(
+                "ownership",
+                "Institutional Ownership",
+                ("institutional_ownership_pct", "institutional_ownership"),
+                value_type="percent_high_good",
+            ),
+            self.institutional_item(
+                "ownership_change_qoq",
+                "Ownership Change QoQ",
+                ("institutional_ownership_change_qoq", "ownership_change_qoq"),
+                value_type="signed_percent",
+            ),
+            self.institutional_item(
+                "net_buying",
+                "Net Institutional Buying",
+                ("net_institutional_buying", "thirteen_f_net_change", "13f_net_change"),
+                value_type="currency",
+            ),
+            self.institutional_item(
+                "holder_count",
+                "Number of Institutional Holders",
+                ("institutional_holders", "holder_count", "holders"),
+                value_type="integer",
+            ),
+            self.institutional_item(
+                "recent_13f_activity",
+                "Recent 13F Activity",
+                ("recent_13f_activity", "13f_status", "thirteen_f_status", "latest_13f_filing_date"),
+                value_type="text",
+            ),
+            self.institutional_item(
+                "insider_buying",
+                "Insider Buying",
+                ("insider_buying", "insider_buying_flag", "insider_buying_score"),
+                value_type="flag_positive",
+            ),
+            self.institutional_item(
+                "insider_selling",
+                "Insider Selling",
+                ("insider_selling", "insider_selling_flag", "insider_selling_score"),
+                value_type="flag_negative",
+            ),
+        ]
+
+    def institutional_item(self, key, title, aliases, value_type="text"):
+        raw_value = self.first_existing(
+            *[self.institutional_value(alias) for alias in aliases]
+        )
+        display = self.format_institutional_value(raw_value, value_type)
+        return key, title, display, self.institutional_role(raw_value, value_type)
+
+    def institutional_value(self, key):
+        institutional = self.detail.get("institutional")
+        if isinstance(institutional, dict) and key in institutional:
+            return institutional.get(key)
+
+        metrics = self.metrics()
+        if key in metrics:
+            return metrics.get(key)
+
+        return self.candidate_value(key)
+
+    def format_institutional_value(self, value, value_type):
+        if value in (None, ""):
+            return "N/A"
+
+        if value_type in {"flag_positive", "flag_negative"}:
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+            number = self.number_value(value)
+            if number is not None:
+                return "Yes" if number > 0 else "No"
+            return str(value)
+
+        number = self.number_value(value)
+
+        if value_type == "percent_high_good":
+            return f"{number:.1f}%" if number is not None else str(value)
+        if value_type == "signed_percent":
+            return f"{number:+.1f}%" if number is not None else str(value)
+        if value_type == "currency":
+            return self.format_currency_value(number, value)
+        if value_type == "integer":
+            return f"{int(number):,}" if number is not None else str(value)
+        return str(value)
+
+    @staticmethod
+    def format_currency_value(number, original):
+        if number is None:
+            return str(original)
+        prefix = "-" if number < 0 else ""
+        absolute = abs(number)
+        if absolute >= 1_000_000_000:
+            return f"{prefix}${absolute / 1_000_000_000:.2f}B"
+        if absolute >= 1_000_000:
+            return f"{prefix}${absolute / 1_000_000:.2f}M"
+        return f"{prefix}${absolute:,.0f}"
+
+    def institutional_role(self, value, value_type):
+        if value in (None, ""):
+            return "missing"
+
+        if value_type == "flag_positive":
+            return "positive" if self.truthy_value(value) else "neutral"
+        if value_type == "flag_negative":
+            return "negative" if self.truthy_value(value) else "neutral"
+
+        number = self.number_value(value)
+        if number is None:
+            text = str(value).lower()
+            if any(word in text for word in ("current", "positive", "buying", "rising")):
+                return "positive"
+            if any(word in text for word in ("stale", "selling", "negative", "falling")):
+                return "negative"
+            return "neutral"
+
+        if value_type == "percent_high_good":
+            if number >= 60:
+                return "positive"
+            if number >= 35:
+                return "watch"
+            return "negative"
+        if value_type in {"signed_percent", "currency"}:
+            if number > 0:
+                return "positive"
+            if number < 0:
+                return "negative"
+            return "neutral"
+        return "neutral"
+
+    def institutional_outlook_text(self):
+        score = self.institutional_outlook_score()
+        if score is None:
+            return "N/A"
+        if score >= 2:
+            return "Strong"
+        if score <= -2:
+            return "Weak"
+        return "Neutral"
+
+    def institutional_outlook_role(self):
+        outlook = self.institutional_outlook_text()
+        if outlook == "Strong":
+            return "positive"
+        if outlook == "Weak":
+            return "negative"
+        if outlook == "Neutral":
+            return "watch"
+        return "missing"
+
+    def institutional_outlook_score(self):
+        values_seen = 0
+        score = 0
+
+        ownership = self.number_value(
+            self.institutional_value("institutional_ownership_pct")
+            or self.institutional_value("institutional_ownership")
+        )
+        if ownership is not None:
+            values_seen += 1
+            if ownership >= 60:
+                score += 1
+            elif ownership < 35:
+                score -= 1
+
+        ownership_change = self.number_value(
+            self.institutional_value("institutional_ownership_change_qoq")
+            or self.institutional_value("ownership_change_qoq")
+        )
+        if ownership_change is not None:
+            values_seen += 1
+            score += 1 if ownership_change > 0 else -1 if ownership_change < 0 else 0
+
+        net_buying = self.number_value(
+            self.institutional_value("net_institutional_buying")
+            or self.institutional_value("thirteen_f_net_change")
+            or self.institutional_value("13f_net_change")
+        )
+        if net_buying is not None:
+            values_seen += 1
+            score += 1 if net_buying > 0 else -1 if net_buying < 0 else 0
+
+        buying = self.institutional_value("insider_buying_flag")
+        if buying not in (None, ""):
+            values_seen += 1
+            score += 1 if self.truthy_value(buying) else 0
+
+        selling = self.institutional_value("insider_selling_flag")
+        if selling not in (None, ""):
+            values_seen += 1
+            score -= 1 if self.truthy_value(selling) else 0
+
+        if values_seen == 0:
+            return None
+        return score
+
+    def bounce_history_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        header = QLabel("Historical Bounce Summary")
+        header.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(header)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+
+        self.bounce_summary_labels = {}
+        for index, (key, title, value, role) in enumerate(self.bounce_summary_items()):
+            card, value_label = self.create_summary_card(title, value)
+            card.setObjectName("CandidateDetailTechnicalCard")
+            value_label.setProperty("status", role)
+            value_label.style().unpolish(value_label)
+            value_label.style().polish(value_label)
+            self.bounce_summary_labels[key] = value_label
+            grid.addWidget(card, index // 4, index % 4)
+
+        layout.addLayout(grid)
+
+        self.bounce_empty_label = QLabel("No historical bounce data available.")
+        self.bounce_empty_label.setObjectName("EmptyStateLabel")
+        self.bounce_empty_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.bounce_empty_label)
+
+        self.bounce_history_table = QTableWidget(0, 5)
+        self.bounce_history_table.setObjectName("CandidateDetailBounceTable")
+        self.bounce_history_table.setHorizontalHeaderLabels(
+            ["Date", "Support Price", "Bounce %", "Days to Peak", "Successful"]
+        )
+        self.bounce_history_table.verticalHeader().setVisible(False)
+        self.bounce_history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.bounce_history_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.bounce_history_table.setAlternatingRowColors(True)
+        self.bounce_history_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+        layout.addWidget(self.bounce_history_table)
+
+        rows = self.bounce_history_rows()
+        self.populate_bounce_history_table(rows)
+        has_rows = bool(rows)
+        self.bounce_empty_label.setVisible(not has_rows)
+        self.bounce_history_table.setVisible(has_rows)
+
+        layout.addStretch()
+        return tab
+
+    def bounce_summary_items(self):
+        return [
+            self.bounce_summary_item(
+                "support_tests",
+                "Support Tests",
+                ("support_tests", "support_test_count", "bounce_count"),
+                "integer",
+            ),
+            self.bounce_summary_item(
+                "successful_bounces",
+                "Successful Bounces",
+                (
+                    "successful_bounces",
+                    "successful_bounce_count",
+                    "successful_support_tests",
+                    "validated_bounces",
+                ),
+                "integer",
+            ),
+            self.bounce_summary_item(
+                "success_pct",
+                "Bounce Success %",
+                (
+                    "bounce_success_pct",
+                    "bounce_success_rate",
+                    "historical_bounce_success_rate",
+                ),
+                "percent_high_good",
+            ),
+            self.bounce_summary_item(
+                "average_bounce",
+                "Average Bounce",
+                ("average_bounce", "avg_bounce", "average_bounce_pct"),
+                "percent_high_good",
+            ),
+            self.bounce_summary_item(
+                "median_bounce",
+                "Median Bounce",
+                ("median_bounce", "median_bounce_pct"),
+                "percent_high_good",
+            ),
+            self.bounce_summary_item(
+                "largest_bounce",
+                "Largest Bounce",
+                ("largest_bounce", "largest_bounce_pct", "max_bounce"),
+                "percent_high_good",
+            ),
+            self.bounce_summary_item(
+                "most_recent_bounce",
+                "Most Recent Bounce",
+                ("most_recent_bounce", "last_bounce", "last_bounce_date"),
+                "text",
+            ),
+        ]
+
+    def bounce_summary_item(self, key, title, aliases, value_type):
+        raw_value = self.first_existing(
+            *[self.bounce_value(alias) for alias in aliases]
+        )
+        display = self.format_bounce_value(raw_value, value_type)
+        return key, title, display, self.bounce_role(raw_value, value_type)
+
+    def bounce_value(self, key):
+        bounce = self.detail.get("bounce")
+        if isinstance(bounce, dict) and key in bounce:
+            return bounce.get(key)
+
+        metrics = self.metrics()
+        if key in metrics:
+            return metrics.get(key)
+
+        return self.candidate_value(key)
+
+    def bounce_history_rows(self):
+        sources = [
+            self.candidate_value("bounce_history"),
+            self.detail.get("bounce_history"),
+            self.metrics().get("bounce_history"),
+        ]
+
+        bounce_detail = self.detail.get("bounce")
+        if isinstance(bounce_detail, dict):
+            sources.append(bounce_detail.get("history"))
+
+        bounce_metrics = self.metrics().get("bounce")
+        if isinstance(bounce_metrics, dict):
+            sources.append(bounce_metrics.get("history"))
+
+        for source in sources:
+            if isinstance(source, (list, tuple)):
+                return list(source)
+        return []
+
+    def populate_bounce_history_table(self, rows):
+        self.bounce_history_table.setRowCount(0)
+        for row_index, row in enumerate(rows):
+            self.bounce_history_table.insertRow(row_index)
+            values = [
+                self.format_value(
+                    self.bounce_row_value(row, "date", "bounce_date", "validation_date")
+                ),
+                self.format_bounce_value(
+                    self.bounce_row_value(
+                        row,
+                        "support_price",
+                        "support",
+                        "support_level",
+                        "support_price_mid",
+                    ),
+                    "price",
+                ),
+                self.format_bounce_value(
+                    self.bounce_row_value(
+                        row,
+                        "bounce_pct",
+                        "bounce_percent",
+                        "bounce_return_pct",
+                        "max_bounce_pct",
+                    ),
+                    "percent_high_good",
+                ),
+                self.format_bounce_value(
+                    self.bounce_row_value(
+                        row,
+                        "days_to_peak",
+                        "days_to_high",
+                        "peak_days",
+                    ),
+                    "integer",
+                ),
+                self.format_successful_value(
+                    self.bounce_row_value(
+                        row,
+                        "successful",
+                        "is_successful",
+                        "validated",
+                        "passed",
+                    )
+                ),
+            ]
+
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column in {1, 2, 3}:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                else:
+                    item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                self.bounce_history_table.setItem(row_index, column, item)
+
+    def bounce_row_value(self, row, *keys):
+        for key in keys:
+            value = self.object_value(row, key)
+            if value not in (None, ""):
+                return value
+        return None
+
+    def format_bounce_value(self, value, value_type):
+        if value in (None, ""):
+            return "N/A"
+        if value_type == "text":
+            return str(value)
+
+        number = self.number_value(value)
+        if number is None:
+            return str(value)
+        if value_type == "price":
+            return f"${number:,.2f}"
+        if value_type == "integer":
+            return f"{int(number):,}"
+        if value_type == "percent_high_good":
+            return f"{number:.1f}%"
+        return f"{number:.1f}"
+
+    def format_successful_value(self, value):
+        if value in (None, ""):
+            return "N/A"
+        return "Yes" if self.truthy_value(value) else "No"
+
+    def bounce_role(self, value, value_type):
+        if value in (None, ""):
+            return "missing"
+        if value_type == "text":
+            return "neutral"
+
+        number = self.number_value(value)
+        if number is None:
+            return "neutral"
+        if value_type == "percent_high_good":
+            if number >= 70:
+                return "positive"
+            if number >= 40:
+                return "watch"
+            return "negative"
+        return "neutral"
+
     def metrics_tab(self, title, key):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -202,21 +841,203 @@ class CandidateDetailWindow(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
 
-        form = QFormLayout()
-        values = self.metric_group("risk")
-        values.setdefault("risk_rating", self.risk_text())
-        values.setdefault("risk_reward", self.risk_reward_text())
+        header = QLabel("Risk Analysis")
+        header.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(header)
 
-        for metric, value in values.items():
-            label = QLabel(self.format_value(value))
-            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            self.section_labels[f"risk.{metric}"] = label
-            form.addRow(str(metric), label)
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
 
-        layout.addLayout(form)
+        self.risk_labels = {}
+        for index, (key, title, value, role) in enumerate(self.risk_items()):
+            card, value_label = self.create_summary_card(title, value)
+            card.setObjectName("CandidateDetailInstitutionalCard")
+            value_label.setProperty("status", role)
+            value_label.style().unpolish(value_label)
+            value_label.style().polish(value_label)
+            self.risk_labels[key] = value_label
+            self.section_labels[f"risk.{key}"] = value_label
+            grid.addWidget(card, index // 4, index % 4)
+
+        layout.addLayout(grid)
+
+        warning_section = QFrame()
+        warning_section.setObjectName("CandidateDetailWhySection")
+        warning_layout = QVBoxLayout(warning_section)
+        warning_layout.setContentsMargins(14, 12, 14, 12)
+        warning_layout.setSpacing(8)
+
+        warning_title = QLabel("Active Risk Warnings")
+        warning_title.setObjectName("CandidateDetailSectionTitle")
+        warning_layout.addWidget(warning_title)
+
+        self.risk_warning_labels = []
+        for warning in self.active_risk_warnings():
+            label = QLabel(warning)
+            label.setObjectName("CandidateDetailWhyItem")
+            label.setWordWrap(True)
+            self.risk_warning_labels.append(label)
+            warning_layout.addWidget(label)
+
+        layout.addWidget(warning_section)
         layout.addStretch()
         return tab
+
+    def risk_items(self):
+        return [
+            self.risk_item(
+                "risk_rating",
+                "Risk Rating",
+                ("risk_rating", "risk_level", "rating"),
+                "rating",
+            ),
+            self.risk_item(
+                "upcoming_earnings",
+                "Upcoming Earnings",
+                ("upcoming_earnings", "earnings_date", "next_earnings_date"),
+                "text",
+            ),
+            self.risk_item(
+                "short_interest",
+                "Short Interest",
+                ("short_interest", "short_interest_pct", "short_float_pct"),
+                "percent_high_bad",
+            ),
+            self.risk_item(
+                "support_failure_risk",
+                "Support Failure Risk",
+                ("support_failure_risk", "support_failure_risk_pct", "breakdown_risk"),
+                "percent_high_bad",
+            ),
+            self.risk_item(
+                "volatility",
+                "Volatility",
+                ("volatility", "volatility_pct", "atr_pct"),
+                "percent_high_bad",
+            ),
+            self.risk_item(
+                "debt_risk",
+                "Debt Risk",
+                ("debt_risk", "debt_risk_score", "leverage_risk"),
+                "risk_score",
+            ),
+            self.risk_item(
+                "insider_selling_risk",
+                "Insider Selling Risk",
+                ("insider_selling_risk", "insider_selling_flag", "insider_selling_score"),
+                "risk_score",
+            ),
+            self.risk_item(
+                "overall_risk_score",
+                "Overall Risk Score",
+                ("overall_risk_score", "risk_score", "composite_risk_score"),
+                "risk_score",
+            ),
+        ]
+
+    def risk_item(self, key, title, aliases, value_type):
+        if key == "risk_rating":
+            raw_value = self.first_existing(
+                *[self.risk_value(alias) for alias in aliases],
+                self.risk_text(),
+            )
+        else:
+            raw_value = self.first_existing(
+                *[self.risk_value(alias) for alias in aliases]
+            )
+        display = self.format_risk_value(raw_value, value_type)
+        return key, title, display, self.risk_role(raw_value, value_type)
+
+    def risk_value(self, key):
+        risk = self.detail.get("risk")
+        if isinstance(risk, dict) and key in risk:
+            return risk.get(key)
+
+        metrics = self.metrics()
+        if key in metrics:
+            return metrics.get(key)
+
+        return self.candidate_value(key)
+
+    def format_risk_value(self, value, value_type):
+        if value in (None, ""):
+            return "N/A"
+
+        if value_type == "rating":
+            label = self.object_value(value, "rating_label") or self.object_value(value, "label")
+            return str(label or value)
+
+        if value_type == "text":
+            return str(value)
+
+        number = self.number_value(value)
+        if number is None:
+            return str(value)
+
+        if value_type == "percent_high_bad":
+            return f"{number:.1f}%"
+        if value_type == "risk_score":
+            return f"{number:.1f}"
+        return str(value)
+
+    def risk_role(self, value, value_type):
+        if value in (None, ""):
+            return "missing"
+
+        if value_type == "rating":
+            text = self.format_risk_value(value, value_type).lower()
+            if any(word in text for word in ("high", "elevated", "weak", "avoid")):
+                return "negative"
+            if any(word in text for word in ("moderate", "medium", "watch")):
+                return "watch"
+            if any(word in text for word in ("low", "strong", "controlled")):
+                return "positive"
+            return "neutral"
+
+        if value_type == "text":
+            return "neutral"
+
+        number = self.number_value(value)
+        if number is None:
+            text = str(value).lower()
+            if any(word in text for word in ("high", "elevated", "yes", "active")):
+                return "negative"
+            if any(word in text for word in ("moderate", "medium", "watch")):
+                return "watch"
+            if any(word in text for word in ("low", "none", "no", "controlled")):
+                return "positive"
+            return "neutral"
+
+        if value_type == "percent_high_bad":
+            if number >= 20:
+                return "negative"
+            if number >= 10:
+                return "watch"
+            return "positive"
+
+        if value_type == "risk_score":
+            if number >= 70:
+                return "negative"
+            if number >= 40:
+                return "watch"
+            return "positive"
+
+        return "neutral"
+
+    def active_risk_warnings(self):
+        warnings = []
+        for key, title, value, role in self.risk_items():
+            if value == "N/A" or role != "negative":
+                continue
+            warnings.append(f"* {title}: {value}")
+
+        if not warnings:
+            return ["No active risks highlighted."]
+        return warnings
 
     def header_text(self):
         ticker = self.ticker_text()
@@ -437,6 +1258,15 @@ class CandidateDetailWindow(QDialog):
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def truthy_value(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value > 0
+        normalized = str(value or "").strip().lower()
+        return normalized in {"1", "true", "yes", "y", "buying", "positive"}
 
     @staticmethod
     def format_value(value):

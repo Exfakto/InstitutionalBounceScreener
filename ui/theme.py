@@ -432,6 +432,9 @@ class Theme:
 
         QFrame#CandidateDetailScoreCard,
         QFrame#CandidateDetailSummaryCard,
+        QFrame#CandidateDetailTechnicalCard,
+        QFrame#CandidateDetailInstitutionalCard,
+        QFrame#CandidateDetailInstitutionalOutlookCard,
         QFrame#CandidateDetailWhySection {{
             background-color: {cls.CARD_BACKGROUND};
             border: 1px solid {cls.BORDER};
@@ -450,6 +453,22 @@ class Theme:
             font-weight: 800;
         }}
 
+        QLabel#CandidateDetailCardValue[status="positive"] {{
+            color: {cls.POSITIVE};
+        }}
+
+        QLabel#CandidateDetailCardValue[status="watch"] {{
+            color: {cls.WARNING};
+        }}
+
+        QLabel#CandidateDetailCardValue[status="negative"] {{
+            color: {cls.NEGATIVE};
+        }}
+
+        QLabel#CandidateDetailCardValue[status="missing"] {{
+            color: {cls.MUTED_TEXT};
+        }}
+
         QLabel#CandidateDetailScoreValue {{
             color: {cls.ACCENT};
             font-size: 34pt;
@@ -463,6 +482,30 @@ class Theme:
             border-radius: {DesignSystem.Radius.MD}px;
             padding: 6px 10px;
             font-weight: 800;
+        }}
+
+        QLabel#CandidateDetailScoreRating[status="positive"] {{
+            color: {cls.POSITIVE};
+            border-color: {cls.POSITIVE};
+            background-color: #13261F;
+        }}
+
+        QLabel#CandidateDetailScoreRating[status="watch"] {{
+            color: {cls.WARNING};
+            border-color: {cls.WARNING};
+            background-color: #2A2314;
+        }}
+
+        QLabel#CandidateDetailScoreRating[status="negative"] {{
+            color: {cls.NEGATIVE};
+            border-color: {cls.NEGATIVE};
+            background-color: #2A1719;
+        }}
+
+        QLabel#CandidateDetailScoreRating[status="missing"] {{
+            color: {cls.MUTED_TEXT};
+            border-color: {cls.MUTED_BORDER};
+            background-color: {cls.ELEVATED_PANEL};
         }}
 
         QLabel#CandidateDetailSectionTitle {{
