@@ -34,6 +34,7 @@ from controllers.dashboard_controller import DashboardController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
+from services.scan_preset_service import ScanPresetService
 from services.universe_scan_adapter import UniverseScanAdapter
 from services.workspace_state_service import WorkspaceStateService
 
@@ -121,6 +122,7 @@ class MainWindow(QMainWindow):
         self.screener_preset_controller = ScreenerPresetController()
         self.market_status_service = MarketStatusService()
         self.settings_service = SettingsService()
+        self.scan_preset_service = ScanPresetService()
         self.workspace_state_service = WorkspaceStateService()
         self.refresh_scheduler = RefreshScheduler()
         self.refresh_scheduler.register_callback(self.handle_live_refresh_result)
@@ -274,6 +276,13 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.screening_mode_changed.connect(
             self.handle_screening_mode_changed
         )
+        self.screening_results_panel.scan_preset_changed.connect(
+            self.handle_scan_preset_changed
+        )
+        self.screening_results_panel.set_scan_presets(
+            self.scan_preset_service.list_presets()
+        )
+        self.update_scan_preset_summary()
         self.activity_panel = ActivityPanel()
 
         self.screener_filters_panel = self.build_screener_filters_panel()
@@ -1955,8 +1964,81 @@ class MainWindow(QMainWindow):
     def universe_scan_tickers(self):
 
         return self.universe_scan_adapter().load_tickers(
-            self.current_screener_filters()
+            self.current_universe_scan_filters()
         )
+
+    # ----------------------------------------------------------
+
+    def selected_scan_preset(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return None
+        return self.scan_preset_service.apply_preset(
+            self.screening_results_panel.selected_scan_preset_name()
+        )
+
+    # ----------------------------------------------------------
+
+    def current_universe_scan_filters(self):
+
+        filters = self.current_screener_filters()
+        filters["scan_preset"] = self.selected_scan_preset()
+        return filters
+
+    # ----------------------------------------------------------
+
+    def scan_filter_summary_text(self, preset=None):
+
+        preset = preset if preset is not None else self.selected_scan_preset()
+        if preset is None:
+            return "Filters: No preset selected"
+
+        parts = []
+        if preset.min_market_cap is not None:
+            parts.append(f"Market cap >= {self.compact_number(preset.min_market_cap)}")
+        if preset.min_price is not None:
+            parts.append(f"Price >= ${preset.min_price:g}")
+        if preset.min_avg_volume is not None:
+            parts.append(f"Avg volume >= {self.compact_number(preset.min_avg_volume)}")
+        if preset.min_avg_dollar_volume is not None:
+            parts.append(
+                f"Avg dollar volume >= {self.compact_number(preset.min_avg_dollar_volume)}"
+            )
+        if preset.exchanges:
+            parts.append(f"Exchanges: {', '.join(preset.exchanges)}")
+        if preset.security_types:
+            parts.append(f"Types: {', '.join(preset.security_types)}")
+        return "Filters: " + "; ".join(parts)
+
+    # ----------------------------------------------------------
+
+    def update_scan_preset_summary(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return
+        preset = self.selected_scan_preset()
+        if preset is None:
+            self.screening_results_panel.set_preset_description("Preset: --")
+            self.screening_results_panel.set_active_filter_summary("Filters: --")
+            return
+        self.screening_results_panel.set_preset_description(
+            f"{preset.name}: {preset.description}"
+        )
+        self.screening_results_panel.set_active_filter_summary(
+            self.scan_filter_summary_text(preset)
+        )
+
+    # ----------------------------------------------------------
+
+    def handle_scan_preset_changed(self, name=None):
+
+        self.update_scan_preset_summary()
+        if (
+            hasattr(self, "screening_results_panel")
+            and self.screening_results_panel.is_universe_scan_mode()
+        ):
+            return self.handle_screening_mode_changed()
+        return []
 
     # ----------------------------------------------------------
 
@@ -1965,6 +2047,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "screening_results_panel"):
             return []
 
+        self.update_scan_preset_summary()
         if self.screening_results_panel.is_universe_scan_mode():
             tickers = self.universe_scan_tickers()
             self.screening_results_panel.set_universe_count(len(tickers))
@@ -1981,6 +2064,22 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.set_universe_count("--")
         self.screening_results_panel.set_screening_status("Ready")
         return []
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def compact_number(value):
+
+        number = float(value)
+        for suffix, divisor in [
+            ("T", 1_000_000_000_000),
+            ("B", 1_000_000_000),
+            ("M", 1_000_000),
+            ("K", 1_000),
+        ]:
+            if abs(number) >= divisor:
+                return f"{number / divisor:g}{suffix}"
+        return f"{number:g}"
 
     # ----------------------------------------------------------
 

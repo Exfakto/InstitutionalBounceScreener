@@ -1146,8 +1146,24 @@ def test_main_window_universe_mode_disables_ticker_input_and_shows_count(
 ):
     window = patched_window
     window.controller.market_universe_records = [
-        {"ticker": "aapl"},
-        {"ticker": "msft"},
+        {
+            "ticker": "aapl",
+            "market_cap": 5_000_000_000,
+            "price": 25,
+            "average_volume": 800_000,
+            "average_dollar_volume": 20_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        },
+        {
+            "ticker": "msft",
+            "market_cap": 5_000_000_000,
+            "price": 25,
+            "average_volume": 800_000,
+            "average_dollar_volume": 20_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        },
     ]
 
     window.screening_results_panel.screening_mode_combo.setCurrentText(
@@ -1169,9 +1185,33 @@ def test_main_window_universe_scan_mode_uses_adapter_tickers(
     FakeScreeningWorker.instances = []
     monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
     window.controller.market_universe_records = [
-        {"ticker": "aapl"},
-        {"ticker": "AAPL"},
-        {"ticker": "nvda"},
+        {
+            "ticker": "aapl",
+            "market_cap": 5_000_000_000,
+            "price": 25,
+            "average_volume": 800_000,
+            "average_dollar_volume": 20_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        },
+        {
+            "ticker": "AAPL",
+            "market_cap": 5_000_000_000,
+            "price": 25,
+            "average_volume": 800_000,
+            "average_dollar_volume": 20_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        },
+        {
+            "ticker": "nvda",
+            "market_cap": 5_000_000_000,
+            "price": 25,
+            "average_volume": 800_000,
+            "average_dollar_volume": 20_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        },
     ]
     window.screening_results_panel.ticker_input.setText("manual")
     window.screening_results_panel.screening_mode_combo.setCurrentText(
@@ -1213,7 +1253,15 @@ def test_main_window_universe_scan_max_ticker_limit_behavior(
     monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
     window.MAX_UNIVERSE_SCAN_TICKERS = 3
     window.controller.market_universe_records = [
-        {"ticker": f"T{i}"}
+        {
+            "ticker": f"T{i}",
+            "market_cap": 5_000_000_000,
+            "price": 25,
+            "average_volume": 800_000,
+            "average_dollar_volume": 20_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        }
         for i in range(5)
     ]
     window.screening_results_panel.screening_mode_combo.setCurrentText(
@@ -1226,6 +1274,68 @@ def test_main_window_universe_scan_max_ticker_limit_behavior(
     assert window.screening_results_panel.screening_status_label.text() == (
         "Large scan limited to 3 ticker(s)"
     )
+
+
+def test_main_window_scan_preset_dropdown_behavior(patched_window):
+    window = patched_window
+    combo = window.screening_results_panel.scan_preset_combo
+
+    names = [combo.itemText(index) for index in range(combo.count())]
+
+    assert names == [
+        "Institutional Quality",
+        "Liquid Large Cap",
+        "Growth Bounce Watchlist",
+        "Conservative Quality",
+    ]
+    combo.setCurrentText("Liquid Large Cap")
+    assert "Liquid Large Cap" in window.screening_results_panel.preset_description_label.text()
+
+
+def test_main_window_scan_filter_summary_text(patched_window):
+    window = patched_window
+    window.screening_results_panel.scan_preset_combo.setCurrentText("Conservative Quality")
+
+    summary = window.screening_results_panel.active_filter_summary_label.text()
+
+    assert "Market cap >= 5B" in summary
+    assert "Price >= $15" in summary
+    assert "Exchanges: NYSE, NASDAQ" in summary
+    assert "Types: Common Stock" in summary
+
+
+def test_main_window_ticker_count_refreshes_after_preset_change(patched_window):
+    window = patched_window
+    window.controller.market_universe_records = [
+        {
+            "ticker": "BIG",
+            "market_cap": 20_000_000_000,
+            "price": 100,
+            "average_volume": 2_000_000,
+            "average_dollar_volume": 200_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        },
+        {
+            "ticker": "SMALL",
+            "market_cap": 2_000_000_000,
+            "price": 7,
+            "average_volume": 400_000,
+            "average_dollar_volume": 6_000_000,
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+        },
+    ]
+    panel = window.screening_results_panel
+    panel.screening_mode_combo.setCurrentText("Universe scan mode")
+    panel.scan_preset_combo.setCurrentText("Growth Bounce Watchlist")
+
+    assert panel.universe_count_label.text() == "Universe: 2"
+
+    panel.scan_preset_combo.setCurrentText("Liquid Large Cap")
+
+    assert panel.universe_count_label.text() == "Universe: 1"
+    assert panel.screening_status_label.text() == "Universe scan ready: 1 ticker(s)"
 
 
 def test_main_window_run_screening_button_starts_worker(

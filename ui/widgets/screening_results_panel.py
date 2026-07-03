@@ -24,6 +24,7 @@ class ScreeningResultsPanel(QWidget):
     run_screening_requested = Signal(str)
     cancel_screening_requested = Signal()
     screening_mode_changed = Signal(str)
+    scan_preset_changed = Signal(str)
     run_selected = Signal(str)
     candidate_selected = Signal(object)
 
@@ -114,6 +115,9 @@ class ScreeningResultsPanel(QWidget):
         self.screening_mode_combo.setObjectName("ScreeningModeCombo")
         self.screening_mode_combo.addItems(["Manual ticker input", "Universe scan mode"])
         self.screening_mode_combo.currentTextChanged.connect(self.handle_mode_changed)
+        self.scan_preset_combo = QComboBox()
+        self.scan_preset_combo.setObjectName("ScanPresetCombo")
+        self.scan_preset_combo.currentTextChanged.connect(self.scan_preset_changed.emit)
         self.ticker_input = QLineEdit()
         self.ticker_input.setObjectName("ScreeningTickerInput")
         self.ticker_input.setPlaceholderText("AAPL, MSFT, NVDA")
@@ -128,14 +132,23 @@ class ScreeningResultsPanel(QWidget):
         self.screening_status_label.setObjectName("ResearchPreviewFieldValue")
         self.universe_count_label = QLabel("Universe: --")
         self.universe_count_label.setObjectName("ResearchPreviewFieldValue")
+        self.preset_description_label = QLabel("Preset: --")
+        self.preset_description_label.setObjectName("ResearchPreviewFieldValue")
+        self.preset_description_label.setWordWrap(True)
+        self.active_filter_summary_label = QLabel("Filters: --")
+        self.active_filter_summary_label.setObjectName("ResearchPreviewFieldValue")
+        self.active_filter_summary_label.setWordWrap(True)
 
         layout.addWidget(self.screening_mode_combo)
+        layout.addWidget(self.scan_preset_combo)
         layout.addWidget(label)
         layout.addWidget(self.ticker_input, stretch=1)
         layout.addWidget(self.run_screening_button)
         layout.addWidget(self.cancel_screening_button)
         layout.addWidget(self.universe_count_label)
         layout.addWidget(self.screening_status_label)
+        layout.addWidget(self.preset_description_label, stretch=1)
+        layout.addWidget(self.active_filter_summary_label, stretch=1)
         return section
 
     def emit_run_screening(self):
@@ -150,6 +163,27 @@ class ScreeningResultsPanel(QWidget):
 
     def set_universe_count(self, count):
         self.universe_count_label.setText(f"Universe: {count}")
+
+    def set_scan_presets(self, presets):
+        current = self.scan_preset_combo.currentText()
+        self.scan_preset_combo.blockSignals(True)
+        self.scan_preset_combo.clear()
+        for preset in presets or []:
+            self.scan_preset_combo.addItem(preset.name)
+        if current:
+            index = self.scan_preset_combo.findText(current)
+            if index >= 0:
+                self.scan_preset_combo.setCurrentIndex(index)
+        self.scan_preset_combo.blockSignals(False)
+
+    def selected_scan_preset_name(self):
+        return self.scan_preset_combo.currentText()
+
+    def set_preset_description(self, text):
+        self.preset_description_label.setText(text or "Preset: --")
+
+    def set_active_filter_summary(self, text):
+        self.active_filter_summary_label.setText(text or "Filters: --")
 
     def set_screening_active(self, active, status_text=None):
         self.run_screening_button.setEnabled(not active)

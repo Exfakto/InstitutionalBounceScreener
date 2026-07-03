@@ -33,7 +33,64 @@ class UniverseScanAdapter:
     def apply_filters(records, filters):
         if (filters or {}).get("Universe", {}).get("enabled", True) is False:
             return []
-        return list(records or [])
+        preset = (filters or {}).get("scan_preset")
+        return [
+            record
+            for record in (records or [])
+            if UniverseScanAdapter.record_matches_preset(record, preset)
+        ]
+
+    @staticmethod
+    def record_matches_preset(record, preset):
+        if preset is None:
+            return True
+
+        checks = [
+            ("market_cap", getattr(preset, "min_market_cap", None)),
+            ("price", getattr(preset, "min_price", None)),
+            ("average_volume", getattr(preset, "min_avg_volume", None)),
+            ("average_dollar_volume", getattr(preset, "min_avg_dollar_volume", None)),
+        ]
+        for field, minimum in checks:
+            if minimum is not None:
+                value = UniverseScanAdapter.number_value(
+                    UniverseScanAdapter.record_value(record, field)
+                )
+                if value is None or value < minimum:
+                    return False
+
+        exchanges = [value.upper() for value in getattr(preset, "exchanges", [])]
+        if exchanges:
+            exchange = str(UniverseScanAdapter.record_value(record, "exchange") or "").upper()
+            if exchange not in exchanges:
+                return False
+
+        security_types = [
+            value.upper() for value in getattr(preset, "security_types", [])
+        ]
+        if security_types:
+            security_type = str(
+                UniverseScanAdapter.record_value(record, "security_type") or ""
+            ).upper()
+            if security_type not in security_types:
+                return False
+
+        return True
+
+    @staticmethod
+    def record_value(record, key):
+        if isinstance(record, dict):
+            return record.get(key)
+        return getattr(record, key, None)
+
+    @staticmethod
+    def number_value(value):
+        if value in (None, ""):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def normalize_tickers(tickers):
