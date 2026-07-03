@@ -36,6 +36,10 @@ from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
 from services.app_settings_service import AppSettingsService
+from services.data_quality_service import DataQualityService
+from services.market_data_cache_service import MarketDataCacheService
+from services.market_data_refresh_service import MarketDataRefreshService
+from services.provider_diagnostics_service import ProviderDiagnosticsService
 from services.scan_preset_service import ScanPresetService
 from services.universe_scan_adapter import UniverseScanAdapter
 from services.workspace_state_service import WorkspaceStateService
@@ -148,6 +152,7 @@ class MainWindow(QMainWindow):
         self.ranked_candidates_total_count = 0
         self.run_history_offset = 0
         self.run_history_total_count = 0
+        self.data_refresh_cancel_requested = False
 
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1600, 900)
@@ -308,6 +313,30 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.scan_preset_changed.connect(
             self.handle_scan_preset_changed
         )
+        self.screening_results_panel.refresh_selected_ticker_requested.connect(
+            self.refresh_selected_market_data_ticker
+        )
+        self.screening_results_panel.refresh_ticker_list_requested.connect(
+            self.refresh_market_data_ticker_list
+        )
+        self.screening_results_panel.refresh_universe_symbols_requested.connect(
+            self.refresh_market_data_universe_symbols
+        )
+        self.screening_results_panel.cancel_data_refresh_requested.connect(
+            self.cancel_market_data_refresh
+        )
+        self.screening_results_panel.clear_cache_ticker_requested.connect(
+            self.clear_market_data_cache_ticker
+        )
+        self.screening_results_panel.clear_all_cache_requested.connect(
+            self.clear_all_market_data_cache
+        )
+        self.screening_results_panel.provider_diagnostics_requested.connect(
+            self.run_provider_diagnostics
+        )
+        self.screening_results_panel.data_quality_report_requested.connect(
+            self.show_data_quality_report
+        )
         self.screening_results_panel.set_scan_presets(
             self.scan_preset_service.list_presets()
         )
@@ -347,6 +376,7 @@ class MainWindow(QMainWindow):
         self.refresh_trade_journal()
         self.refresh_ranked_candidates_view()
         self.refresh_screening_run_history_view()
+        self.refresh_cache_coverage_summary()
 
     # ----------------------------------------------------------
 
@@ -1985,12 +2015,213 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def parse_ticker_input(self, ticker_text):
+
+        return self.parse_screening_tickers(ticker_text)
+
+    # ----------------------------------------------------------
+
     def universe_scan_adapter(self):
 
         explicit = getattr(self, "_universe_scan_adapter", None)
         if explicit is not None:
             return explicit
         return UniverseScanAdapter(self.controller)
+
+    # ----------------------------------------------------------
+
+    def market_data_refresh_service(self):
+
+        explicit = getattr(self, "_market_data_refresh_service", None)
+        if explicit is not None:
+            return explicit
+        return MarketDataRefreshService(repository=self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def market_data_cache_service(self):
+
+        explicit = getattr(self, "_market_data_cache_service", None)
+        if explicit is not None:
+            return explicit
+        return MarketDataCacheService(repository=self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def data_quality_service(self):
+
+        explicit = getattr(self, "_data_quality_service", None)
+        if explicit is not None:
+            return explicit
+        return DataQualityService(repository=self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def provider_diagnostics_service(self):
+
+        explicit = getattr(self, "_provider_diagnostics_service", None)
+        if explicit is not None:
+            return explicit
+        return ProviderDiagnosticsService(settings_service=self.app_settings_service)
+
+    # ----------------------------------------------------------
+
+    def refresh_selected_market_data_ticker(self, ticker, force_refresh=False):
+
+        tickers = self.parse_ticker_input(ticker)
+        if not tickers:
+            self.screening_results_panel.set_market_data_status("No ticker selected")
+            return None
+        return self.refresh_market_data_tickers(tickers[:1], force_refresh=force_refresh)
+
+    # ----------------------------------------------------------
+
+    def refresh_market_data_ticker_list(self, ticker_text, force_refresh=False):
+
+        tickers = self.parse_ticker_input(ticker_text)
+        if not tickers:
+            self.screening_results_panel.set_market_data_status("No tickers provided")
+            return None
+        return self.refresh_market_data_tickers(tickers, force_refresh=force_refresh)
+
+    # ----------------------------------------------------------
+
+    def refresh_market_data_tickers(self, tickers, force_refresh=False):
+
+        panel = self.screening_results_panel
+        service = self.market_data_refresh_service()
+        self.data_refresh_cancel_requested = False
+        panel.set_data_refresh_active(True, "Refreshing market data")
+
+        def progress(progress_event):
+            if getattr(self, "data_refresh_cancel_requested", False):
+                return
+            current = progress_event.get("current_ticker") or "--"
+            processed = progress_event.get("processed_tickers", 0)
+            total = progress_event.get("total_tickers", 0)
+            panel.set_market_data_status(f"Refreshing {current}: {processed}/{total}")
+
+        try:
+            result = service.refresh_tickers(
+                tickers,
+                force_refresh=force_refresh,
+                progress_callback=progress,
+                cancellation_callback=lambda: self.data_refresh_cancel_requested,
+            )
+            if self.data_refresh_cancel_requested:
+                panel.set_market_data_status("Refresh cancelled")
+            else:
+                errors = len(getattr(result, "errors", []) or [])
+                warnings = len(getattr(result, "warnings", []) or [])
+                count = len(getattr(result, "results", {}) or {})
+                panel.set_market_data_status(
+                    f"Refresh complete: {count} ticker(s), {warnings} warning(s), {errors} error(s)"
+                )
+            self.refresh_cache_coverage_summary()
+            return result
+        except Exception as exc:
+            panel.set_market_data_status(f"Refresh failed: {exc}")
+            return None
+        finally:
+            panel.set_data_refresh_active(False)
+
+    # ----------------------------------------------------------
+
+    def refresh_market_data_universe_symbols(self, force_refresh=False):
+
+        tickers = self.universe_scan_tickers()
+        if not tickers:
+            self.screening_results_panel.set_market_data_status(
+                "No eligible universe symbols"
+            )
+            return None
+        return self.refresh_market_data_tickers(tickers, force_refresh=force_refresh)
+
+    # ----------------------------------------------------------
+
+    def cancel_market_data_refresh(self):
+
+        self.data_refresh_cancel_requested = True
+        self.screening_results_panel.set_data_refresh_active(False, "Refresh cancelled")
+        return True
+
+    # ----------------------------------------------------------
+
+    def refresh_cache_coverage_summary(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return []
+        try:
+            coverage = self.market_data_cache_service().coverage()
+        except Exception:
+            coverage = []
+        self.screening_results_panel.set_cache_coverage_summary(coverage)
+        return coverage
+
+    # ----------------------------------------------------------
+
+    def clear_market_data_cache_ticker(self, ticker):
+
+        tickers = self.parse_ticker_input(ticker)
+        if not tickers:
+            self.screening_results_panel.set_market_data_status("No ticker selected")
+            return 0
+        deleted = self.market_data_cache_service().clear_ticker(tickers[0])
+        self.screening_results_panel.set_market_data_status(
+            f"Cleared {deleted} cached row(s) for {tickers[0]}"
+        )
+        self.refresh_cache_coverage_summary()
+        return deleted
+
+    # ----------------------------------------------------------
+
+    def clear_all_market_data_cache(self):
+
+        deleted = self.market_data_cache_service().clear_all()
+        self.screening_results_panel.set_market_data_status(
+            f"Cleared {deleted} cached OHLCV row(s)"
+        )
+        self.refresh_cache_coverage_summary()
+        return deleted
+
+    # ----------------------------------------------------------
+
+    def run_provider_diagnostics(self):
+
+        try:
+            result = self.provider_diagnostics_service().run(connectivity_test=True)
+            status = (
+                f"Provider {result.selected_provider}: {result.credential_status}; "
+                f"connectivity {result.connectivity_status}; retries {result.max_retries}"
+            )
+        except Exception as exc:
+            result = None
+            status = f"Provider diagnostics failed: {exc}"
+        self.screening_results_panel.set_market_data_status(status)
+        return result
+
+    # ----------------------------------------------------------
+
+    def show_data_quality_report(self, ticker_text=None):
+
+        tickers = self.parse_ticker_input(ticker_text)
+        if not tickers:
+            tickers = [
+                self.ticker_for_candidate(candidate)
+                for candidate in getattr(self.screening_results_panel, "current_candidates", [])
+            ]
+        tickers = [ticker for ticker in tickers if ticker]
+        if not tickers:
+            self.screening_results_panel.set_market_data_status(
+                "No tickers available for data quality report"
+            )
+            return None
+        report = self.data_quality_service().generate_report(tickers)
+        warning_count = len(getattr(report, "warnings", []) or [])
+        self.screening_results_panel.set_market_data_status(
+            f"Data quality report: {len(report.ticker_reports)} ticker(s), {warning_count} warning(s)"
+        )
+        return report
 
     # ----------------------------------------------------------
 
@@ -2256,9 +2487,21 @@ class MainWindow(QMainWindow):
 
     def create_screening_worker(self, tickers):
 
+        repository = self.screening_repository()
+        pipeline_adapter = None
+        if repository is not None:
+            from services.candidate_pipeline_adapter import CandidatePipelineAdapter
+            pipeline_adapter = CandidatePipelineAdapter(repository)
+        from services.screening_orchestrator import ScreeningOrchestrator
+        orchestrator = ScreeningOrchestrator(
+            market_data_refresh_service=self.market_data_refresh_service(),
+            pipeline_adapter=pipeline_adapter,
+            repository=repository,
+        )
         return ScreeningWorker(
             tickers=tickers,
-            repository=self.screening_repository(),
+            repository=repository,
+            orchestrator=orchestrator,
             parent=self,
         )
 

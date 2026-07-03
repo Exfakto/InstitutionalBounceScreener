@@ -382,6 +382,38 @@ class DatabaseManager:
         self.connection.commit()
         return deleted
 
+    def clear_all_ohlcv(self):
+        self.cursor.execute("DELETE FROM historical_ohlcv_cache")
+        deleted = self.cursor.rowcount
+        self.connection.commit()
+        return deleted
+
+    def fetch_ohlcv_cache_coverage(self, ticker=None):
+        normalized = self._normalize_ticker(ticker)
+        filters = []
+        params = []
+        if normalized is not None:
+            filters.append("ticker = ?")
+            params.append(normalized)
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        self.cursor.execute(
+            f"""
+            SELECT
+                ticker,
+                COUNT(*) AS row_count,
+                MIN(date) AS first_date,
+                MAX(date) AS last_date,
+                MAX(updated_at) AS last_updated,
+                GROUP_CONCAT(DISTINCT source) AS sources
+            FROM historical_ohlcv_cache
+            {where_clause}
+            GROUP BY ticker
+            ORDER BY ticker
+            """,
+            params,
+        )
+        return [dict(row) for row in self.cursor.fetchall()]
+
     def get_total_rows(self):
 
         self.cursor.execute(

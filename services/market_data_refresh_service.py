@@ -100,6 +100,7 @@ class MarketDataRefreshService:
         end_date=None,
         force_refresh=False,
         progress_callback=None,
+        cancellation_callback=None,
     ):
         normalized = []
         for ticker in tickers or []:
@@ -112,6 +113,9 @@ class MarketDataRefreshService:
         errors = []
         total = len(normalized)
         for index, ticker in enumerate(normalized, start=1):
+            if cancellation_callback is not None and cancellation_callback():
+                warnings.append("Market data refresh cancelled")
+                break
             if progress_callback is not None:
                 progress_callback(
                     {

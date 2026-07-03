@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QCheckBox,
     QComboBox,
     QLineEdit,
     QPushButton,
@@ -35,6 +36,14 @@ class ScreeningResultsPanel(QWidget):
     export_full_run_package_requested = Signal()
     load_more_ranked_candidates_requested = Signal()
     load_more_run_history_requested = Signal()
+    refresh_selected_ticker_requested = Signal(str, bool)
+    refresh_ticker_list_requested = Signal(str, bool)
+    refresh_universe_symbols_requested = Signal(bool)
+    cancel_data_refresh_requested = Signal()
+    clear_cache_ticker_requested = Signal(str)
+    clear_all_cache_requested = Signal()
+    provider_diagnostics_requested = Signal()
+    data_quality_report_requested = Signal(str)
 
     RANKED_HEADERS = [
         "Rank",
@@ -84,6 +93,7 @@ class ScreeningResultsPanel(QWidget):
         content_layout.setSpacing(DesignSystem.Spacing.MD)
 
         content_layout.addWidget(self.build_screening_controls())
+        content_layout.addWidget(self.build_market_data_controls())
         content_layout.addWidget(self.build_export_controls())
 
         ranked_section, self.ranked_candidates_table, self.ranked_empty_label = (
@@ -224,6 +234,138 @@ class ScreeningResultsPanel(QWidget):
         layout.addWidget(self.export_status_label, stretch=1)
         self.set_export_enabled(False)
         return section
+
+    def build_market_data_controls(self):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        section.setStyleSheet(DesignSystem.card_style())
+        layout = QHBoxLayout(section)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
+        )
+        layout.setSpacing(DesignSystem.Spacing.SM)
+
+        label = QLabel("Market Data")
+        label.setObjectName("ResearchPreviewFieldLabel")
+        self.data_refresh_ticker_input = QLineEdit()
+        self.data_refresh_ticker_input.setObjectName("DataRefreshTickerInput")
+        self.data_refresh_ticker_input.setPlaceholderText("Ticker or CSV list")
+        self.force_refresh_checkbox = QCheckBox("Force")
+        self.force_refresh_checkbox.setObjectName("ForceRefreshCheckbox")
+        self.refresh_selected_ticker_button = QPushButton("Refresh Ticker")
+        self.refresh_selected_ticker_button.setObjectName("SecondaryButton")
+        self.refresh_selected_ticker_button.clicked.connect(
+            self.emit_refresh_selected_ticker
+        )
+        self.refresh_ticker_list_button = QPushButton("Refresh List")
+        self.refresh_ticker_list_button.setObjectName("SecondaryButton")
+        self.refresh_ticker_list_button.clicked.connect(self.emit_refresh_ticker_list)
+        self.refresh_universe_symbols_button = QPushButton("Refresh Universe")
+        self.refresh_universe_symbols_button.setObjectName("SecondaryButton")
+        self.refresh_universe_symbols_button.clicked.connect(
+            self.emit_refresh_universe_symbols
+        )
+        self.cancel_data_refresh_button = QPushButton("Cancel Refresh")
+        self.cancel_data_refresh_button.setObjectName("SecondaryButton")
+        self.cancel_data_refresh_button.setEnabled(False)
+        self.cancel_data_refresh_button.clicked.connect(
+            self.cancel_data_refresh_requested.emit
+        )
+        self.cache_coverage_button = QPushButton("Cache Coverage")
+        self.cache_coverage_button.setObjectName("SecondaryButton")
+        self.cache_coverage_button.clicked.connect(self.emit_data_quality_report)
+        self.clear_cache_ticker_button = QPushButton("Clear Ticker Cache")
+        self.clear_cache_ticker_button.setObjectName("SecondaryButton")
+        self.clear_cache_ticker_button.clicked.connect(self.emit_clear_cache_ticker)
+        self.clear_all_cache_button = QPushButton("Clear All Cache")
+        self.clear_all_cache_button.setObjectName("SecondaryButton")
+        self.clear_all_cache_button.clicked.connect(self.clear_all_cache_requested.emit)
+        self.provider_diagnostics_button = QPushButton("Provider Diagnostics")
+        self.provider_diagnostics_button.setObjectName("SecondaryButton")
+        self.provider_diagnostics_button.clicked.connect(
+            self.provider_diagnostics_requested.emit
+        )
+        self.market_data_status_label = QLabel("Market data ready")
+        self.market_data_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.market_data_status_label.setWordWrap(True)
+        self.cache_coverage_label = QLabel("Cache: --")
+        self.cache_coverage_label.setObjectName("ResearchPreviewFieldValue")
+        self.cache_coverage_label.setWordWrap(True)
+
+        layout.addWidget(label)
+        layout.addWidget(self.data_refresh_ticker_input, stretch=1)
+        layout.addWidget(self.force_refresh_checkbox)
+        layout.addWidget(self.refresh_selected_ticker_button)
+        layout.addWidget(self.refresh_ticker_list_button)
+        layout.addWidget(self.refresh_universe_symbols_button)
+        layout.addWidget(self.cancel_data_refresh_button)
+        layout.addWidget(self.cache_coverage_button)
+        layout.addWidget(self.clear_cache_ticker_button)
+        layout.addWidget(self.clear_all_cache_button)
+        layout.addWidget(self.provider_diagnostics_button)
+        layout.addWidget(self.cache_coverage_label, stretch=1)
+        layout.addWidget(self.market_data_status_label, stretch=1)
+        return section
+
+    def emit_refresh_selected_ticker(self):
+        ticker = self.data_refresh_ticker_input.text().strip() or self.selected_candidate_ticker()
+        self.refresh_selected_ticker_requested.emit(
+            ticker,
+            self.force_refresh_checkbox.isChecked(),
+        )
+
+    def emit_refresh_ticker_list(self):
+        self.refresh_ticker_list_requested.emit(
+            self.data_refresh_ticker_input.text(),
+            self.force_refresh_checkbox.isChecked(),
+        )
+
+    def emit_refresh_universe_symbols(self):
+        self.refresh_universe_symbols_requested.emit(self.force_refresh_checkbox.isChecked())
+
+    def emit_clear_cache_ticker(self):
+        ticker = self.data_refresh_ticker_input.text().strip() or self.selected_candidate_ticker()
+        self.clear_cache_ticker_requested.emit(ticker)
+
+    def emit_data_quality_report(self):
+        self.data_quality_report_requested.emit(self.data_refresh_ticker_input.text())
+
+    def selected_candidate_ticker(self):
+        row = self.selected_row(self.ranked_candidates_table)
+        if row is None:
+            return ""
+        item = self.ranked_candidates_table.item(row, 1)
+        return item.text() if item is not None and item.text() != "N/A" else ""
+
+    def set_data_refresh_active(self, active, status_text=None):
+        for button in (
+            self.refresh_selected_ticker_button,
+            self.refresh_ticker_list_button,
+            self.refresh_universe_symbols_button,
+        ):
+            button.setEnabled(not active)
+        self.cancel_data_refresh_button.setEnabled(bool(active))
+        if status_text is not None:
+            self.set_market_data_status(status_text)
+
+    def set_market_data_status(self, status_text):
+        self.market_data_status_label.setText(status_text or "")
+        self.apply_status_property(self.market_data_status_label, status_text)
+
+    def set_cache_coverage_summary(self, coverage_rows):
+        rows = list(coverage_rows or [])
+        total_tickers = len(rows)
+        total_rows = sum(int(self.value(row, "row_count") or 0) for row in rows)
+        stale_count = sum(1 for row in rows if self.value(row, "stale"))
+        if total_tickers == 0:
+            self.cache_coverage_label.setText("Cache: empty")
+        else:
+            self.cache_coverage_label.setText(
+                f"Cache: {total_tickers} tickers / {total_rows} rows / {stale_count} stale"
+            )
 
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())

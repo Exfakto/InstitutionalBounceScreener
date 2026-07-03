@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 
@@ -74,7 +75,14 @@ class ResultsExportService:
             "Screening run metadata exported to JSON.",
         )
 
-    def export_full_run_package(self, run_metadata, candidates, output_dir, filename):
+    def export_full_run_package(
+        self,
+        run_metadata,
+        candidates,
+        output_dir,
+        filename,
+        provider_metadata=None,
+    ):
         destination = self.destination_path(output_dir, filename, "json")
         if destination is None:
             return self.result(False, "Output directory is required.")
@@ -84,12 +92,37 @@ class ResultsExportService:
             "candidates": [
                 self.candidate_row(candidate) for candidate in (candidates or [])
             ],
+            "provider_metadata": self.normalize_run_metadata(provider_metadata),
         }
         return self.write_json(
             package,
             destination,
             "Full screening run package exported.",
             count=len(package["candidates"]),
+        )
+
+    def export_cache_coverage_report(self, coverage_rows, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "json")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        payload = [self.normalize_run_metadata(row) for row in (coverage_rows or [])]
+        return self.write_json(
+            payload,
+            destination,
+            "Cache coverage report exported.",
+            count=len(payload),
+        )
+
+    def export_data_quality_report(self, report, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "json")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        payload = self.normalize_run_metadata(report)
+        return self.write_json(
+            payload,
+            destination,
+            "Data quality report exported.",
+            count=len(payload.get("ticker_reports", {}) if isinstance(payload, dict) else []),
         )
 
     def write_json(self, payload, destination, message, count=None):
@@ -130,6 +163,8 @@ class ResultsExportService:
     def normalize_run_metadata(cls, run_metadata):
         if run_metadata is None:
             return {}
+        if is_dataclass(run_metadata):
+            return cls.normalize_run_metadata(asdict(run_metadata))
         if isinstance(run_metadata, dict):
             return {
                 str(key): cls.json_safe(value)
@@ -141,6 +176,8 @@ class ResultsExportService:
 
     @classmethod
     def json_safe(cls, value):
+        if is_dataclass(value):
+            return cls.json_safe(asdict(value))
         if isinstance(value, dict):
             return {str(key): cls.json_safe(item) for key, item in value.items()}
         if isinstance(value, (list, tuple)):
