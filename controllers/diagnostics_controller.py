@@ -21,3 +21,13 @@ class DiagnosticsController:
 
     def diagnostics_text(self) -> str:
         return self.diagnostics_service.diagnostics_text()
+
+    def startup_report(self):
+        if hasattr(self.diagnostics_service, "startup_report"):
+            return self.diagnostics_service.startup_report()
+        return None
+
+    def health_report(self):
+        if hasattr(self.diagnostics_service, "health_report"):
+            return self.diagnostics_service.health_report()
+        return None

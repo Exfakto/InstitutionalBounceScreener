@@ -1,0 +1,4 @@
+APPLICATION_NAME = "Institutional Bounce Screener"
+VERSION = "4.0.0"
+BUILD_DATE = "2026-07-03"
+SCHEMA_VERSION = "1"

@@ -23,7 +23,10 @@ def test_diagnostics_service_returns_expected_keys(tmp_path):
     diagnostics = service.get_diagnostics()
 
     assert diagnostics["app_name"] == "Institutional Bounce Screener"
-    assert diagnostics["version"] == "v3.0.0-beta"
+    assert diagnostics["version"] == "4.0.0"
+    assert diagnostics["build_date"] == "2026-07-03"
+    assert diagnostics["schema_version"] == "1"
+    assert diagnostics["qt_version"]
     assert diagnostics["python_version"]
     assert diagnostics["operating_system"]
     assert diagnostics["active_provider"] == "local"
@@ -61,5 +64,6 @@ def test_diagnostics_text_is_readable(tmp_path):
     text = service.diagnostics_text()
 
     assert "Application: Institutional Bounce Screener" in text
-    assert "Version: v3.0.0-beta" in text
+    assert "Version: 4.0.0" in text
+    assert "Schema Version: 1" in text
     assert "Active Provider: local" in text

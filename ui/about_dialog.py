@@ -56,6 +56,8 @@ class AboutDialog(QDialog):
 
         self.copy_button = QPushButton("Copy Diagnostics")
         self.copy_button.clicked.connect(self.copy_diagnostics)
+        self.refresh_button = QPushButton("Refresh Diagnostics")
+        self.refresh_button.clicked.connect(self.load_diagnostics)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         self.button_box.rejected.connect(self.reject)
@@ -66,6 +68,7 @@ class AboutDialog(QDialog):
         layout.addWidget(self.description_label)
         layout.addWidget(self.diagnostics_group)
         layout.addWidget(self.diagnostics_text)
+        layout.addWidget(self.refresh_button)
         layout.addWidget(self.copy_button)
         layout.addWidget(self.button_box)
 
@@ -74,9 +77,23 @@ class AboutDialog(QDialog):
     def load_diagnostics(self) -> None:
         diagnostics = self.controller.get_diagnostics()
         self.app_name_label.setText(str(diagnostics.get("app_name") or "--"))
-        self.version_label.setText(f"Version: {diagnostics.get('version') or '--'}")
+        self.version_label.setText(
+            f"Version: {diagnostics.get('version') or '--'}"
+            f" | Build: {diagnostics.get('build_date') or '--'}"
+            f" | Schema: {diagnostics.get('schema_version') or '--'}"
+        )
         self._render_diagnostics(diagnostics)
-        self.diagnostics_text.setPlainText(self.controller.diagnostics_text())
+        self.diagnostics_text.setPlainText(self.full_diagnostics_text())
+
+    def full_diagnostics_text(self) -> str:
+        parts = [self.controller.diagnostics_text()]
+        startup = self.controller.startup_report()
+        health = self.controller.health_report()
+        if startup is not None:
+            parts.append(self.report_text("Startup Diagnostics", startup))
+        if health is not None:
+            parts.append(self.report_text("Health Check", health))
+        return "\n\n".join(part for part in parts if part)
 
     def copy_diagnostics(self) -> None:
         QApplication.clipboard().setText(self.diagnostics_text.toPlainText())
@@ -84,6 +101,9 @@ class AboutDialog(QDialog):
     def _render_diagnostics(self, diagnostics: dict[str, Any]) -> None:
         labels = [
             ("python_version", "Python"),
+            ("qt_version", "Qt/PySide"),
+            ("build_date", "Build Date"),
+            ("schema_version", "Schema Version"),
             ("operating_system", "Operating System"),
             ("active_provider", "Active Provider"),
             ("provider_config_path", "Provider Config"),
@@ -103,3 +123,20 @@ class AboutDialog(QDialog):
                 self.diagnostic_labels[key] = label
 
             label.setText(str(diagnostics.get(key) or "--"))
+
+    @staticmethod
+    def report_text(title, report) -> str:
+        lines = [f"{title}: {getattr(report, 'status', '--')}"]
+        for check in getattr(report, "checks", []) or []:
+            lines.append(
+                f"- {getattr(check, 'name', '--')}: "
+                f"{getattr(check, 'status', '--')} - "
+                f"{getattr(check, 'message', '--')}"
+            )
+        warnings = getattr(report, "warnings", []) or []
+        errors = getattr(report, "errors", []) or []
+        if warnings:
+            lines.append("Warnings: " + "; ".join(str(item) for item in warnings))
+        if errors:
+            lines.append("Errors: " + "; ".join(str(item) for item in errors))
+        return "\n".join(lines)

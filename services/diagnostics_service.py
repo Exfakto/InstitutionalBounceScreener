@@ -5,16 +5,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from config.app_metadata import APPLICATION_NAME, BUILD_DATE, SCHEMA_VERSION, VERSION
 from config.settings import DATABASE_FOLDER, DATABASE_NAME
 from providers.provider_config import ProviderConfig
+from services.health_check_service import HealthCheckService
+from services.startup_diagnostics_service import StartupDiagnosticsService
 
 
 class DiagnosticsService:
     """
     Collect lightweight runtime diagnostics without network or file writes.
     """
-
-    DEFAULT_VERSION = "v3.0.0-beta"
 
     def __init__(
         self,
@@ -29,6 +30,8 @@ class DiagnosticsService:
             else Path(DATABASE_FOLDER) / DATABASE_NAME
         )
         self.log_path = Path(log_path) if log_path is not None else Path("logs")
+        self.startup_diagnostics_service = StartupDiagnosticsService()
+        self.health_check_service = HealthCheckService()
 
     def get_diagnostics(self) -> dict[str, Any]:
         """
@@ -38,9 +41,12 @@ class DiagnosticsService:
         provider_config = ProviderConfig.load(self.provider_config_path)
 
         return {
-            "app_name": "Institutional Bounce Screener",
+            "app_name": APPLICATION_NAME,
             "version": self._version(),
+            "build_date": BUILD_DATE,
+            "schema_version": SCHEMA_VERSION,
             "python_version": sys.version.split()[0],
+            "qt_version": self.qt_version(),
             "operating_system": platform.platform(),
             "active_provider": provider_config.active_provider,
             "provider_config_path": str(self.provider_config_path),
@@ -52,6 +58,12 @@ class DiagnosticsService:
             "warnings": list(provider_config.warnings),
         }
 
+    def startup_report(self):
+        return self.startup_diagnostics_service.run()
+
+    def health_report(self):
+        return self.health_check_service.run()
+
     def diagnostics_text(self) -> str:
         """
         Return a readable diagnostics summary suitable for the clipboard.
@@ -61,7 +73,10 @@ class DiagnosticsService:
         labels = {
             "app_name": "Application",
             "version": "Version",
+            "build_date": "Build Date",
+            "schema_version": "Schema Version",
             "python_version": "Python",
+            "qt_version": "Qt/PySide",
             "operating_system": "Operating System",
             "active_provider": "Active Provider",
             "provider_config_path": "Provider Config",
@@ -83,4 +98,13 @@ class DiagnosticsService:
         return "\n".join(lines)
 
     def _version(self) -> str:
-        return self.DEFAULT_VERSION
+        return VERSION
+
+    @staticmethod
+    def qt_version() -> str:
+        try:
+            from PySide6.QtCore import __version__ as pyside_version
+
+            return pyside_version
+        except Exception:
+            return "Unavailable"
