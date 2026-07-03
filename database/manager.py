@@ -7,6 +7,8 @@ from database.schema import (
     EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
     INSTITUTIONAL_METRICS_TABLE,
+    MARKET_UNIVERSE_INDEXES,
+    MARKET_UNIVERSE_TABLE,
     PAPER_TRADES_TABLE,
     PRICE_HISTORY_TABLE,
     SUPPORT_LEVELS_TABLE,
@@ -51,6 +53,9 @@ class DatabaseManager:
     def initialize(self):
 
         self.cursor.execute(STOCKS_TABLE)
+        self.cursor.execute(MARKET_UNIVERSE_TABLE)
+        for index_statement in MARKET_UNIVERSE_INDEXES:
+            self.cursor.execute(index_statement)
         self.cursor.execute(PRICE_HISTORY_TABLE)
         self.cursor.execute(TECHNICAL_INDICATORS_TABLE)
         self.cursor.execute(SUPPORT_LEVELS_TABLE)
@@ -749,6 +754,157 @@ class DatabaseManager:
         )
 
         return self.cursor.fetchone()[0]
+
+    def upsert_market_universe_records(self, records):
+
+        rows = []
+
+        for record in records or []:
+            normalized = self.normalize_market_universe_record(record)
+            if normalized is not None:
+                rows.append(normalized)
+
+        if not rows:
+            return 0
+
+        self.cursor.executemany(
+            """
+            INSERT INTO market_universe
+            (
+                ticker,
+                company_name,
+                exchange,
+                security_type,
+                sector,
+                industry,
+                market_cap,
+                price,
+                average_volume,
+                average_dollar_volume,
+                is_active,
+                last_updated
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+            ON CONFLICT(ticker) DO UPDATE SET
+                company_name = excluded.company_name,
+                exchange = excluded.exchange,
+                security_type = excluded.security_type,
+                sector = excluded.sector,
+                industry = excluded.industry,
+                market_cap = excluded.market_cap,
+                price = excluded.price,
+                average_volume = excluded.average_volume,
+                average_dollar_volume = excluded.average_dollar_volume,
+                is_active = excluded.is_active,
+                last_updated = excluded.last_updated
+            """,
+            rows,
+        )
+
+        self.connection.commit()
+        return len(rows)
+
+    def get_active_market_universe_records(self):
+
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM market_universe
+            WHERE is_active = 1
+            ORDER BY ticker
+            """
+        )
+
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_market_universe_by_exchange(self, exchange, active_only=True):
+
+        if exchange in (None, ""):
+            return []
+
+        query = """
+            SELECT *
+            FROM market_universe
+            WHERE UPPER(exchange) = ?
+        """
+        params = [str(exchange).strip().upper()]
+
+        if active_only:
+            query += " AND is_active = 1"
+
+        query += " ORDER BY ticker"
+
+        self.cursor.execute(query, params)
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def deactivate_stale_market_universe_records(self, active_tickers):
+
+        tickers = [
+            str(ticker).strip().upper()
+            for ticker in (active_tickers or [])
+            if str(ticker or "").strip()
+        ]
+
+        if not tickers:
+            self.cursor.execute("UPDATE market_universe SET is_active = 0")
+            self.connection.commit()
+            return self.cursor.rowcount
+
+        placeholders = ", ".join("?" for _ in tickers)
+        self.cursor.execute(
+            f"""
+            UPDATE market_universe
+            SET is_active = 0
+            WHERE ticker NOT IN ({placeholders})
+            """,
+            tickers,
+        )
+        self.connection.commit()
+        return self.cursor.rowcount
+
+    @classmethod
+    def normalize_market_universe_record(cls, record):
+
+        if record is None:
+            return None
+
+        ticker = cls.record_value(record, "ticker")
+        ticker = str(ticker or "").strip().upper()
+
+        if not ticker:
+            return None
+
+        average_volume = cls._sqlite_float(cls.record_value(record, "average_volume"))
+        price = cls._sqlite_float(cls.record_value(record, "price"))
+        average_dollar_volume = cls._sqlite_float(
+            cls.record_value(record, "average_dollar_volume")
+        )
+
+        if average_dollar_volume is None and average_volume is not None and price is not None:
+            average_dollar_volume = average_volume * price
+
+        return (
+            ticker,
+            cls.record_value(record, "company_name") or cls.record_value(record, "company") or "",
+            cls.record_value(record, "exchange") or "",
+            cls.record_value(record, "security_type") or "",
+            cls.record_value(record, "sector") or "",
+            cls.record_value(record, "industry") or "",
+            cls._sqlite_float(cls.record_value(record, "market_cap")),
+            price,
+            average_volume,
+            average_dollar_volume,
+            1 if cls.record_value(record, "is_active") not in (False, 0, "0") else 0,
+            cls.record_value(record, "last_updated"),
+        )
+
+    @staticmethod
+    def record_value(record, key):
+
+        if isinstance(record, dict):
+            return record.get(key)
+
+        return getattr(record, key, None)
 
     # ==========================================================
     # Institutional Metrics

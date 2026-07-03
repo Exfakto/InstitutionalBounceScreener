@@ -31,6 +31,10 @@ class CandidateTable(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(0, len(self.COLUMNS), parent)
 
+        self._display_candidates = []
+        self._populating = False
+        self._sort_column = 1
+        self._sort_order = Qt.DescendingOrder
         self.setObjectName("CandidateTable")
         self.setHorizontalHeaderLabels(self.COLUMNS)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -43,30 +47,76 @@ class CandidateTable(QTableWidget):
         self.setWordWrap(False)
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(40)
-        self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setMinimumSectionSize(104)
+        self.horizontalHeader().setSectionsClickable(True)
+        self.horizontalHeader().sectionClicked.connect(self.handle_header_sort)
+        self.apply_default_column_widths()
         self.setStyleSheet(self.grid_style())
         self.cellDoubleClicked.connect(self.emit_double_clicked_ticker)
+
+    def isSortingEnabled(self):
+        return True
 
     def populate(self, candidates):
         """
         Populate table rows from CandidateScore objects.
         """
 
+        self._display_candidates = self.sorted_candidates(candidates)
+        self._populate_rows(self._display_candidates)
+
+    def _populate_rows(self, candidates):
+        self._populating = True
+        self.setSortingEnabled(False)
         self.setRowCount(0)
 
-        for row, candidate in enumerate(self.sorted_candidates(candidates)):
+        for row, candidate in enumerate(candidates or []):
             self.insertRow(row)
 
             for column, (value, role) in enumerate(self.row_values(candidate)):
                 item = QTableWidgetItem(value)
+                sort_value = self.sort_value_for_column(candidate, column)
+                if sort_value is not None:
+                    item.setData(Qt.UserRole, sort_value)
                 item.setTextAlignment(self.alignment_for_column(column))
                 self.apply_item_style(item, role)
                 self.setItem(row, column, item)
 
-        self.resizeColumnsToContents()
+        self.apply_default_column_widths()
         self.horizontalHeader().setStretchLastSection(True)
+        self._populating = False
+
+    def handle_header_sort(self, column):
+        if column == self._sort_column and self._sort_order == Qt.AscendingOrder:
+            order = Qt.DescendingOrder
+        else:
+            order = Qt.AscendingOrder
+        self.sortItems(column, order)
+
+    def sortItems(self, column, order=Qt.AscendingOrder):
+        if self._populating:
+            return
+
+        self._sort_column = column
+        self._sort_order = order
+        reverse = order == Qt.DescendingOrder
+
+        def key(candidate):
+            sort_value = self.sort_value_for_column(candidate, column)
+            if sort_value is not None:
+                return (0, sort_value)
+            display = self.row_values(candidate)[column][0]
+            return (1, str(display or "").lower())
+
+        self._display_candidates = sorted(
+            self._display_candidates,
+            key=key,
+            reverse=reverse,
+        )
+        self._populate_rows(self._display_candidates)
+        self.horizontalHeader().setSortIndicator(column, order)
 
     def selected_ticker(self):
         """
@@ -130,6 +180,37 @@ class CandidateTable(QTableWidget):
             (self.format_score(scores.get("support_score")), self.score_role(scores.get("support_score"))),
             (self.format_score(scores.get("bounce_score")), self.score_role(scores.get("bounce_score"))),
         ]
+
+    @classmethod
+    def sort_value_for_column(cls, candidate, column):
+        scores = getattr(candidate, "score_map", {}) or {}
+        metrics = getattr(candidate, "metrics", {}) or {}
+
+        if column == 1:
+            return cls.number_value(getattr(candidate, "primary_score_value", None))
+        if column == 2:
+            opportunity = getattr(candidate, "opportunity_rating", None)
+            return cls.number_value(
+                cls.first_existing(
+                    cls.object_value(opportunity, "rating_score"),
+                    getattr(candidate, "primary_score_value", None),
+                )
+            )
+        if column == 3:
+            return cls.number_value(scores.get("quality_score"))
+        if column == 4:
+            return cls.number_value(scores.get("technical_score"))
+        if column == 5:
+            return cls.number_value(scores.get("institutional_score"))
+        if column == 6:
+            return cls.number_value(
+                cls.first_existing(metrics.get("risk_reward"), getattr(candidate, "risk_reward", None))
+            )
+        if column == 8:
+            return cls.number_value(scores.get("support_score"))
+        if column == 9:
+            return cls.number_value(scores.get("bounce_score"))
+        return None
 
     @classmethod
     def sorted_candidates(cls, candidates):
@@ -278,6 +359,23 @@ class CandidateTable(QTableWidget):
         if column == 2:
             return Qt.AlignCenter
         return Qt.AlignRight | Qt.AlignVCenter
+
+    def apply_default_column_widths(self):
+        widths = {
+            0: 108,
+            1: 132,
+            2: 150,
+            3: 112,
+            4: 112,
+            5: 132,
+            6: 124,
+            7: 120,
+            8: 112,
+            9: 112,
+        }
+
+        for column, width in widths.items():
+            self.setColumnWidth(column, width)
 
     @staticmethod
     def apply_item_style(item, role):

@@ -40,6 +40,65 @@ CREATE TABLE IF NOT EXISTS stocks (
 );
 """
 
+
+MARKET_UNIVERSE_TABLE = """
+CREATE TABLE IF NOT EXISTS market_universe (
+
+    ticker TEXT PRIMARY KEY,
+
+    company_name TEXT,
+
+    exchange TEXT,
+
+    security_type TEXT,
+
+    sector TEXT,
+
+    industry TEXT,
+
+    market_cap REAL,
+
+    price REAL,
+
+    average_volume REAL,
+
+    average_dollar_volume REAL,
+
+    is_active INTEGER DEFAULT 1,
+
+    last_updated TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""
+
+
+MARKET_UNIVERSE_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_market_universe_ticker
+    ON market_universe(ticker);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_market_universe_exchange
+    ON market_universe(exchange);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_market_universe_security_type
+    ON market_universe(security_type);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_market_universe_market_cap
+    ON market_universe(market_cap);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_market_universe_average_dollar_volume
+    ON market_universe(average_dollar_volume);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_market_universe_is_active
+    ON market_universe(is_active);
+    """,
+]
+
 TECHNICAL_INDICATORS_TABLE = """
 CREATE TABLE IF NOT EXISTS technical_indicators (
 
