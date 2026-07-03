@@ -24,6 +24,7 @@ def test_kpi_strip_displays_dashboard_statistics(app):
             "indicator_rows": 8901,
             "support_levels": 23,
             "validated_zones": 17,
+            "candidates": 6,
         }
     )
 
@@ -32,6 +33,7 @@ def test_kpi_strip_displays_dashboard_statistics(app):
     assert strip.value_for("indicator_rows") == "8,901"
     assert strip.value_for("support_levels") == "23"
     assert strip.value_for("validated_zones") == "17"
+    assert strip.value_for("candidates") == "6"
 
 
 def test_kpi_strip_contains_expected_cards(app):
@@ -43,4 +45,14 @@ def test_kpi_strip_contains_expected_cards(app):
         "indicator_rows",
         "support_levels",
         "validated_zones",
+        "candidates",
     ]
+
+
+def test_kpi_cards_include_professional_metadata(app):
+    strip = KpiStrip()
+    card = strip.cards["stocks"]
+
+    assert card.title.text() == "Universe Stocks"
+    assert card.subtitle.text() == "Active market universe"
+    assert card.icon.text() == "UNV"

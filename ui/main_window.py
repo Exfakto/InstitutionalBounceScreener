@@ -1098,6 +1098,7 @@ class MainWindow(QMainWindow):
         stats.setdefault("indicator_rows", 0)
         stats.setdefault("support_levels", 0)
         stats.setdefault("validated_zones", 0)
+        stats["candidates"] = len(getattr(self, "candidates_by_ticker", {}) or {})
         stats["stocks"] = stock_count
         self.latest_statistics = stats
         self.kpi_strip.update_statistics(stats)
@@ -1129,6 +1130,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "candidates_table"):
             self.candidates_table.populate([])
         self.candidates_by_ticker = {}
+        self.refresh_candidate_kpi()
         if hasattr(self, "research_preview"):
             self.research_preview.clear()
         if hasattr(self, "trade_card"):
@@ -1225,10 +1227,31 @@ class MainWindow(QMainWindow):
     def refresh_statistics(self):
 
         stats = self.controller.get_statistics()
+        stats["candidates"] = len(getattr(self, "candidates_by_ticker", {}) or {})
         self.latest_statistics = stats
 
         self.kpi_strip.update_statistics(stats)
         self.refresh_dashboard()
+
+    # ----------------------------------------------------------
+
+    def refresh_candidate_kpi(self):
+
+        if not hasattr(self, "kpi_strip"):
+            return
+
+        stats = dict(getattr(self, "latest_statistics", {}) or {})
+        for key in [
+            "stocks",
+            "rows",
+            "indicator_rows",
+            "support_levels",
+            "validated_zones",
+        ]:
+            stats.setdefault(key, 0)
+        stats["candidates"] = len(getattr(self, "candidates_by_ticker", {}) or {})
+        self.latest_statistics = stats
+        self.kpi_strip.update_statistics(stats)
 
     # ----------------------------------------------------------
 
@@ -1521,6 +1544,7 @@ class MainWindow(QMainWindow):
         }
         self.register_refresh_tickers(results["candidates"])
         self.candidates_table.populate(results["candidates"])
+        self.refresh_candidate_kpi()
         self.update_open_detail_state()
         self.last_screen_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.update_screener_status(

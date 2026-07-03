@@ -257,6 +257,27 @@ def test_main_window_dashboard_summary_widgets_are_created(patched_window):
     }
 
 
+def test_main_window_candidate_kpi_updates_without_duplicate_cards(patched_window):
+    window = patched_window
+
+    initial_card_keys = list(window.kpi_strip.cards)
+    window.candidates_by_ticker = {
+        "AAPL": SimpleNamespace(ticker="AAPL"),
+        "MSFT": SimpleNamespace(ticker="MSFT"),
+    }
+
+    window.refresh_candidate_kpi()
+
+    assert window.kpi_strip.value_for("candidates") == "2"
+    assert list(window.kpi_strip.cards) == initial_card_keys
+
+    window.candidates_by_ticker = {"NVDA": SimpleNamespace(ticker="NVDA")}
+    window.refresh_candidate_kpi()
+
+    assert window.kpi_strip.value_for("candidates") == "1"
+    assert list(window.kpi_strip.cards) == initial_card_keys
+
+
 def test_main_window_update_summary_executes_without_exceptions(patched_window):
     window = patched_window
 

@@ -381,16 +381,36 @@ class Theme:
             border-radius: {DesignSystem.Radius.LG}px;
         }}
 
+        QFrame#KpiAccentBar {{
+            border: none;
+            border-radius: 1px;
+        }}
+
         QLabel#KpiTitle {{
             color: {cls.MUTED_TEXT};
             font-size: {DesignSystem.Typography.SMALL_PT}pt;
             font-weight: 800;
         }}
 
+        QLabel#KpiIcon {{
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.SM}px;
+            padding: 2px 5px;
+            font-size: {DesignSystem.Typography.CAPTION_PT}pt;
+            font-weight: 800;
+        }}
+
         QLabel#KpiValue {{
             color: {cls.PRIMARY_TEXT};
-            font-size: 18pt;
+            font-size: {DesignSystem.Typography.KPI_PT}pt;
             font-weight: 800;
+        }}
+
+        QLabel#KpiSubtitle {{
+            color: {cls.SECONDARY_TEXT};
+            font-size: {DesignSystem.Typography.CAPTION_PT}pt;
+            font-weight: 600;
         }}
 
         QLabel#ResearchPreviewTicker {{
