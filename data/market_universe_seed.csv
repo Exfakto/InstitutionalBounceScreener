@@ -1,0 +1,26 @@
+ticker,company_name,exchange,security_type,sector,industry,market_cap,price,average_volume,average_dollar_volume,is_active,last_updated
+AAPL,Apple Inc.,NASDAQ,Common Stock,Technology,Consumer Electronics,3000000000000,200.00,55000000,11000000000,1,2026-07-03
+MSFT,Microsoft Corporation,NASDAQ,Common Stock,Technology,Software Infrastructure,3200000000000,450.00,22000000,9900000000,1,2026-07-03
+NVDA,NVIDIA Corporation,NASDAQ,Common Stock,Technology,Semiconductors,2800000000000,125.00,40000000,5000000000,1,2026-07-03
+AMZN,Amazon.com Inc.,NASDAQ,Common Stock,Consumer Cyclical,Internet Retail,1900000000000,190.00,35000000,6650000000,1,2026-07-03
+GOOGL,Alphabet Inc. Class A,NASDAQ,Common Stock,Communication Services,Internet Content & Information,2100000000000,175.00,30000000,5250000000,1,2026-07-03
+META,Meta Platforms Inc.,NASDAQ,Common Stock,Communication Services,Internet Content & Information,1400000000000,520.00,15000000,7800000000,1,2026-07-03
+TSLA,Tesla Inc.,NASDAQ,Common Stock,Consumer Cyclical,Auto Manufacturers,700000000000,220.00,90000000,19800000000,1,2026-07-03
+AVGO,Broadcom Inc.,NASDAQ,Common Stock,Technology,Semiconductors,750000000000,165.00,28000000,4620000000,1,2026-07-03
+COST,Costco Wholesale Corporation,NASDAQ,Common Stock,Consumer Defensive,Discount Stores,400000000000,900.00,1800000,1620000000,1,2026-07-03
+ADBE,Adobe Inc.,NASDAQ,Common Stock,Technology,Software Application,220000000000,500.00,3000000,1500000000,1,2026-07-03
+JPM,JPMorgan Chase & Co.,NYSE,Common Stock,Financial Services,Banks Diversified,600000000000,210.00,9000000,1890000000,1,2026-07-03
+V,Visa Inc.,NYSE,Common Stock,Financial Services,Credit Services,550000000000,275.00,7000000,1925000000,1,2026-07-03
+JNJ,Johnson & Johnson,NYSE,Common Stock,Healthcare,Drug Manufacturers General,380000000000,160.00,8000000,1280000000,1,2026-07-03
+UNH,UnitedHealth Group Incorporated,NYSE,Common Stock,Healthcare,Healthcare Plans,460000000000,500.00,3500000,1750000000,1,2026-07-03
+PG,Procter & Gamble Company,NYSE,Common Stock,Consumer Defensive,Household & Personal Products,380000000000,165.00,7000000,1155000000,1,2026-07-03
+XOM,Exxon Mobil Corporation,NYSE,Common Stock,Energy,Oil & Gas Integrated,500000000000,115.00,16000000,1840000000,1,2026-07-03
+HD,Home Depot Inc.,NYSE,Common Stock,Consumer Cyclical,Home Improvement Retail,360000000000,360.00,3500000,1260000000,1,2026-07-03
+MA,Mastercard Incorporated,NYSE,Common Stock,Financial Services,Credit Services,430000000000,470.00,2500000,1175000000,1,2026-07-03
+LLY,Eli Lilly and Company,NYSE,Common Stock,Healthcare,Drug Manufacturers General,850000000000,900.00,3000000,2700000000,1,2026-07-03
+WMT,Walmart Inc.,NYSE,Common Stock,Consumer Defensive,Discount Stores,550000000000,70.00,18000000,1260000000,1,2026-07-03
+BAC,Bank of America Corporation,NYSE,Common Stock,Financial Services,Banks Diversified,300000000000,38.00,45000000,1710000000,1,2026-07-03
+KO,Coca-Cola Company,NYSE,Common Stock,Consumer Defensive,Beverages Non-Alcoholic,270000000000,63.00,14000000,882000000,1,2026-07-03
+CRM,Salesforce Inc.,NYSE,Common Stock,Technology,Software Application,250000000000,260.00,6000000,1560000000,1,2026-07-03
+CAT,Caterpillar Inc.,NYSE,Common Stock,Industrials,Farm & Heavy Construction Machinery,170000000000,340.00,3000000,1020000000,1,2026-07-03
+NEE,NextEra Energy Inc.,NYSE,Common Stock,Utilities,Utilities Regulated Electric,150000000000,73.00,11000000,803000000,1,2026-07-03
