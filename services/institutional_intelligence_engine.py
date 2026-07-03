@@ -7,6 +7,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from math import isfinite
 
+from database.institutional_data import InstitutionalData
+from services.institutional_intelligence_service import (
+    InstitutionalIntelligenceService,
+    InstitutionalScoreResult,
+)
+
 
 @dataclass(frozen=True)
 class InstitutionalActivity:
@@ -40,10 +46,104 @@ class InstitutionalIntelligenceResult:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class InstitutionalSignal:
+    ticker: str
+    raw_institutional_data: InstitutionalData | None
+    score_result: InstitutionalScoreResult
+    as_of_date: str | None = None
+    source: str | None = None
+    warnings: list[str] = field(default_factory=list)
+
+
 class InstitutionalIntelligenceEngine:
     """
     Score institutional sponsorship, fund flow, and insider activity.
     """
+
+    def __init__(self, provider=None, scoring_service=None):
+        self.provider = provider
+        self.scoring_service = scoring_service or InstitutionalIntelligenceService()
+
+    def score_ticker(self, ticker):
+        normalized = self.normalize_ticker(ticker)
+        if normalized is None:
+            raw_data = None
+            score_result = self.scoring_service.calculate()
+            return InstitutionalSignal(
+                ticker="",
+                raw_institutional_data=raw_data,
+                score_result=score_result,
+                warnings=["Missing ticker", *score_result.warnings],
+            )
+
+        self.require_provider()
+        raw_data = self.provider.fetch_for_ticker(normalized)
+        return self.build_signal(normalized, raw_data)
+
+    def score_tickers(self, tickers):
+        normalized = [
+            value
+            for value in (self.normalize_ticker(ticker) for ticker in (tickers or []))
+            if value is not None
+        ]
+        if not normalized:
+            return {}
+
+        self.require_provider()
+        raw_records = self.provider.fetch_for_tickers(normalized) or {}
+        return {
+            ticker: self.build_signal(ticker, raw_records.get(ticker))
+            for ticker in normalized
+        }
+
+    def build_signal(self, ticker, raw_data):
+        score_result = self.scoring_service.calculate_from_record(raw_data)
+        warnings = [*self.missing_field_warnings(raw_data), *score_result.warnings]
+
+        return InstitutionalSignal(
+            ticker=ticker,
+            raw_institutional_data=raw_data,
+            score_result=score_result,
+            as_of_date=self.value(raw_data, "as_of_date"),
+            source=self.value(raw_data, "source"),
+            warnings=self.unique_warnings(warnings),
+        )
+
+    def require_provider(self):
+        if self.provider is None:
+            raise ValueError("InstitutionalIntelligenceEngine requires an institutional data provider.")
+
+    @staticmethod
+    def missing_field_warnings(raw_data):
+        if raw_data is None:
+            return ["Missing institutional data"]
+
+        fields = {
+            "institutional_ownership_pct": "Missing institutional ownership",
+            "institutional_ownership_change_qoq": "Missing institutional ownership trend",
+            "net_institutional_buying": "Missing net institutional buying",
+            "insider_buying_flag": "Missing insider buying flag",
+            "insider_selling_flag": "Missing insider selling flag",
+        }
+        return [
+            message
+            for field, message in fields.items()
+            if InstitutionalIntelligenceEngine.value(raw_data, field) in (None, "")
+        ]
+
+    @staticmethod
+    def normalize_ticker(ticker):
+        value = str(ticker or "").strip().upper()
+        return value or None
+
+    @staticmethod
+    def unique_warnings(warnings):
+        unique = []
+        for warning in warnings:
+            if warning and warning not in unique:
+                unique.append(warning)
+        return unique
 
     def analyze(self, candidate=None, **overrides):
         source = dict(overrides)
