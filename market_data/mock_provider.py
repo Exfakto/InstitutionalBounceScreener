@@ -59,6 +59,18 @@ class MockMarketDataProvider(MarketDataProvider):
 
     def __init__(self, universe=None):
         self.universe = deepcopy(universe if universe is not None else self.UNIVERSE)
+        self.ohlcv = {
+            "AAPL": [
+                {
+                    "date": "2026-01-02",
+                    "open": 100.0,
+                    "high": 105.0,
+                    "low": 99.0,
+                    "close": 104.0,
+                    "volume": 1000000,
+                }
+            ]
+        }
 
     def get_market_universe(self):
         return deepcopy(self.universe)
@@ -108,6 +120,33 @@ class MockMarketDataProvider(MarketDataProvider):
 
     def get_last_updated(self):
         return self.LAST_UPDATED
+
+    def fetch_daily_ohlcv(self, ticker, start_date=None, end_date=None):
+        normalized = str(ticker or "").strip().upper()
+        rows = deepcopy(self.ohlcv.get(normalized, []))
+        if start_date is not None:
+            rows = [row for row in rows if str(row.get("date")) >= str(start_date)]
+        if end_date is not None:
+            rows = [row for row in rows if str(row.get("date")) <= str(end_date)]
+        return rows
+
+    def fetch_fundamentals(self, ticker):
+        return self.get_fundamentals(ticker)
+
+    def fetch_universe_symbols(self, exchange=None):
+        normalized_exchange = str(exchange or "").strip().upper()
+        symbols = []
+        for record in self.universe:
+            if normalized_exchange and str(record.get("exchange") or "").upper() != normalized_exchange:
+                continue
+            symbols.append(
+                {
+                    "ticker": record.get("ticker"),
+                    "exchange": record.get("exchange"),
+                    "security_type": record.get("security_type"),
+                }
+            )
+        return deepcopy(symbols)
 
     def record_for_ticker(self, ticker):
         normalized = str(ticker or "").strip().upper()

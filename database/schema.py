@@ -41,6 +41,45 @@ CREATE TABLE IF NOT EXISTS stocks (
 """
 
 
+HISTORICAL_OHLCV_CACHE_TABLE = """
+CREATE TABLE IF NOT EXISTS historical_ohlcv_cache (
+
+    ticker TEXT NOT NULL,
+
+    date TEXT NOT NULL,
+
+    open REAL,
+
+    high REAL,
+
+    low REAL,
+
+    close REAL,
+
+    volume INTEGER,
+
+    source TEXT,
+
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (ticker, date)
+
+);
+"""
+
+
+HISTORICAL_OHLCV_CACHE_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_historical_ohlcv_cache_ticker
+    ON historical_ohlcv_cache(ticker);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_historical_ohlcv_cache_date
+    ON historical_ohlcv_cache(date);
+    """,
+]
+
+
 MARKET_UNIVERSE_TABLE = """
 CREATE TABLE IF NOT EXISTS market_universe (
 

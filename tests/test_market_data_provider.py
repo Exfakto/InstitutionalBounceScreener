@@ -37,6 +37,15 @@ def test_market_data_provider_base_methods_raise_when_called_by_subclass():
         def get_last_updated(self):
             return super().get_last_updated()
 
+        def fetch_daily_ohlcv(self, ticker, start_date=None, end_date=None):
+            return super().fetch_daily_ohlcv(ticker, start_date, end_date)
+
+        def fetch_fundamentals(self, ticker):
+            return super().fetch_fundamentals(ticker)
+
+        def fetch_universe_symbols(self, exchange=None):
+            return super().fetch_universe_symbols(exchange)
+
     provider = DelegatingProvider()
 
     with pytest.raises(NotImplementedError):
@@ -51,6 +60,12 @@ def test_market_data_provider_base_methods_raise_when_called_by_subclass():
         provider.get_fundamentals("AAPL")
     with pytest.raises(NotImplementedError):
         provider.get_last_updated()
+    with pytest.raises(NotImplementedError):
+        provider.fetch_daily_ohlcv("AAPL")
+    with pytest.raises(NotImplementedError):
+        provider.fetch_fundamentals("AAPL")
+    with pytest.raises(NotImplementedError):
+        provider.fetch_universe_symbols()
 
 
 def test_mock_market_data_provider_universe_is_deterministic():
@@ -89,3 +104,15 @@ def test_mock_market_data_provider_bulk_quotes_and_last_updated():
     assert set(quotes) == {"MSFT", "JPM"}
     assert quotes["MSFT"]["price"] == 450.0
     assert provider.get_last_updated() == "2026-07-03T00:00:00"
+
+
+def test_mock_market_data_provider_new_market_data_methods():
+    provider = MockMarketDataProvider()
+
+    rows = provider.fetch_daily_ohlcv("aapl", "2026-01-01", "2026-01-31")
+    fundamentals = provider.fetch_fundamentals("AAPL")
+    symbols = provider.fetch_universe_symbols(exchange="NYSE")
+
+    assert rows[0]["ticker"] if "ticker" in rows[0] else "AAPL"
+    assert fundamentals["ticker"] == "AAPL"
+    assert [symbol["ticker"] for symbol in symbols] == ["JPM"]

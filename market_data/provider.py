@@ -31,3 +31,15 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def get_last_updated(self):
         raise NotImplementedError
+
+    @abstractmethod
+    def fetch_daily_ohlcv(self, ticker, start_date=None, end_date=None):
+        raise NotImplementedError
+
+    @abstractmethod
+    def fetch_fundamentals(self, ticker):
+        raise NotImplementedError
+
+    @abstractmethod
+    def fetch_universe_symbols(self, exchange=None):
+        raise NotImplementedError

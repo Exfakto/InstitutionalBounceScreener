@@ -9,6 +9,8 @@ from database.schema import (
     BOUNCE_VALIDATIONS_TABLE,
     EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
+    HISTORICAL_OHLCV_CACHE_INDEXES,
+    HISTORICAL_OHLCV_CACHE_TABLE,
     INSTITUTIONAL_METRICS_TABLE,
     MARKET_UNIVERSE_INDEXES,
     MARKET_UNIVERSE_TABLE,
@@ -66,6 +68,9 @@ class DatabaseManager:
         for index_statement in MARKET_UNIVERSE_INDEXES:
             self.cursor.execute(index_statement)
         self.cursor.execute(PRICE_HISTORY_TABLE)
+        self.cursor.execute(HISTORICAL_OHLCV_CACHE_TABLE)
+        for index_statement in HISTORICAL_OHLCV_CACHE_INDEXES:
+            self.cursor.execute(index_statement)
         self.cursor.execute(TECHNICAL_INDICATORS_TABLE)
         self.cursor.execute(SUPPORT_LEVELS_TABLE)
         self.cursor.execute(BOUNCE_VALIDATIONS_TABLE)
@@ -276,6 +281,106 @@ class DatabaseManager:
         )
 
         return dataframe
+
+    # ==========================================================
+    # Historical OHLCV Cache
+    # ==========================================================
+
+    def upsert_ohlcv(self, ticker, rows, source=None):
+        normalized = self._normalize_ticker(ticker)
+        if normalized is None:
+            return 0
+
+        payload = []
+        for row in rows or []:
+            date_value = self.record_value(row, "date")
+            if date_value in (None, ""):
+                continue
+            payload.append(
+                (
+                    normalized,
+                    str(date_value),
+                    self._sqlite_float(self.record_value(row, "open")),
+                    self._sqlite_float(self.record_value(row, "high")),
+                    self._sqlite_float(self.record_value(row, "low")),
+                    self._sqlite_float(self.record_value(row, "close")),
+                    self._sqlite_int(self.record_value(row, "volume")),
+                    source or self.record_value(row, "source"),
+                )
+            )
+
+        if not payload:
+            return 0
+
+        self.cursor.executemany(
+            """
+            INSERT INTO historical_ohlcv_cache
+            (
+                ticker,
+                date,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                source,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(ticker, date) DO UPDATE SET
+                open = excluded.open,
+                high = excluded.high,
+                low = excluded.low,
+                close = excluded.close,
+                volume = excluded.volume,
+                source = excluded.source,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            payload,
+        )
+        self.connection.commit()
+        return len(payload)
+
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        normalized = self._normalize_ticker(ticker)
+        if normalized is None:
+            return []
+
+        filters = ["ticker = ?"]
+        params = [normalized]
+        if start_date is not None:
+            filters.append("date >= ?")
+            params.append(str(start_date))
+        if end_date is not None:
+            filters.append("date <= ?")
+            params.append(str(end_date))
+
+        self.cursor.execute(
+            f"""
+            SELECT ticker, date, open, high, low, close, volume, source, updated_at
+            FROM historical_ohlcv_cache
+            WHERE {" AND ".join(filters)}
+            ORDER BY date ASC
+            """,
+            params,
+        )
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def clear_ohlcv(self, ticker):
+        normalized = self._normalize_ticker(ticker)
+        if normalized is None:
+            return 0
+
+        self.cursor.execute(
+            """
+            DELETE FROM historical_ohlcv_cache
+            WHERE ticker = ?
+            """,
+            (normalized,),
+        )
+        deleted = self.cursor.rowcount
+        self.connection.commit()
+        return deleted
 
     def get_total_rows(self):
 
