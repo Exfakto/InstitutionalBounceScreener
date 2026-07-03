@@ -266,6 +266,9 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.run_screening_requested.connect(
             self.start_screening_from_input
         )
+        self.screening_results_panel.cancel_screening_requested.connect(
+            self.cancel_screening
+        )
         self.activity_panel = ActivityPanel()
 
         self.screener_filters_panel = self.build_screener_filters_panel()
@@ -1964,6 +1967,7 @@ class MainWindow(QMainWindow):
         worker.progress_signal.connect(self.handle_screening_progress)
         worker.completed_signal.connect(self.handle_screening_completed)
         worker.failed_signal.connect(self.handle_screening_failed)
+        worker.cancelled_signal.connect(self.handle_screening_cancelled)
         worker.start()
         return worker
 
@@ -1987,7 +1991,16 @@ class MainWindow(QMainWindow):
 
     def handle_screening_progress(self, message):
 
-        self.screening_results_panel.set_screening_status(message)
+        if isinstance(message, dict):
+            current = message.get("current_ticker") or "--"
+            processed = message.get("processed_tickers", 0)
+            total = message.get("total_tickers", 0)
+            pct = message.get("progress_percentage", 0)
+            status = message.get("status_message") or "Screening"
+            text = f"{status} ({processed}/{total}, {pct:.0f}%, current: {current})"
+        else:
+            text = str(message)
+        self.screening_results_panel.set_screening_status(text)
 
     # ----------------------------------------------------------
 
@@ -2004,6 +2017,19 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def handle_screening_cancelled(self, result):
+
+        count = len(getattr(result, "ranked_candidates", []) or [])
+        self.screening_results_panel.set_screening_active(
+            False,
+            f"Screening cancelled: {count} ranked candidate(s)",
+        )
+        self.screening_worker = None
+        self.refresh_screening_run_history_view()
+        self.refresh_ranked_candidates_view()
+
+    # ----------------------------------------------------------
+
     def handle_screening_failed(self, message):
 
         self.screening_results_panel.set_screening_active(
@@ -2011,6 +2037,21 @@ class MainWindow(QMainWindow):
             f"Screening failed: {message}",
         )
         self.screening_worker = None
+
+    # ----------------------------------------------------------
+
+    def cancel_screening(self):
+
+        worker = getattr(self, "screening_worker", None)
+        if worker is None:
+            self.screening_results_panel.set_screening_status("No active screening run")
+            return False
+
+        if hasattr(worker, "request_cancel"):
+            worker.request_cancel()
+        self.screening_results_panel.set_screening_status("Cancellation requested")
+        self.screening_results_panel.cancel_screening_button.setEnabled(False)
+        return True
 
     # ----------------------------------------------------------
 
@@ -2277,6 +2318,8 @@ class MainWindow(QMainWindow):
 
         worker = getattr(self, "screening_worker", None)
         if worker is not None and hasattr(worker, "isRunning") and worker.isRunning():
+            if hasattr(worker, "request_cancel"):
+                worker.request_cancel()
             worker.quit()
             worker.wait(1000)
 

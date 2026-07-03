@@ -414,7 +414,16 @@ CREATE TABLE IF NOT EXISTS screening_runs (
     run_id TEXT PRIMARY KEY,
 
     status TEXT NOT NULL
-        CHECK (status IN ('STARTED', 'COMPLETED', 'FAILED', 'PARTIAL')),
+        CHECK (
+            status IN (
+                'STARTED',
+                'COMPLETED',
+                'FAILED',
+                'PARTIAL',
+                'CANCELLED',
+                'PARTIAL_CANCELLED'
+            )
+        ),
 
     started_at TEXT,
 

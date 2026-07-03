@@ -21,6 +21,7 @@ class ScreeningResultsPanel(QWidget):
     refresh_ranked_candidates_requested = Signal()
     refresh_run_history_requested = Signal()
     run_screening_requested = Signal(str)
+    cancel_screening_requested = Signal()
     run_selected = Signal(str)
     candidate_selected = Signal(object)
 
@@ -113,12 +114,17 @@ class ScreeningResultsPanel(QWidget):
         self.run_screening_button = QPushButton("Run Screening")
         self.run_screening_button.setObjectName("PrimaryButton")
         self.run_screening_button.clicked.connect(self.emit_run_screening)
+        self.cancel_screening_button = QPushButton("Cancel Screening")
+        self.cancel_screening_button.setObjectName("SecondaryButton")
+        self.cancel_screening_button.setEnabled(False)
+        self.cancel_screening_button.clicked.connect(self.cancel_screening_requested.emit)
         self.screening_status_label = QLabel("Ready")
         self.screening_status_label.setObjectName("ResearchPreviewFieldValue")
 
         layout.addWidget(label)
         layout.addWidget(self.ticker_input, stretch=1)
         layout.addWidget(self.run_screening_button)
+        layout.addWidget(self.cancel_screening_button)
         layout.addWidget(self.screening_status_label)
         return section
 
@@ -127,6 +133,7 @@ class ScreeningResultsPanel(QWidget):
 
     def set_screening_active(self, active, status_text=None):
         self.run_screening_button.setEnabled(not active)
+        self.cancel_screening_button.setEnabled(active)
         if status_text is not None:
             self.screening_status_label.setText(status_text)
 

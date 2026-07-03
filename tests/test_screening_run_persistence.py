@@ -103,3 +103,16 @@ def test_fetch_screening_run_history_ordering_and_limit():
 
     assert [row["run_id"] for row in history] == ["run-3", "run-2", "run-1"]
     manager.close()
+
+
+def test_screening_run_cancelled_statuses_persist():
+    manager = build_manager()
+
+    manager.create_screening_run("cancelled", status="STARTED")
+    manager.update_screening_run("cancelled", status="CANCELLED")
+    manager.create_screening_run("partial-cancelled", status="STARTED")
+    manager.update_screening_run("partial-cancelled", status="PARTIAL_CANCELLED")
+
+    assert manager.fetch_screening_run("cancelled")["status"] == "CANCELLED"
+    assert manager.fetch_screening_run("partial-cancelled")["status"] == "PARTIAL_CANCELLED"
+    manager.close()

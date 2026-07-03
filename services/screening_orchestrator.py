@@ -20,6 +20,7 @@ from services.technical_indicator_engine import TechnicalIndicatorEngine
 @dataclass(frozen=True)
 class ScreeningRunResult:
     run_id: str
+    status: str
     started_at: str
     completed_at: str
     tickers_requested: int
@@ -62,6 +63,8 @@ class ScreeningOrchestrator:
         run_id=None,
         minimum_score=None,
         allow_low_confidence=False,
+        progress_callback=None,
+        cancellation_callback=None,
     ):
         run_id = str(run_id or uuid4())
         started_at = self.timestamp()
@@ -70,6 +73,7 @@ class ScreeningOrchestrator:
         errors = []
         composite_scores = []
         processed = 0
+        cancelled = False
         self.create_run_record(
             run_id,
             started_at,
@@ -78,6 +82,13 @@ class ScreeningOrchestrator:
 
         if not normalized_tickers:
             warnings.append("No tickers provided")
+            self.report_progress(
+                progress_callback,
+                total=0,
+                processed=0,
+                current_ticker=None,
+                status_message="No tickers provided",
+            )
             pipeline_result = self.persist_scores(
                 composite_scores,
                 run_id,
@@ -88,9 +99,10 @@ class ScreeningOrchestrator:
             )
             final_warnings = self.unique([*warnings, *pipeline_result.warnings])
             completed_at = self.timestamp()
+            status = self.final_status(0, 0, errors, cancelled=False)
             self.update_run_record(
                 run_id,
-                status=self.final_status(0, 0, errors),
+                status=status,
                 completed_at=completed_at,
                 tickers_requested=0,
                 tickers_processed=0,
@@ -100,6 +112,7 @@ class ScreeningOrchestrator:
             )
             return ScreeningRunResult(
                 run_id=run_id,
+                status=status,
                 started_at=started_at,
                 completed_at=completed_at,
                 tickers_requested=0,
@@ -110,7 +123,26 @@ class ScreeningOrchestrator:
             )
 
         for ticker in normalized_tickers:
+            if self.cancel_requested(cancellation_callback):
+                cancelled = True
+                warnings.append("Screening cancelled")
+                self.report_progress(
+                    progress_callback,
+                    total=len(normalized_tickers),
+                    processed=processed,
+                    current_ticker=ticker,
+                    status_message="Cancellation requested",
+                )
+                break
+
             try:
+                self.report_progress(
+                    progress_callback,
+                    total=len(normalized_tickers),
+                    processed=processed,
+                    current_ticker=ticker,
+                    status_message=f"Processing {ticker}",
+                )
                 prices = self.fetch_price_history(ticker)
                 support_result = self.support_engine.detect_support_zones(ticker, prices)
                 zones = self.value(support_result, "zones") or []
@@ -126,6 +158,13 @@ class ScreeningOrchestrator:
                 )
                 composite_scores.append(composite_result)
                 processed += 1
+                self.report_progress(
+                    progress_callback,
+                    total=len(normalized_tickers),
+                    processed=processed,
+                    current_ticker=ticker,
+                    status_message=f"Processed {ticker}",
+                )
                 self.collect_warnings(
                     ticker,
                     warnings,
@@ -148,9 +187,15 @@ class ScreeningOrchestrator:
         )
         final_warnings = self.unique([*warnings, *pipeline_result.warnings])
         completed_at = self.timestamp()
+        status = self.final_status(
+            len(normalized_tickers),
+            processed,
+            errors,
+            cancelled=cancelled,
+        )
         self.update_run_record(
             run_id,
-            status=self.final_status(len(normalized_tickers), processed, errors),
+            status=status,
             completed_at=completed_at,
             tickers_requested=len(normalized_tickers),
             tickers_processed=processed,
@@ -161,6 +206,7 @@ class ScreeningOrchestrator:
 
         return ScreeningRunResult(
             run_id=run_id,
+            status=status,
             started_at=started_at,
             completed_at=completed_at,
             tickers_requested=len(normalized_tickers),
@@ -317,12 +363,43 @@ class ScreeningOrchestrator:
         return datetime.now(timezone.utc).isoformat()
 
     @staticmethod
-    def final_status(tickers_requested, tickers_processed, errors):
+    def final_status(tickers_requested, tickers_processed, errors, cancelled=False):
+        if cancelled:
+            return "PARTIAL_CANCELLED" if tickers_processed else "CANCELLED"
         if any(str(error).startswith("Pipeline persistence failed:") for error in errors):
             return "FAILED"
         if errors or tickers_processed < tickers_requested:
             return "PARTIAL"
         return "COMPLETED"
+
+    @staticmethod
+    def cancel_requested(cancellation_callback):
+        if cancellation_callback is None:
+            return False
+        try:
+            return bool(cancellation_callback())
+        except Exception:
+            return False
+
+    @staticmethod
+    def report_progress(
+        progress_callback,
+        total,
+        processed,
+        current_ticker,
+        status_message,
+    ):
+        if progress_callback is None:
+            return
+        percentage = 100 if total == 0 else round(processed / total * 100, 2)
+        progress = {
+            "total_tickers": total,
+            "processed_tickers": processed,
+            "current_ticker": current_ticker,
+            "progress_percentage": percentage,
+            "status_message": status_message,
+        }
+        progress_callback(progress)
 
     @staticmethod
     def value(source, key):

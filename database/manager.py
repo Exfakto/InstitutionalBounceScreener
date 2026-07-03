@@ -2244,7 +2244,14 @@ class DatabaseManager:
     @staticmethod
     def _valid_screening_status(status):
         normalized = str(status or "STARTED").strip().upper()
-        if normalized not in {"STARTED", "COMPLETED", "FAILED", "PARTIAL"}:
+        if normalized not in {
+            "STARTED",
+            "COMPLETED",
+            "FAILED",
+            "PARTIAL",
+            "CANCELLED",
+            "PARTIAL_CANCELLED",
+        }:
             return "FAILED"
         return normalized
 

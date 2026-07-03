@@ -281,3 +281,57 @@ def test_screening_orchestrator_failed_status_when_pipeline_fails():
     assert run["errors"] == ["Pipeline persistence failed: adapter failed"]
     assert run["candidate_count"] == 1
     manager.close()
+
+
+def test_screening_orchestrator_cooperative_cancellation_persists_partial_cancelled():
+    manager = build_manager()
+    progress_events = []
+    calls = {"count": 0}
+
+    def cancel_after_first_progress():
+        return calls["count"] > 0
+
+    def progress_callback(progress):
+        progress_events.append(progress)
+        if progress["processed_tickers"] == 1:
+            calls["count"] += 1
+
+    orchestrator = build_orchestrator(
+        manager,
+        composite_engine=FakeCompositeEngine({"AAA": 92, "BBB": 90}),
+    )
+
+    result = orchestrator.run(
+        ["AAA", "BBB"],
+        run_id="cancelled-run",
+        progress_callback=progress_callback,
+        cancellation_callback=cancel_after_first_progress,
+    )
+    run = manager.fetch_screening_run("cancelled-run")
+
+    assert result.status == "PARTIAL_CANCELLED"
+    assert result.tickers_processed == 1
+    assert "Screening cancelled" in result.warnings
+    assert run["status"] == "PARTIAL_CANCELLED"
+    assert run["tickers_requested"] == 2
+    assert run["tickers_processed"] == 1
+    assert "Screening cancelled" in run["warnings"]
+    assert any(event["current_ticker"] == "BBB" for event in progress_events)
+    manager.close()
+
+
+def test_screening_orchestrator_cancel_before_processing_persists_cancelled():
+    manager = build_manager()
+    orchestrator = build_orchestrator(manager)
+
+    result = orchestrator.run(
+        ["AAA"],
+        run_id="cancel-before-run",
+        cancellation_callback=lambda: True,
+    )
+    run = manager.fetch_screening_run("cancel-before-run")
+
+    assert result.status == "CANCELLED"
+    assert result.tickers_processed == 0
+    assert run["status"] == "CANCELLED"
+    manager.close()

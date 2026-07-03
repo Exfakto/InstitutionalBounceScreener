@@ -220,9 +220,10 @@ class FakeScreeningRepository:
 
 class FakeScreeningWorker(QObject):
     started_signal = Signal(str)
-    progress_signal = Signal(str)
+    progress_signal = Signal(object)
     completed_signal = Signal(object)
     failed_signal = Signal(str)
+    cancelled_signal = Signal(object)
     instances = []
 
     def __init__(self, tickers=None, repository=None, parent=None, **kwargs):
@@ -230,7 +231,11 @@ class FakeScreeningWorker(QObject):
         self.tickers = tickers or []
         self.repository = repository
         self.started = False
+        self.cancel_requested = False
         FakeScreeningWorker.instances.append(self)
+
+    def request_cancel(self):
+        self.cancel_requested = True
 
     def start(self):
         self.started = True
@@ -1151,6 +1156,48 @@ def test_main_window_run_screening_button_disabled_during_run(
     assert window.screening_results_panel.screening_status_label.text().startswith(
         "Starting screening"
     )
+    assert window.screening_results_panel.cancel_screening_button.isEnabled() is True
+
+
+def test_main_window_screening_progress_updates_status(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    worker = window.start_screening_from_input("AAPL,MSFT")
+    worker.progress_signal.emit(
+        {
+            "total_tickers": 2,
+            "processed_tickers": 1,
+            "current_ticker": "MSFT",
+            "progress_percentage": 50,
+            "status_message": "Processing MSFT",
+        }
+    )
+
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Processing MSFT (1/2, 50%, current: MSFT)"
+    )
+
+
+def test_main_window_cancel_screening_requests_worker_cancel(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    worker = window.start_screening_from_input("AAPL")
+    result = window.cancel_screening()
+
+    assert result is True
+    assert worker.cancel_requested is True
+    assert window.screening_results_panel.screening_status_label.text() == "Cancellation requested"
+    assert window.screening_results_panel.cancel_screening_button.isEnabled() is False
 
 
 def test_main_window_screening_completion_refreshes_results(
@@ -1198,6 +1245,53 @@ def test_main_window_screening_completion_refreshes_results(
     assert repository.history_calls == 1
 
 
+def test_main_window_screening_cancel_resets_ui_and_refreshes_results(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    repository = FakeScreeningRepository()
+    repository.run_history = [
+        {
+            "run_id": "cancel-run",
+            "status": "PARTIAL_CANCELLED",
+            "tickers_requested": 2,
+            "tickers_processed": 1,
+            "candidate_count": 1,
+        }
+    ]
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=1,
+            ticker="AAPL",
+            final_score=80,
+            grade="A",
+            confidence_level="HIGH",
+            setup_label="High-Quality Bounce",
+            explanation=[],
+            warnings=[],
+            rejection_reasons=[],
+        )
+    ]
+    window._screening_repository = repository
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    worker = window.start_screening_from_input("AAPL,MSFT")
+    worker.cancelled_signal.emit(
+        SimpleNamespace(status="PARTIAL_CANCELLED", ranked_candidates=repository.ranked_candidates)
+    )
+
+    assert window.screening_results_panel.run_screening_button.isEnabled() is True
+    assert window.screening_results_panel.cancel_screening_button.isEnabled() is False
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Screening cancelled: 1 ranked candidate(s)"
+    )
+    assert window.screening_worker is None
+    assert window.screening_results_panel.run_history_table.item(0, 1).text() == "PARTIAL_CANCELLED"
+    assert window.screening_results_panel.ranked_candidates_table.item(0, 1).text() == "AAPL"
+
+
 def test_main_window_screening_failure_shows_safe_error_state(
     patched_window,
     monkeypatch,
@@ -1210,6 +1304,7 @@ def test_main_window_screening_failure_shows_safe_error_state(
     worker.failed_signal.emit("planned failure")
 
     assert window.screening_results_panel.run_screening_button.isEnabled() is True
+    assert window.screening_results_panel.cancel_screening_button.isEnabled() is False
     assert window.screening_results_panel.screening_status_label.text() == (
         "Screening failed: planned failure"
     )
