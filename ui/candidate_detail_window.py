@@ -2,9 +2,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
+    QFrame,
+    QGridLayout,
     QLabel,
     QTabWidget,
     QTextEdit,
+    QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )
@@ -21,6 +24,7 @@ class CandidateDetailWindow(QDialog):
         self.candidate = candidate
         self.detail = detail or {}
         self.summary_labels = {}
+        self.overview_cards = {}
         self.section_labels = {}
 
         ticker = self.ticker_text()
@@ -56,30 +60,119 @@ class CandidateDetailWindow(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft)
-        for key, label, value in [
+        top_layout = QHBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(12)
+
+        score_card = self.create_score_card()
+        top_layout.addWidget(score_card, stretch=1)
+
+        summary_grid = QGridLayout()
+        summary_grid.setContentsMargins(0, 0, 0, 0)
+        summary_grid.setHorizontalSpacing(10)
+        summary_grid.setVerticalSpacing(10)
+
+        cards = [
+            ("company_name", "Company Name", self.company_text()),
             ("ticker", "Ticker", self.ticker_text()),
-            ("company_name", "Company", self.company_text()),
+            ("exchange", "Exchange", self.exchange_text()),
+            ("sector", "Sector", self.sector_text()),
+            ("industry", "Industry", self.industry_text()),
             ("current_price", "Current Price", self.price_text()),
-            ("score", "Institutional Bounce Score", self.score_text()),
+            ("overall_rating", "Overall Rating", self.overall_rating_text()),
             ("signal", "Signal", self.signal_text()),
             ("opportunity", "Opportunity Rating", self.opportunity_text()),
             ("risk", "Risk Rating", self.risk_text()),
-        ]:
-            value_label = QLabel(value)
-            value_label.setObjectName("ResearchPreviewFieldValue")
-            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            self.summary_labels[key] = value_label
-            form.addRow(label, value_label)
+        ]
 
-        layout.addLayout(form)
+        for index, (key, title, value) in enumerate(cards):
+            card, value_label = self.create_summary_card(title, value)
+            self.summary_labels[key] = value_label
+            self.overview_cards[key] = card
+            summary_grid.addWidget(card, index // 2, index % 2)
+
+        summary_container = QWidget()
+        summary_container.setLayout(summary_grid)
+        top_layout.addWidget(summary_container, stretch=3)
+
+        layout.addLayout(top_layout)
+
+        why_section = self.create_why_section()
+        layout.addWidget(why_section)
 
         self.summary_text = QTextEdit()
         self.summary_text.setReadOnly(True)
         self.summary_text.setPlainText(self.summary_body_text())
+        self.summary_text.setObjectName("CandidateDetailSummaryText")
         layout.addWidget(self.summary_text)
         return tab
+
+    def create_score_card(self):
+        card = QFrame()
+        card.setObjectName("CandidateDetailScoreCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+
+        title = QLabel("Institutional Bounce Score")
+        title.setObjectName("CandidateDetailCardTitle")
+        title.setAlignment(Qt.AlignCenter)
+
+        value = QLabel(self.score_text())
+        value.setObjectName("CandidateDetailScoreValue")
+        value.setAlignment(Qt.AlignCenter)
+        self.summary_labels["score"] = value
+
+        rating = QLabel(self.overall_rating_text())
+        rating.setObjectName("CandidateDetailScoreRating")
+        rating.setAlignment(Qt.AlignCenter)
+
+        layout.addWidget(title)
+        layout.addWidget(value)
+        layout.addWidget(rating)
+        layout.addStretch()
+        return card
+
+    def create_summary_card(self, title, value):
+        card = QFrame()
+        card.setObjectName("CandidateDetailSummaryCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(4)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CandidateDetailCardTitle")
+
+        value_label = QLabel(value)
+        value_label.setObjectName("CandidateDetailCardValue")
+        value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        value_label.setWordWrap(True)
+
+        layout.addWidget(title_label)
+        layout.addWidget(value_label)
+        return card, value_label
+
+    def create_why_section(self):
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        title = QLabel("Why this candidate?")
+        title.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title)
+
+        self.why_labels = []
+        reasons = self.why_candidate_reasons()
+        for reason in reasons:
+            label = QLabel(reason)
+            label.setObjectName("CandidateDetailWhyItem")
+            label.setWordWrap(True)
+            self.why_labels.append(label)
+            layout.addWidget(label)
+
+        return section
 
     def metrics_tab(self, title, key):
         tab = QWidget()
@@ -142,6 +235,27 @@ class CandidateDetailWindow(QDialog):
             or self.detail.get("company_name")
         )
 
+    def exchange_text(self):
+        return self.format_value(
+            self.candidate_value("exchange")
+            or self.metrics().get("exchange")
+            or self.detail.get("exchange")
+        )
+
+    def sector_text(self):
+        return self.format_value(
+            self.candidate_value("sector")
+            or self.metrics().get("sector")
+            or self.detail.get("sector")
+        )
+
+    def industry_text(self):
+        return self.format_value(
+            self.candidate_value("industry")
+            or self.metrics().get("industry")
+            or self.detail.get("industry")
+        )
+
     def price_text(self):
         value = self.candidate_value("current_price") or self.candidate_value("price")
         if value is None:
@@ -170,12 +284,26 @@ class CandidateDetailWindow(QDialog):
         if score is None:
             return "N/A"
         if score >= 85:
-            return "High Conviction"
+            return "Strong Buy"
         if score >= 70:
+            return "Buy"
+        if score >= 55:
             return "Watch"
+        return "Avoid"
+
+    def overall_rating_text(self):
+        score = self.number_value(self.candidate_value("primary_score_value"))
+        if score is None:
+            score = self.number_value(self.candidate_value("institutional_bounce_score"))
+        if score is None:
+            return "N/A"
+        if score >= 85:
+            return "Elite"
+        if score >= 70:
+            return "Strong"
         if score >= 55:
             return "Developing"
-        return "Avoid"
+        return "Weak"
 
     def opportunity_text(self):
         opportunity = self.candidate_value("opportunity_rating")
@@ -212,6 +340,60 @@ class CandidateDetailWindow(QDialog):
                 return str(value)
         return "N/A"
 
+    def why_candidate_reasons(self):
+        explicit = self.first_existing(
+            self.candidate_value("reasons"),
+            self.metrics().get("reasons"),
+        )
+        if isinstance(explicit, (list, tuple)) and explicit:
+            return [self.reason_text(reason) for reason in explicit]
+
+        reasons = []
+        metrics = self.metrics()
+        ownership = self.number_value(
+            metrics.get("institutional_ownership_pct")
+            or metrics.get("institutional_score")
+        )
+        support_tests = self.number_value(
+            metrics.get("successful_support_tests")
+            or metrics.get("validated_bounces")
+            or metrics.get("bounce_count")
+        )
+        relative_strength = self.number_value(metrics.get("relative_strength_score"))
+        bounce_probability = self.number_value(
+            metrics.get("bounce_probability")
+            or metrics.get("historical_bounce_success_rate")
+            or metrics.get("bounce_score")
+        )
+
+        if ownership is not None and ownership >= 60:
+            reasons.append("Strong institutional ownership")
+        if support_tests is not None and support_tests >= 3:
+            reasons.append("Three successful support tests")
+        if relative_strength is not None and relative_strength >= 70:
+            reasons.append("Positive relative strength")
+        if bounce_probability is not None and bounce_probability >= 70:
+            reasons.append("High bounce probability")
+
+        thesis = self.candidate_value("trade_thesis")
+        strengths = self.object_value(thesis, "strengths")
+        if not reasons and isinstance(strengths, (list, tuple)) and strengths:
+            reasons.extend(strengths[:4])
+
+        if not reasons:
+            return ["N/A"]
+
+        return [self.reason_text(reason) for reason in reasons[:4]]
+
+    @staticmethod
+    def reason_text(reason):
+        text = str(reason or "").strip()
+        if not text:
+            text = "N/A"
+        if text == "N/A":
+            return "N/A"
+        return f"* {text}"
+
     def metric_group(self, group):
         metrics = self.metrics()
         value = metrics.get(group)
@@ -229,6 +411,13 @@ class CandidateDetailWindow(QDialog):
         if isinstance(self.candidate, dict):
             return self.candidate.get(name)
         return getattr(self.candidate, name, None)
+
+    @staticmethod
+    def first_existing(*values):
+        for value in values:
+            if value not in (None, ""):
+                return value
+        return None
 
     @staticmethod
     def object_value(source, name):

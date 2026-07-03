@@ -430,6 +430,61 @@ class Theme:
             font-weight: 800;
         }}
 
+        QFrame#CandidateDetailScoreCard,
+        QFrame#CandidateDetailSummaryCard,
+        QFrame#CandidateDetailWhySection {{
+            background-color: {cls.CARD_BACKGROUND};
+            border: 1px solid {cls.BORDER};
+            border-radius: {DesignSystem.Radius.LG}px;
+        }}
+
+        QLabel#CandidateDetailCardTitle {{
+            color: {cls.MUTED_TEXT};
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
+            font-weight: 800;
+        }}
+
+        QLabel#CandidateDetailCardValue {{
+            color: {cls.PRIMARY_TEXT};
+            font-size: {DesignSystem.Typography.SECTION_PT}pt;
+            font-weight: 800;
+        }}
+
+        QLabel#CandidateDetailScoreValue {{
+            color: {cls.ACCENT};
+            font-size: 34pt;
+            font-weight: 800;
+        }}
+
+        QLabel#CandidateDetailScoreRating {{
+            color: {cls.SECONDARY_TEXT};
+            background-color: {cls.ACCENT_MUTED};
+            border: 1px solid {cls.ACCENT};
+            border-radius: {DesignSystem.Radius.MD}px;
+            padding: 6px 10px;
+            font-weight: 800;
+        }}
+
+        QLabel#CandidateDetailSectionTitle {{
+            color: {cls.PRIMARY_TEXT};
+            font-size: {DesignSystem.Typography.SECTION_PT}pt;
+            font-weight: 800;
+        }}
+
+        QLabel#CandidateDetailWhyItem {{
+            color: {cls.SECONDARY_TEXT};
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
+            font-weight: 700;
+            padding: 2px 0;
+        }}
+
+        QTextEdit#CandidateDetailSummaryText {{
+            background-color: {cls.PANEL_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.MD}px;
+            color: {cls.SECONDARY_TEXT};
+        }}
+
         QTabWidget#CandidateDetailTabs::pane {{
             background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.BORDER};
