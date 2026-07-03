@@ -5,6 +5,13 @@ from market_data.local_csv_provider import (
     LocalCsvUniverseProvider,
     UniverseSymbolProvider,
 )
+from market_data.live_provider import LiveMarketDataProvider
+from market_data.live_adapters import (
+    AlpacaMarketDataProvider,
+    FinancialModelingPrepProvider,
+    PolygonMarketDataProvider,
+)
+from market_data.provider_factory import ProviderFactory
 
 __all__ = [
     "MarketDataProvider",
@@ -12,4 +19,9 @@ __all__ = [
     "LocalCsvMarketDataProvider",
     "LocalCsvUniverseProvider",
     "UniverseSymbolProvider",
+    "LiveMarketDataProvider",
+    "PolygonMarketDataProvider",
+    "FinancialModelingPrepProvider",
+    "AlpacaMarketDataProvider",
+    "ProviderFactory",
 ]
