@@ -616,3 +616,24 @@ def test_research_preview_handles_missing_component_scores(app):
     assert all(label.text() == "--" for label in preview.institutional_labels.values())
     assert all(label.text() == "--" for label in preview.risk_labels.values())
     assert preview.warning_label.text() == "No warnings"
+
+
+def test_research_preview_handles_candidate_without_opportunity_rating(app):
+    preview = ResearchPreview()
+    candidate = SimpleNamespace(
+        ticker="MSFT",
+        company_name="Microsoft Corporation",
+        metrics={"market_cap": 3200000000000},
+        score_map={},
+        scores=[],
+        warnings=[],
+    )
+
+    preview.set_candidate(candidate)
+
+    assert preview.ticker_label.text() == "MSFT"
+    assert preview.signal_label.text() == "Opportunity rating unavailable."
+    assert preview.summary_labels["overall"].text() == "-"
+    assert preview.summary_labels["opportunity"].text() == "Opportunity rating unavailable."
+    assert preview.decision_label.text() == "Decision unavailable."
+    assert preview.fundamental_labels["market_cap"].text() == "$3.20T"

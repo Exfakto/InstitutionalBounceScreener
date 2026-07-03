@@ -45,9 +45,10 @@ class MarketUniverseImporter:
         "NMS": "NASDAQ",
     }
 
-    def __init__(self, csv_path=None, db=None):
+    def __init__(self, csv_path=None, db=None, provider=None):
         self.csv_path = Path(csv_path or "data/universe/market_universe.csv")
         self.db = db or DatabaseManager()
+        self.provider = provider
 
     def import_csv(self, csv_path=None):
         path = Path(csv_path) if csv_path is not None else self.csv_path
@@ -77,6 +78,51 @@ class MarketUniverseImporter:
             except Exception as exc:
                 summary["records_skipped"] += 1
                 summary["errors"].append(f"Row {row_number}: {exc}")
+                continue
+
+            if record is None:
+                summary["records_skipped"] += 1
+                continue
+
+            records.append(record)
+
+        try:
+            summary["records_imported"] = self.db.upsert_market_universe_records(records)
+        except Exception as exc:
+            summary["records_imported"] = 0
+            summary["records_skipped"] = summary["total_rows_read"]
+            summary["errors"].append(str(exc))
+
+        return summary
+
+    def import_from_provider(self, provider=None):
+        provider = provider or self.provider
+        summary = {
+            "total_rows_read": 0,
+            "records_imported": 0,
+            "records_skipped": 0,
+            "errors": [],
+        }
+
+        if provider is None:
+            summary["errors"].append("Market data provider is required.")
+            return summary
+
+        try:
+            universe = provider.get_market_universe()
+        except Exception as exc:
+            summary["errors"].append(str(exc))
+            return summary
+
+        summary["total_rows_read"] = len(universe or [])
+        records = []
+
+        for index, row in enumerate(universe or [], start=1):
+            try:
+                record = self.normalize_row(row)
+            except Exception as exc:
+                summary["records_skipped"] += 1
+                summary["errors"].append(f"Record {index}: {exc}")
                 continue
 
             if record is None:

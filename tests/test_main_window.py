@@ -584,6 +584,27 @@ def test_main_window_dashboard_loads_rows_from_market_universe(patched_window):
     assert window.dashboard_summary_labels["stocks_passing_filters"].text() == "2"
 
 
+def test_main_window_market_universe_row_selection_updates_research_preview(patched_window):
+    window = patched_window
+    window.controller.market_universe_records = [
+        {
+            "ticker": "MSFT",
+            "company_name": "Microsoft Corporation",
+            "exchange": "NASDAQ",
+            "market_cap": 3200000000000,
+        }
+    ]
+    window.refresh_dashboard_results()
+
+    window.candidates_table.selectRow(0)
+    window.update_open_detail_state()
+
+    assert window.research_preview.ticker_label.text() == "MSFT"
+    assert window.research_preview.signal_label.text() == "Opportunity rating unavailable."
+    assert window.research_preview.summary_labels["overall"].text() == "-"
+    assert window.research_preview.fundamental_labels["market_cap"].text() == "$3.20T"
+
+
 def test_main_window_dashboard_empty_market_universe_shows_empty_message(patched_window):
     window = patched_window
 

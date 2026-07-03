@@ -3,6 +3,7 @@ import sqlite3
 from database.manager import DatabaseManager
 from database.schema import MARKET_UNIVERSE_INDEXES, MARKET_UNIVERSE_TABLE
 from market.market_universe_importer import MarketUniverseImporter
+from market_data import MockMarketDataProvider
 
 
 def build_manager():
@@ -182,4 +183,55 @@ def test_import_market_universe_bad_numeric_values_do_not_crash(tmp_path):
     assert records[0]["market_cap"] is None
     assert records[0]["price"] is None
     assert records[0]["average_volume"] is None
+    manager.close()
+
+
+def test_import_market_universe_from_injected_provider():
+    manager = build_manager()
+    provider = MockMarketDataProvider()
+
+    summary = MarketUniverseImporter(db=manager, provider=provider).import_from_provider()
+    records = manager.get_active_market_universe_records()
+
+    assert summary == {
+        "total_rows_read": 3,
+        "records_imported": 3,
+        "records_skipped": 0,
+        "errors": [],
+    }
+    assert [record["ticker"] for record in records] == ["AAPL", "JPM", "MSFT"]
+    assert records[0]["exchange"] == "NASDAQ"
+    manager.close()
+
+
+def test_import_market_universe_from_provider_skips_invalid_records():
+    manager = build_manager()
+    provider = MockMarketDataProvider(
+        [
+            {"ticker": "AAPL", "company_name": "Apple Inc.", "exchange": "NASDAQ"},
+            {"ticker": "", "company_name": "Missing", "exchange": "NYSE"},
+            {"ticker": "MSFT", "company_name": "Microsoft", "exchange": ""},
+        ]
+    )
+
+    summary = MarketUniverseImporter(db=manager, provider=provider).import_from_provider()
+    records = manager.get_active_market_universe_records()
+
+    assert summary["total_rows_read"] == 3
+    assert summary["records_imported"] == 1
+    assert summary["records_skipped"] == 2
+    assert summary["errors"] == []
+    assert [record["ticker"] for record in records] == ["AAPL"]
+    manager.close()
+
+
+def test_import_market_universe_from_provider_requires_provider():
+    manager = build_manager()
+
+    summary = MarketUniverseImporter(db=manager).import_from_provider()
+
+    assert summary["total_rows_read"] == 0
+    assert summary["records_imported"] == 0
+    assert summary["records_skipped"] == 0
+    assert summary["errors"] == ["Market data provider is required."]
     manager.close()

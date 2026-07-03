@@ -1046,10 +1046,31 @@ class MainWindow(QMainWindow):
         return SimpleNamespace(
             ticker=ticker,
             company_name=value(record, "company_name") or value(record, "company"),
+            primary_score_value=None,
+            opportunity_rating=None,
+            risk_rating=None,
+            composite_score=None,
+            bounce_score=None,
+            setup_quality=None,
+            institutional_checklist=None,
+            trade_thesis=None,
+            research_report=None,
+            trade_card=None,
+            institutional_bounce_score=None,
+            composite_intelligence_component_scores={},
             metrics=metrics,
-            score_map={},
+            score_map={
+                "quality_score": None,
+                "institutional_score": None,
+                "technical_score": None,
+                "support_score": None,
+                "bounce_score": None,
+            },
             scores=[],
             warnings=[],
+            notes=None,
+            summary=None,
+            timestamp=datetime.now(),
         )
 
     # ----------------------------------------------------------

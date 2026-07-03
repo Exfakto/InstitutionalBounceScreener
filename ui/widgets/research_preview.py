@@ -237,13 +237,13 @@ class LegacyResearchPreview(QWidget):
     def format_warnings(candidate_score):
         warnings = []
 
-        for score in candidate_score.scores:
+        for score in getattr(candidate_score, "scores", []) or []:
             warnings.extend(score.details.get("warnings", []))
 
             if score.error:
                 warnings.append(score.error)
 
-        warnings.extend(candidate_score.warnings)
+        warnings.extend(getattr(candidate_score, "warnings", []) or [])
 
         if not warnings:
             return "No warnings"
@@ -649,9 +649,9 @@ class ResearchPreview(QWidget):
             self.clear()
             return
 
-        opportunity = candidate_score.opportunity_rating
-        checklist = candidate_score.institutional_checklist
-        thesis = candidate_score.trade_thesis
+        opportunity = getattr(candidate_score, "opportunity_rating", None)
+        checklist = getattr(candidate_score, "institutional_checklist", None)
+        thesis = getattr(candidate_score, "trade_thesis", None)
         report = getattr(candidate_score, "research_report", None)
         metrics = self.workspace_metrics_for_candidate(candidate_score)
 
@@ -667,11 +667,11 @@ class ResearchPreview(QWidget):
         self.warning_title_label.show()
         self.warning_label.show()
 
-        self.ticker_label.setText(candidate_score.ticker)
+        self.ticker_label.setText(getattr(candidate_score, "ticker", ""))
         self.company_label.setText(self.company_name_for_candidate(candidate_score))
         self.rating_label.setText(self.format_opportunity_header(opportunity))
         self.summary_labels["overall"].setText(
-            self.format_score(candidate_score.primary_score_value)
+            self.format_score(getattr(candidate_score, "primary_score_value", None))
         )
         self.summary_labels["opportunity"].setText(
             self.format_opportunity_summary(opportunity)
@@ -680,12 +680,16 @@ class ResearchPreview(QWidget):
             self.format_checklist_summary(checklist)
         )
         self.letter_grade_label.setText(
-            self.letter_grade_for_score(candidate_score.primary_score_value)
+            self.letter_grade_for_score(
+                getattr(candidate_score, "primary_score_value", None)
+            )
         )
         self.confidence_label.setText(self.confidence_for_candidate(candidate_score))
-        self.timestamp_label.setText(f"Analysis Time: {candidate_score.timestamp}")
+        self.timestamp_label.setText(
+            f"Analysis Time: {getattr(candidate_score, 'timestamp', 'N/A')}"
+        )
 
-        score_map = candidate_score.score_map
+        score_map = getattr(candidate_score, "score_map", {}) or {}
         for key, _label in self.SCORE_FIELDS:
             self.score_labels[key].setText(self.format_score(score_map.get(key)))
 
