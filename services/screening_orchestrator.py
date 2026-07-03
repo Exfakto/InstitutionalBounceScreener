@@ -54,6 +54,7 @@ class ScreeningOrchestrator:
         self.pipeline_adapter = pipeline_adapter
         if self.pipeline_adapter is None and repository is not None:
             self.pipeline_adapter = CandidatePipelineAdapter(repository)
+        self.repository = repository or getattr(self.pipeline_adapter, "repository", None)
 
     def run(
         self,
@@ -69,6 +70,11 @@ class ScreeningOrchestrator:
         errors = []
         composite_scores = []
         processed = 0
+        self.create_run_record(
+            run_id,
+            started_at,
+            tickers_requested=len(normalized_tickers),
+        )
 
         if not normalized_tickers:
             warnings.append("No tickers provided")
@@ -80,14 +86,26 @@ class ScreeningOrchestrator:
                 warnings,
                 errors,
             )
+            final_warnings = self.unique([*warnings, *pipeline_result.warnings])
+            completed_at = self.timestamp()
+            self.update_run_record(
+                run_id,
+                status=self.final_status(0, 0, errors),
+                completed_at=completed_at,
+                tickers_requested=0,
+                tickers_processed=0,
+                candidate_count=len(pipeline_result.ranked_candidates),
+                warnings=final_warnings,
+                errors=errors,
+            )
             return ScreeningRunResult(
                 run_id=run_id,
                 started_at=started_at,
-                completed_at=self.timestamp(),
+                completed_at=completed_at,
                 tickers_requested=0,
                 tickers_processed=0,
                 ranked_candidates=pipeline_result.ranked_candidates,
-                warnings=[*warnings, *pipeline_result.warnings],
+                warnings=final_warnings,
                 errors=errors,
             )
 
@@ -128,15 +146,27 @@ class ScreeningOrchestrator:
             warnings,
             errors,
         )
+        final_warnings = self.unique([*warnings, *pipeline_result.warnings])
+        completed_at = self.timestamp()
+        self.update_run_record(
+            run_id,
+            status=self.final_status(len(normalized_tickers), processed, errors),
+            completed_at=completed_at,
+            tickers_requested=len(normalized_tickers),
+            tickers_processed=processed,
+            candidate_count=len(pipeline_result.ranked_candidates),
+            warnings=final_warnings,
+            errors=errors,
+        )
 
         return ScreeningRunResult(
             run_id=run_id,
             started_at=started_at,
-            completed_at=self.timestamp(),
+            completed_at=completed_at,
             tickers_requested=len(normalized_tickers),
             tickers_processed=processed,
             ranked_candidates=pipeline_result.ranked_candidates,
-            warnings=self.unique([*warnings, *pipeline_result.warnings]),
+            warnings=final_warnings,
             errors=errors,
         )
 
@@ -191,6 +221,44 @@ class ScreeningOrchestrator:
                     allow_low_confidence=allow_low_confidence,
                 )
             return ranking_result
+
+    def create_run_record(self, run_id, started_at, tickers_requested):
+        if self.repository is None or not hasattr(self.repository, "create_screening_run"):
+            return None
+        return self.repository.create_screening_run(
+            run_id=run_id,
+            started_at=started_at,
+            tickers_requested=tickers_requested,
+            tickers_processed=0,
+            candidate_count=0,
+            warnings=[],
+            errors=[],
+            status="STARTED",
+        )
+
+    def update_run_record(
+        self,
+        run_id,
+        status,
+        completed_at,
+        tickers_requested,
+        tickers_processed,
+        candidate_count,
+        warnings,
+        errors,
+    ):
+        if self.repository is None or not hasattr(self.repository, "update_screening_run"):
+            return None
+        return self.repository.update_screening_run(
+            run_id=run_id,
+            status=status,
+            completed_at=completed_at,
+            tickers_requested=tickers_requested,
+            tickers_processed=tickers_processed,
+            candidate_count=candidate_count,
+            warnings=warnings,
+            errors=errors,
+        )
 
     def fetch_price_history(self, ticker):
         if self.price_history_provider is None:
@@ -247,6 +315,14 @@ class ScreeningOrchestrator:
     @staticmethod
     def timestamp():
         return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def final_status(tickers_requested, tickers_processed, errors):
+        if any(str(error).startswith("Pipeline persistence failed:") for error in errors):
+            return "FAILED"
+        if errors or tickers_processed < tickers_requested:
+            return "PARTIAL"
+        return "COMPLETED"
 
     @staticmethod
     def value(source, key):

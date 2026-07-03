@@ -15,6 +15,8 @@ from database.schema import (
     PRICE_HISTORY_TABLE,
     RANKED_CANDIDATES_INDEXES,
     RANKED_CANDIDATES_TABLE,
+    SCREENING_RUNS_INDEXES,
+    SCREENING_RUNS_TABLE,
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
     TECHNICAL_INDICATORS_TABLE,
@@ -75,6 +77,9 @@ class DatabaseManager:
         self.cursor.execute(PAPER_TRADES_TABLE)
         self.cursor.execute(RANKED_CANDIDATES_TABLE)
         for index_statement in RANKED_CANDIDATES_INDEXES:
+            self.cursor.execute(index_statement)
+        self.cursor.execute(SCREENING_RUNS_TABLE)
+        for index_statement in SCREENING_RUNS_INDEXES:
             self.cursor.execute(index_statement)
 
         self.connection.commit()
@@ -1235,6 +1240,171 @@ class DatabaseManager:
         return deleted
 
     # ==========================================================
+    # Screening Runs
+    # ==========================================================
+
+    def create_screening_run(
+        self,
+        run_id,
+        started_at=None,
+        tickers_requested=0,
+        tickers_processed=0,
+        candidate_count=0,
+        warnings=None,
+        errors=None,
+        status="STARTED",
+    ):
+        if run_id in (None, ""):
+            return None
+
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO screening_runs
+            (
+                run_id,
+                status,
+                started_at,
+                completed_at,
+                tickers_requested,
+                tickers_processed,
+                candidate_count,
+                warnings_json,
+                errors_json
+            )
+            VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(run_id),
+                self._valid_screening_status(status),
+                started_at,
+                self._sqlite_int(tickers_requested),
+                self._sqlite_int(tickers_processed),
+                self._sqlite_int(candidate_count),
+                self._json_text(warnings),
+                self._json_text(errors),
+            ),
+        )
+        self.connection.commit()
+        return self.fetch_screening_run(run_id)
+
+    def update_screening_run(
+        self,
+        run_id,
+        status=None,
+        completed_at=None,
+        tickers_requested=None,
+        tickers_processed=None,
+        candidate_count=None,
+        warnings=None,
+        errors=None,
+    ):
+        if run_id in (None, ""):
+            return None
+
+        fields = []
+        values = []
+        if status is not None:
+            fields.append("status = ?")
+            values.append(self._valid_screening_status(status))
+        if completed_at is not None:
+            fields.append("completed_at = ?")
+            values.append(completed_at)
+        if tickers_requested is not None:
+            fields.append("tickers_requested = ?")
+            values.append(self._sqlite_int(tickers_requested))
+        if tickers_processed is not None:
+            fields.append("tickers_processed = ?")
+            values.append(self._sqlite_int(tickers_processed))
+        if candidate_count is not None:
+            fields.append("candidate_count = ?")
+            values.append(self._sqlite_int(candidate_count))
+        if warnings is not None:
+            fields.append("warnings_json = ?")
+            values.append(self._json_text(warnings))
+        if errors is not None:
+            fields.append("errors_json = ?")
+            values.append(self._json_text(errors))
+
+        if not fields:
+            return self.fetch_screening_run(run_id)
+
+        values.append(str(run_id))
+        self.cursor.execute(
+            f"""
+            UPDATE screening_runs
+            SET {", ".join(fields)}
+            WHERE run_id = ?
+            """,
+            values,
+        )
+        self.connection.commit()
+        return self.fetch_screening_run(run_id)
+
+    def fetch_screening_run(self, run_id):
+        if run_id in (None, ""):
+            return None
+
+        self.cursor.execute(
+            """
+            SELECT
+                run_id,
+                status,
+                started_at,
+                completed_at,
+                tickers_requested,
+                tickers_processed,
+                candidate_count,
+                warnings_json,
+                errors_json
+            FROM screening_runs
+            WHERE run_id = ?
+            """,
+            (str(run_id),),
+        )
+        return self._row_to_screening_run(self.cursor.fetchone())
+
+    def fetch_latest_screening_run(self):
+        self.cursor.execute(
+            """
+            SELECT
+                run_id,
+                status,
+                started_at,
+                completed_at,
+                tickers_requested,
+                tickers_processed,
+                candidate_count,
+                warnings_json,
+                errors_json
+            FROM screening_runs
+            ORDER BY COALESCE(completed_at, started_at) DESC, rowid DESC
+            LIMIT 1
+            """
+        )
+        return self._row_to_screening_run(self.cursor.fetchone())
+
+    def fetch_screening_run_history(self, limit=25):
+        self.cursor.execute(
+            """
+            SELECT
+                run_id,
+                status,
+                started_at,
+                completed_at,
+                tickers_requested,
+                tickers_processed,
+                candidate_count,
+                warnings_json,
+                errors_json
+            FROM screening_runs
+            ORDER BY COALESCE(completed_at, started_at) DESC, rowid DESC
+            LIMIT ?
+            """,
+            (self._sqlite_int(limit) or 25,),
+        )
+        return [self._row_to_screening_run(row) for row in self.cursor.fetchall()]
+
+    # ==========================================================
     # Earnings
     # ==========================================================
 
@@ -1963,6 +2133,23 @@ class DatabaseManager:
         )
 
     @staticmethod
+    def _row_to_screening_run(row):
+        if row is None:
+            return None
+
+        return {
+            "run_id": row["run_id"],
+            "status": row["status"],
+            "started_at": row["started_at"],
+            "completed_at": row["completed_at"],
+            "tickers_requested": row["tickers_requested"],
+            "tickers_processed": row["tickers_processed"],
+            "candidate_count": row["candidate_count"],
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "errors": DatabaseManager._json_list(row["errors_json"]),
+        }
+
+    @staticmethod
     def _json_text(value):
         if value in (None, ""):
             payload = []
@@ -2053,6 +2240,13 @@ class DatabaseManager:
             "Exited Loss",
             "Cancelled",
         }
+
+    @staticmethod
+    def _valid_screening_status(status):
+        normalized = str(status or "STARTED").strip().upper()
+        if normalized not in {"STARTED", "COMPLETED", "FAILED", "PARTIAL"}:
+            return "FAILED"
+        return normalized
 
     # ==========================================================
     # Shutdown

@@ -127,6 +127,14 @@ def build_orchestrator(manager, **overrides):
     )
 
 
+class FailingPipelineAdapter:
+    def __init__(self, repository):
+        self.repository = repository
+
+    def run(self, *args, **kwargs):
+        raise RuntimeError("adapter failed")
+
+
 def test_screening_orchestrator_successful_multi_ticker_run():
     manager = build_manager()
     orchestrator = build_orchestrator(
@@ -143,6 +151,11 @@ def test_screening_orchestrator_successful_multi_ticker_run():
     assert [item.ticker for item in result.ranked_candidates] == ["AAA", "BBB"]
     assert [item.ticker for item in persisted] == ["AAA", "BBB"]
     assert result.errors == []
+    run = manager.fetch_screening_run("run-success")
+    assert run["status"] == "COMPLETED"
+    assert run["tickers_requested"] == 2
+    assert run["tickers_processed"] == 2
+    assert run["candidate_count"] == 2
     manager.close()
 
 
@@ -162,6 +175,11 @@ def test_screening_orchestrator_one_ticker_failure_does_not_stop_run():
     assert [item.ticker for item in result.ranked_candidates] == ["AAA", "CCC"]
     assert [item.ticker for item in persisted] == ["AAA", "CCC"]
     assert result.errors == ["BAD: support failed"]
+    run = manager.fetch_screening_run("run-partial")
+    assert run["status"] == "PARTIAL"
+    assert run["tickers_requested"] == 3
+    assert run["tickers_processed"] == 2
+    assert run["errors"] == ["BAD: support failed"]
     manager.close()
 
 
@@ -177,6 +195,10 @@ def test_screening_orchestrator_empty_ticker_input():
     assert "No tickers provided" in result.warnings
     assert "No composite scores provided" in result.warnings
     assert manager.fetch_ranked_candidates("empty-run") == []
+    run = manager.fetch_screening_run("empty-run")
+    assert run["status"] == "COMPLETED"
+    assert run["candidate_count"] == 0
+    assert "No tickers provided" in run["warnings"]
     manager.close()
 
 
@@ -189,6 +211,7 @@ def test_screening_orchestrator_run_id_propagation():
 
     assert result.run_id == "custom-run-id"
     assert persisted[0].source["run_id"] == "custom-run-id"
+    assert manager.fetch_latest_screening_run()["run_id"] == "custom-run-id"
     manager.close()
 
 
@@ -231,4 +254,30 @@ def test_screening_orchestrator_returns_and_persists_ranked_candidates_through_a
     assert [item.ticker for item in persisted] == ["WIN", "REJECT"]
     assert persisted[1].grade == "REJECT"
     assert persisted[1].rejection_reasons == ["Final score below minimum threshold (60)"]
+    run = manager.fetch_screening_run("adapter-run")
+    assert run["status"] == "COMPLETED"
+    assert run["candidate_count"] == 1
+    manager.close()
+
+
+def test_screening_orchestrator_failed_status_when_pipeline_fails():
+    manager = build_manager()
+    orchestrator = ScreeningOrchestrator(
+        price_history_provider=FakePriceProvider(),
+        support_engine=FakeSupportEngine(),
+        bounce_engine=FakeBounceEngine(),
+        technical_engine=FakeTechnicalEngine(),
+        institutional_engine=FakeInstitutionalEngine(),
+        composite_engine=FakeCompositeEngine({"AAA": 92}),
+        pipeline_adapter=FailingPipelineAdapter(manager),
+    )
+
+    result = orchestrator.run(["AAA"], run_id="failed-run")
+    run = manager.fetch_screening_run("failed-run")
+
+    assert result.tickers_processed == 1
+    assert result.errors == ["Pipeline persistence failed: adapter failed"]
+    assert run["status"] == "FAILED"
+    assert run["errors"] == ["Pipeline persistence failed: adapter failed"]
+    assert run["candidate_count"] == 1
     manager.close()

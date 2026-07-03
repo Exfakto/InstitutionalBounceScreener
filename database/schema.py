@@ -406,3 +406,41 @@ RANKED_CANDIDATES_INDEXES = [
     ON ranked_candidates(created_at);
     """,
 ]
+
+
+SCREENING_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS screening_runs (
+
+    run_id TEXT PRIMARY KEY,
+
+    status TEXT NOT NULL
+        CHECK (status IN ('STARTED', 'COMPLETED', 'FAILED', 'PARTIAL')),
+
+    started_at TEXT,
+
+    completed_at TEXT,
+
+    tickers_requested INTEGER DEFAULT 0,
+
+    tickers_processed INTEGER DEFAULT 0,
+
+    candidate_count INTEGER DEFAULT 0,
+
+    warnings_json TEXT,
+
+    errors_json TEXT
+
+);
+"""
+
+
+SCREENING_RUNS_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_screening_runs_started_at
+    ON screening_runs(started_at);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_screening_runs_completed_at
+    ON screening_runs(completed_at);
+    """,
+]
