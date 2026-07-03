@@ -207,6 +207,8 @@ def patched_window(monkeypatch, app):
 def test_professional_screener_workspace_creation(patched_window):
     window = patched_window
 
+    assert window.dashboard is not None
+    assert window.dashboard_controller is not None
     assert window.screener_workspace_splitter.count() == 2
     assert set(window.filter_sections) == {
         "Universe",
@@ -217,6 +219,17 @@ def test_professional_screener_workspace_creation(patched_window):
     }
     assert window.candidates_table.parent() is window.screener_workspace_splitter
     assert window.statusBar() is not None
+
+
+def test_main_window_dashboard_starts_with_empty_sections(patched_window):
+    window = patched_window
+
+    assert window.dashboard.opportunity_labels["candidates_screened"].text() == "0"
+    assert window.dashboard.best_opportunities_table.rowCount() == 0
+    assert window.dashboard.best_opportunities_empty.isHidden() is False
+    assert window.dashboard.section_frames["institutional_activity"].isHidden() is True
+    assert window.dashboard.section_frames["recent_research"].isHidden() is True
+    assert window.dashboard.section_frames["backtesting_snapshot"].isHidden() is True
 
 
 def test_main_window_creates_dock_widgets(patched_window):
@@ -280,6 +293,35 @@ def test_main_window_run_screen_updates_results_and_status(patched_window):
     assert window.candidates_table.rowCount() == 1
     assert window.candidate_count_status.text() == "Candidate count: 1"
     assert "Last screen time: --" not in window.last_screen_time_status.text()
+    assert window.dashboard.opportunity_labels["candidates_screened"].text() == "1"
+    assert window.dashboard.opportunity_labels["high_conviction"].text() == "1"
+    assert window.dashboard.best_opportunities_table.rowCount() == 1
+    assert window.dashboard.best_opportunities_table.item(0, 0).text() == "AAPL"
+    assert window.dashboard.section_frames["institutional_activity"].isHidden() is False
+
+
+def test_main_window_dashboard_refresh_handles_missing_data(patched_window):
+    window = patched_window
+    window.candidates_by_ticker = {"XYZ": SimpleNamespace(ticker="XYZ")}
+
+    window.refresh_dashboard()
+
+    assert window.dashboard.opportunity_labels["candidates_screened"].text() == "1"
+    assert window.dashboard.opportunity_labels["average_opportunity_score"].text() == "--"
+    assert window.dashboard.best_opportunities_table.item(0, 0).text() == "XYZ"
+    assert window.dashboard.best_opportunities_table.item(0, 1).text() == "--"
+    assert window.dashboard.section_frames["institutional_activity"].isHidden() is True
+
+
+def test_main_window_dashboard_clear_reset_behavior(patched_window):
+    window = patched_window
+    window.run_screener()
+
+    window.dashboard.clear()
+
+    assert window.dashboard.opportunity_labels["candidates_screened"].text() == "0"
+    assert window.dashboard.best_opportunities_table.rowCount() == 0
+    assert window.dashboard.section_frames["institutional_activity"].isHidden() is True
 
 
 def test_main_window_refresh_results_reuses_run_screen(patched_window):

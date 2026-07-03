@@ -26,6 +26,7 @@ from controllers.chart_controller import ChartController
 from controllers.watchlist_controller import WatchlistController
 from controllers.trade_journal_controller import TradeJournalController
 from controllers.screener_preset_controller import ScreenerPresetController
+from controllers.dashboard_controller import DashboardController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
@@ -33,6 +34,7 @@ from services.workspace_state_service import WorkspaceStateService
 
 from ui.widgets.activity_panel import ActivityPanel
 from ui.widgets.candidate_table import CandidateTable
+from ui.widgets.dashboard import InstitutionalDashboard
 from ui.widgets.kpi_strip import KpiStrip
 from ui.widgets.operations_toolbar import OperationsToolbar
 from ui.widgets.header_bar import HeaderBar
@@ -111,6 +113,12 @@ class MainWindow(QMainWindow):
         self.workspace_state_service = WorkspaceStateService()
         self.refresh_scheduler = RefreshScheduler()
         self.refresh_scheduler.register_callback(self.handle_live_refresh_result)
+        self.dashboard_controller = DashboardController(
+            market_controller=self.controller,
+            watchlist_controller=self.watchlist_controller,
+            market_status_service=self.market_status_service,
+            settings_service=self.settings_service,
+        )
         self.last_refresh_at = None
         self.next_refresh_at = None
         self.candidates_by_ticker = {}
@@ -177,6 +185,14 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.kpi_strip)
 
         ##########################################################
+        # Institutional Dashboard
+        ##########################################################
+
+        self.dashboard = InstitutionalDashboard()
+        self.dashboard.setMinimumHeight(280)
+        main_layout.addWidget(self.dashboard)
+
+        ##########################################################
         # Main Workspace
         ##########################################################
 
@@ -236,6 +252,7 @@ class MainWindow(QMainWindow):
         self.create_workspace_docks()
         self.apply_default_dock_layout()
         self.build_screener_status_bar()
+        self.refresh_dashboard()
         self.refresh_watchlist()
         self.refresh_trade_journal()
 
@@ -1018,6 +1035,20 @@ class MainWindow(QMainWindow):
         stats = self.controller.get_statistics()
 
         self.kpi_strip.update_statistics(stats)
+        self.refresh_dashboard()
+
+    # ----------------------------------------------------------
+
+    def refresh_dashboard(self):
+
+        if not hasattr(self, "dashboard"):
+            return
+
+        data = self.dashboard_controller.get_dashboard_data(
+            candidates=list(self.candidates_by_ticker.values()),
+            last_refresh=self.last_refresh_at,
+        )
+        self.dashboard.set_dashboard_data(data)
 
     # ----------------------------------------------------------
 
@@ -1189,6 +1220,7 @@ class MainWindow(QMainWindow):
             candidate_count=len(results["candidates"]),
             last_screen_time=self.last_screen_time,
         )
+        self.refresh_dashboard()
 
         self.activity_panel.set_progress(100)
 
@@ -1357,6 +1389,7 @@ class MainWindow(QMainWindow):
                 self.watchlist_panel.refresh_intelligence(intelligence)
         else:
             self.watchlist_panel.clear()
+        self.refresh_dashboard()
 
     # ----------------------------------------------------------
 
@@ -1502,6 +1535,7 @@ class MainWindow(QMainWindow):
             self.next_refresh_at = self.next_refresh_time(interval, now=self.last_refresh_at)
 
         self.update_refresh_status_header()
+        self.refresh_dashboard()
 
     # ----------------------------------------------------------
 
