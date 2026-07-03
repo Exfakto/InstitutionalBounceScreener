@@ -237,6 +237,23 @@ def test_professional_screener_workspace_creation(patched_window):
     assert window.statusBar() is not None
 
 
+def test_main_window_dashboard_layout_prioritizes_candidate_workspace(patched_window):
+    window = patched_window
+    layout = window.centralWidget().layout()
+
+    assert layout.indexOf(window.header_bar) < layout.indexOf(window.kpi_strip)
+    assert layout.indexOf(window.kpi_strip) < layout.indexOf(window.operations_toolbar)
+    assert layout.indexOf(window.operations_toolbar) < layout.indexOf(
+        window.screener_workspace_splitter
+    )
+    assert layout.indexOf(window.screener_workspace_splitter) < layout.indexOf(
+        window.pipeline_progress_panel
+    )
+    assert layout.indexOf(window.pipeline_progress_panel) < layout.indexOf(window.dashboard)
+    assert window.screener_filters_panel.maximumWidth() <= 280
+    assert window.candidates_table.minimumWidth() >= 880
+
+
 def test_main_window_dashboard_starts_with_empty_sections(patched_window):
     window = patched_window
 

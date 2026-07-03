@@ -152,12 +152,12 @@ class MainWindow(QMainWindow):
 
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(
+            DesignSystem.Spacing.XL,
             DesignSystem.Spacing.LG,
-            DesignSystem.Spacing.LG,
-            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.XL,
             DesignSystem.Spacing.LG,
         )
-        main_layout.setSpacing(DesignSystem.Spacing.MD)
+        main_layout.setSpacing(DesignSystem.Spacing.LG)
 
         ##########################################################
         # Header
@@ -167,7 +167,18 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.header_bar)
 
         ##########################################################
-        # Operations
+        # Statistics
+        ##########################################################
+
+        self.kpi_strip = KpiStrip()
+
+        main_layout.addWidget(self.kpi_strip)
+
+        self.dashboard_summary_panel = self.build_dashboard_summary_panel()
+        main_layout.addWidget(self.dashboard_summary_panel)
+
+        ##########################################################
+        # Pipeline Actions
         ##########################################################
 
         self.operations_toolbar = OperationsToolbar()
@@ -191,27 +202,19 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.operations_toolbar)
 
+        ##########################################################
+        # Pipeline Progress
+        ##########################################################
+
         self.pipeline_progress_panel = PipelineProgressPanel()
-        main_layout.addWidget(self.pipeline_progress_panel)
 
         ##########################################################
-        # Statistics
-        ##########################################################
-
-        self.kpi_strip = KpiStrip()
-
-        main_layout.addWidget(self.kpi_strip)
-
-        self.dashboard_summary_panel = self.build_dashboard_summary_panel()
-        main_layout.addWidget(self.dashboard_summary_panel)
-
-        ##########################################################
-        # Institutional Dashboard
+        # Activity Feed
         ##########################################################
 
         self.dashboard = InstitutionalDashboard()
-        self.dashboard.setMinimumHeight(280)
-        main_layout.addWidget(self.dashboard)
+        self.dashboard.setMinimumHeight(220)
+        self.dashboard.setMaximumHeight(320)
 
         ##########################################################
         # Main Workspace
@@ -257,19 +260,21 @@ class MainWindow(QMainWindow):
         self.center_splitter = self.screener_workspace_splitter
 
         self.price_chart.setMinimumSize(720, 360)
-        self.candidates_table.setMinimumSize(640, 360)
-        self.screener_filters_panel.setMinimumWidth(240)
-        self.screener_filters_panel.setMaximumWidth(360)
+        self.candidates_table.setMinimumSize(880, 420)
+        self.screener_filters_panel.setMinimumWidth(190)
+        self.screener_filters_panel.setMaximumWidth(280)
         self.research_preview.setMinimumWidth(360)
         self.trade_card.setMinimumWidth(360)
 
         self.screener_workspace_splitter.addWidget(self.screener_filters_panel)
         self.screener_workspace_splitter.addWidget(self.candidates_table)
-        self.screener_workspace_splitter.setStretchFactor(0, 25)
-        self.screener_workspace_splitter.setStretchFactor(1, 75)
-        self.screener_workspace_splitter.setSizes([300, 1100])
+        self.screener_workspace_splitter.setStretchFactor(0, 14)
+        self.screener_workspace_splitter.setStretchFactor(1, 86)
+        self.screener_workspace_splitter.setSizes([220, 1280])
 
-        main_layout.addWidget(self.screener_workspace_splitter, stretch=1)
+        main_layout.addWidget(self.screener_workspace_splitter, stretch=4)
+        main_layout.addWidget(self.pipeline_progress_panel)
+        main_layout.addWidget(self.dashboard, stretch=1)
         self.create_workspace_docks()
         self.apply_default_dock_layout()
         self.build_screener_status_bar()

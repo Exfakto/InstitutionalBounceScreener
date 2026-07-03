@@ -76,8 +76,11 @@ class InstitutionalDashboard(QWidget):
             ],
             self.opportunity_labels,
         )
-        layout.addWidget(market, 1, 0)
-        layout.addWidget(opportunity, 1, 1)
+        activity_feed = self._create_activity_feed_section()
+        layout.addWidget(activity_feed, 1, 0, 1, 2)
+
+        layout.addWidget(market, 2, 0)
+        layout.addWidget(opportunity, 2, 1)
 
         self.best_opportunities_table = self._create_table(
             ["Ticker", "Company", "Opportunity Score", "Confidence", "Risk/Reward"]
@@ -90,7 +93,7 @@ class InstitutionalDashboard(QWidget):
             self.best_opportunities_table,
             self.best_opportunities_empty,
         )
-        layout.addWidget(best, 2, 0, 1, 2)
+        layout.addWidget(best, 3, 0, 1, 2)
 
         self.institutional_table = self._create_table(
             ["Ticker", "Institutional Score", "Ownership Trend", "Insider Activity", "13F Status"]
@@ -103,7 +106,7 @@ class InstitutionalDashboard(QWidget):
             self.institutional_table,
             self.institutional_empty,
         )
-        layout.addWidget(institutional, 3, 0, 1, 2)
+        layout.addWidget(institutional, 4, 0, 1, 2)
 
         watchlist = self._create_metric_section(
             "Watchlist Summary",
@@ -115,7 +118,7 @@ class InstitutionalDashboard(QWidget):
             ],
             self.watchlist_labels,
         )
-        layout.addWidget(watchlist, 4, 0)
+        layout.addWidget(watchlist, 5, 0)
 
         self.recent_research_table = self._create_table(
             ["Ticker", "Report", "Generated"]
@@ -128,7 +131,7 @@ class InstitutionalDashboard(QWidget):
             self.recent_research_table,
             self.recent_research_empty,
         )
-        layout.addWidget(research, 4, 1)
+        layout.addWidget(research, 5, 1)
 
         backtesting = self._create_metric_section(
             "Backtesting Snapshot",
@@ -140,10 +143,7 @@ class InstitutionalDashboard(QWidget):
             ],
             self.backtesting_labels,
         )
-        layout.addWidget(backtesting, 5, 0, 1, 2)
-
-        activity_feed = self._create_activity_feed_section()
-        layout.addWidget(activity_feed, 6, 0, 1, 2)
+        layout.addWidget(backtesting, 6, 0, 1, 2)
 
     def _create_metric_section(self, title, fields, target):
         frame = self._create_section_frame(title)
