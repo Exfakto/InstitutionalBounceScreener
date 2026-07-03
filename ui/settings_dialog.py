@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from dataclasses import asdict
+
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -45,6 +47,7 @@ class SettingsDialog(QDialog):
         self._build_refresh_tab()
         self._build_appearance_tab()
         self._build_paths_tab()
+        self._build_app_preferences_tab()
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
@@ -52,6 +55,12 @@ class SettingsDialog(QDialog):
         )
         self.button_box.accepted.connect(self.save_settings)
         self.button_box.rejected.connect(self.reject)
+        self.reset_preferences_button = QPushButton("Reset Preferences")
+        self.reset_preferences_button.clicked.connect(self.reset_app_preferences)
+        self.button_box.addButton(
+            self.reset_preferences_button,
+            QDialogButtonBox.ButtonRole.ResetRole,
+        )
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
@@ -62,11 +71,16 @@ class SettingsDialog(QDialog):
     def load_settings(self) -> None:
         settings = self.controller.load_settings()
         self._apply_settings(settings)
+        self._apply_app_preferences(self.controller.load_app_preferences())
         self.update_provider_status(self.controller.provider_status())
 
     def save_settings(self) -> None:
         self.controller.save_settings(self.settings_from_ui())
+        self.controller.save_app_preferences(self.app_preferences_from_ui())
         self.accept()
+
+    def reset_app_preferences(self) -> None:
+        self._apply_app_preferences(self.controller.reset_app_preferences())
 
     def settings_from_ui(self) -> dict[str, Any]:
         return {
@@ -89,6 +103,18 @@ class SettingsDialog(QDialog):
                 "export_path": self.export_path_input.text().strip(),
                 "log_path": self.log_path_input.text().strip(),
             },
+        }
+
+    def app_preferences_from_ui(self) -> dict[str, Any]:
+        return {
+            "default_scan_mode": self.default_scan_mode_combo.currentText(),
+            "default_scan_preset": self.default_scan_preset_input.text().strip(),
+            "max_scan_size": self.max_scan_size_spin.value(),
+            "large_scan_warning_threshold": self.large_scan_warning_threshold_spin.value(),
+            "default_export_directory": self.default_export_directory_input.text().strip(),
+            "ui_density": self.ui_density_combo.currentText(),
+            "auto_refresh_results": self.auto_refresh_results_checkbox.isChecked(),
+            "show_rejected_candidates": self.show_rejected_candidates_checkbox.isChecked(),
         }
 
     def update_provider_status(self, status: dict[str, Any] | None) -> None:
@@ -163,6 +189,36 @@ class SettingsDialog(QDialog):
         self.database_path_input.setText(str(paths.get("database_path") or ""))
         self.export_path_input.setText(str(paths.get("export_path") or ""))
         self.log_path_input.setText(str(paths.get("log_path") or ""))
+
+    def _apply_app_preferences(self, preferences) -> None:
+        if hasattr(preferences, "__dataclass_fields__"):
+            preferences = asdict(preferences)
+        preferences = preferences if isinstance(preferences, dict) else {}
+
+        self._set_combo_text(
+            self.default_scan_mode_combo,
+            str(preferences.get("default_scan_mode") or "Manual ticker input"),
+        )
+        self.default_scan_preset_input.setText(
+            str(preferences.get("default_scan_preset") or "Institutional Quality")
+        )
+        self.max_scan_size_spin.setValue(int(preferences.get("max_scan_size") or 250))
+        self.large_scan_warning_threshold_spin.setValue(
+            int(preferences.get("large_scan_warning_threshold") or 100)
+        )
+        self.default_export_directory_input.setText(
+            str(preferences.get("default_export_directory") or "exports/results")
+        )
+        self._set_combo_text(
+            self.ui_density_combo,
+            str(preferences.get("ui_density") or "NORMAL"),
+        )
+        self.auto_refresh_results_checkbox.setChecked(
+            bool(preferences.get("auto_refresh_results", True))
+        )
+        self.show_rejected_candidates_checkbox.setChecked(
+            bool(preferences.get("show_rejected_candidates", True))
+        )
 
     def _build_general_tab(self) -> None:
         tab = QWidget()
@@ -249,6 +305,34 @@ class SettingsDialog(QDialog):
         layout.addRow("Log path", self.log_path_input)
 
         self.tabs.addTab(tab, "Paths")
+
+    def _build_app_preferences_tab(self) -> None:
+        tab = QWidget()
+        layout = QFormLayout(tab)
+
+        self.default_scan_mode_combo = QComboBox()
+        self.default_scan_mode_combo.addItems(["Manual ticker input", "Universe scan mode"])
+        self.default_scan_preset_input = QLineEdit()
+        self.max_scan_size_spin = QSpinBox()
+        self.max_scan_size_spin.setRange(1, 10000)
+        self.large_scan_warning_threshold_spin = QSpinBox()
+        self.large_scan_warning_threshold_spin.setRange(1, 10000)
+        self.default_export_directory_input = QLineEdit()
+        self.ui_density_combo = QComboBox()
+        self.ui_density_combo.addItems(["COMPACT", "NORMAL", "COMFORTABLE"])
+        self.auto_refresh_results_checkbox = QCheckBox("Refresh results after screening")
+        self.show_rejected_candidates_checkbox = QCheckBox("Show rejected candidates")
+
+        layout.addRow("Default scan mode", self.default_scan_mode_combo)
+        layout.addRow("Default scan preset", self.default_scan_preset_input)
+        layout.addRow("Max scan size", self.max_scan_size_spin)
+        layout.addRow("Large scan warning", self.large_scan_warning_threshold_spin)
+        layout.addRow("Default export directory", self.default_export_directory_input)
+        layout.addRow("UI density", self.ui_density_combo)
+        layout.addRow("", self.auto_refresh_results_checkbox)
+        layout.addRow("", self.show_rejected_candidates_checkbox)
+
+        self.tabs.addTab(tab, "App Preferences")
 
     @staticmethod
     def _section(settings: dict[str, Any], name: str) -> dict[str, Any]:

@@ -5,6 +5,7 @@ import pandas as pd
 
 from database.institutional_data import InstitutionalData
 from database.schema import (
+    APP_SETTINGS_TABLE,
     BOUNCE_VALIDATIONS_TABLE,
     EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
@@ -81,6 +82,7 @@ class DatabaseManager:
         self.cursor.execute(SCREENING_RUNS_TABLE)
         for index_statement in SCREENING_RUNS_INDEXES:
             self.cursor.execute(index_statement)
+        self.cursor.execute(APP_SETTINGS_TABLE)
 
         self.connection.commit()
 

@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -196,6 +197,22 @@ class FakeWorkspaceStateService:
         return state
 
 
+class FakeAppSettingsService:
+    preferences = SimpleNamespace(
+        default_scan_mode="Manual ticker input",
+        default_scan_preset="Institutional Quality",
+        max_scan_size=250,
+        large_scan_warning_threshold=250,
+        default_export_directory="exports/results",
+        ui_density="NORMAL",
+        auto_refresh_results=True,
+        show_rejected_candidates=True,
+    )
+
+    def get_preferences(self):
+        return self.preferences
+
+
 class FakeScreeningRepository:
     def __init__(self):
         self.ranked_candidates = []
@@ -334,8 +351,19 @@ def patched_window(monkeypatch, app):
     monkeypatch.setattr(main_window_module, "MarketStatusService", FakeMarketStatusService)
     monkeypatch.setattr(main_window_module, "RefreshScheduler", FakeRefreshScheduler)
     monkeypatch.setattr(main_window_module, "WorkspaceStateService", FakeWorkspaceStateService)
+    monkeypatch.setattr(main_window_module, "AppSettingsService", FakeAppSettingsService)
     FakeWorkspaceStateService.state = {}
     FakeWorkspaceStateService.saved_states = []
+    FakeAppSettingsService.preferences = SimpleNamespace(
+        default_scan_mode="Manual ticker input",
+        default_scan_preset="Institutional Quality",
+        max_scan_size=250,
+        large_scan_warning_threshold=250,
+        default_export_directory="exports/results",
+        ui_density="NORMAL",
+        auto_refresh_results=True,
+        show_rejected_candidates=True,
+    )
 
     window = MainWindow()
     yield window
@@ -1072,6 +1100,23 @@ def test_main_window_screening_results_empty_states(patched_window):
     assert window.screening_results_panel.run_history_count_label.text() == "Loaded 0 of 0"
 
 
+def test_main_window_hides_rejected_candidates_when_setting_disabled(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [
+        SimpleNamespace(rank=1, ticker="KEEP", final_score=91, grade="A"),
+        SimpleNamespace(rank=0, ticker="DROP", final_score=45, grade="REJECT"),
+    ]
+    window._screening_repository = repository
+    window.app_preferences = SimpleNamespace(show_rejected_candidates=False)
+
+    rows = window.refresh_ranked_candidates_view()
+
+    assert [row.ticker for row in rows] == ["KEEP"]
+    assert window.screening_results_panel.ranked_candidates_table.rowCount() == 1
+    assert window.screening_results_panel.ranked_candidates_table.item(0, 1).text() == "KEEP"
+
+
 def test_main_window_selected_run_export_uses_selected_candidates(patched_window):
     window = patched_window
     repository = FakeScreeningRepository()
@@ -1142,6 +1187,35 @@ def test_main_window_export_falls_back_to_latest_run(patched_window):
     assert export_service.calls[-1]["kind"] == "json"
     assert export_service.calls[-1]["filename"] == "ranked_candidates_latest-run"
     assert export_service.calls[-1]["candidates"][0].ticker == "AAPL"
+
+
+def test_main_window_export_uses_settings_default_directory(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    export_service = FakeResultsExportService()
+    repository.latest_run = {"run_id": "settings-export", "status": "COMPLETED"}
+    repository.ranked_candidates = [
+        SimpleNamespace(rank=1, ticker="AAPL", final_score=91.0)
+    ]
+    repository.ranked_by_run = {"settings-export": list(repository.ranked_candidates)}
+    window._screening_repository = repository
+    window._results_export_service = export_service
+    window.app_preferences = SimpleNamespace(
+        default_scan_mode="Manual ticker input",
+        default_scan_preset="Institutional Quality",
+        max_scan_size=250,
+        large_scan_warning_threshold=250,
+        default_export_directory="D:/Exports",
+        ui_density="NORMAL",
+        auto_refresh_results=True,
+        show_rejected_candidates=True,
+    )
+    window.apply_app_preferences_to_ui()
+
+    window.refresh_ranked_candidates_view()
+    window.export_ranked_candidates_csv()
+
+    assert Path(export_service.calls[-1]["output_dir"]) == Path("D:/Exports")
 
 
 def test_main_window_export_no_data_shows_safe_message(patched_window):
@@ -1590,6 +1664,10 @@ def test_main_window_universe_scan_max_ticker_limit_behavior(
     FakeScreeningWorker.instances = []
     monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
     window.MAX_UNIVERSE_SCAN_TICKERS = 3
+    window.app_preferences = SimpleNamespace(
+        max_scan_size=3,
+        large_scan_warning_threshold=3,
+    )
     window.controller.market_universe_records = [
         {
             "ticker": f"T{i}",
@@ -1611,6 +1689,21 @@ def test_main_window_universe_scan_max_ticker_limit_behavior(
     assert FakeScreeningWorker.instances[0].tickers == ["T0", "T1", "T2"]
     assert window.screening_results_panel.screening_status_label.text() == (
         "Large scan limited to 3 ticker(s)"
+    )
+
+
+def test_main_window_scan_settings_warning_threshold(patched_window):
+    window = patched_window
+    window.app_preferences = SimpleNamespace(
+        max_scan_size=10,
+        large_scan_warning_threshold=3,
+    )
+
+    tickers = window.apply_screening_ticker_guardrails(["A", "B", "C"])
+
+    assert tickers == ["A", "B", "C"]
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Large scan warning: 3 ticker(s)"
     )
 
 
@@ -1796,6 +1889,29 @@ def test_main_window_screening_completion_refreshes_results(
     assert window.screening_results_panel.run_history_table.item(0, 0).text() == "run-complete"
     assert repository.ranked_calls == 1
     assert repository.history_calls == 1
+
+
+def test_main_window_auto_refresh_results_setting_can_disable_refresh(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [SimpleNamespace(rank=1, ticker="AAPL")]
+    repository.run_history = [{"run_id": "no-refresh", "status": "COMPLETED"}]
+    window._screening_repository = repository
+    window.app_preferences = SimpleNamespace(auto_refresh_results=False)
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+
+    worker = window.start_screening_from_input("AAPL")
+    worker.completed_signal.emit(SimpleNamespace(ranked_candidates=repository.ranked_candidates))
+
+    assert repository.ranked_calls == 0
+    assert repository.history_calls == 0
+    assert window.screening_results_panel.screening_status_label.text() == (
+        "Screening complete: 1 ranked candidate(s)"
+    )
 
 
 def test_main_window_screening_cancel_resets_ui_and_refreshes_results(

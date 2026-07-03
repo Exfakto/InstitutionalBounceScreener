@@ -453,3 +453,16 @@ SCREENING_RUNS_INDEXES = [
     ON screening_runs(completed_at);
     """,
 ]
+
+
+APP_SETTINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS app_settings (
+
+    key TEXT PRIMARY KEY,
+
+    value_json TEXT,
+
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""

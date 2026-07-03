@@ -35,6 +35,7 @@ from controllers.results_export_controller import ResultsExportController
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
+from services.app_settings_service import AppSettingsService
 from services.scan_preset_service import ScanPresetService
 from services.universe_scan_adapter import UniverseScanAdapter
 from services.workspace_state_service import WorkspaceStateService
@@ -125,6 +126,8 @@ class MainWindow(QMainWindow):
         self.screener_preset_controller = ScreenerPresetController()
         self.market_status_service = MarketStatusService()
         self.settings_service = SettingsService()
+        self.app_settings_service = AppSettingsService()
+        self.app_preferences = self.load_app_preferences()
         self.scan_preset_service = ScanPresetService()
         self.workspace_state_service = WorkspaceStateService()
         self.refresh_scheduler = RefreshScheduler()
@@ -308,6 +311,7 @@ class MainWindow(QMainWindow):
         self.screening_results_panel.set_scan_presets(
             self.scan_preset_service.list_presets()
         )
+        self.apply_app_preferences_to_ui()
         self.update_scan_preset_summary()
         self.activity_panel = ActivityPanel()
 
@@ -1015,7 +1019,10 @@ class MainWindow(QMainWindow):
     def open_settings_dialog(self):
 
         self.settings_dialog = SettingsDialog(parent=self)
-        self.settings_dialog.exec()
+        result = self.settings_dialog.exec()
+        self.app_preferences = self.load_app_preferences()
+        self.apply_app_preferences_to_ui()
+        return result
 
     # ----------------------------------------------------------
 
@@ -2093,6 +2100,50 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def load_app_preferences(self):
+
+        try:
+            return self.app_settings_service.get_preferences()
+        except Exception:
+            return None
+
+    # ----------------------------------------------------------
+
+    def app_preference(self, key, default=None):
+
+        return getattr(getattr(self, "app_preferences", None), key, default)
+
+    # ----------------------------------------------------------
+
+    def apply_app_preferences_to_ui(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return
+
+        max_scan_size = self.app_preference(
+            "max_scan_size",
+            self.MAX_UNIVERSE_SCAN_TICKERS,
+        )
+        self.MAX_UNIVERSE_SCAN_TICKERS = int(max_scan_size or self.MAX_UNIVERSE_SCAN_TICKERS)
+        self._results_export_output_dir = self.app_preference(
+            "default_export_directory",
+            "exports/results",
+        )
+
+        mode = self.app_preference("default_scan_mode", None)
+        if mode:
+            index = self.screening_results_panel.screening_mode_combo.findText(mode)
+            if index >= 0:
+                self.screening_results_panel.screening_mode_combo.setCurrentIndex(index)
+
+        preset = self.app_preference("default_scan_preset", None)
+        if preset:
+            index = self.screening_results_panel.scan_preset_combo.findText(preset)
+            if index >= 0:
+                self.screening_results_panel.scan_preset_combo.setCurrentIndex(index)
+
+    # ----------------------------------------------------------
+
     @staticmethod
     def compact_number(value):
 
@@ -2138,15 +2189,32 @@ class MainWindow(QMainWindow):
             )
             return []
 
-        if len(tickers) > self.MAX_UNIVERSE_SCAN_TICKERS:
-            limited = tickers[: self.MAX_UNIVERSE_SCAN_TICKERS]
+        max_scan_size = int(
+            self.app_preference("max_scan_size", self.MAX_UNIVERSE_SCAN_TICKERS)
+            or self.MAX_UNIVERSE_SCAN_TICKERS
+        )
+        warning_threshold = int(
+            self.app_preference("large_scan_warning_threshold", max_scan_size)
+            or max_scan_size
+        )
+
+        if len(tickers) > max_scan_size:
+            limited = tickers[:max_scan_size]
             self.last_screening_guardrail_message = (
-                f"Large scan limited to {self.MAX_UNIVERSE_SCAN_TICKERS} ticker(s)"
+                f"Large scan limited to {max_scan_size} ticker(s)"
             )
             self.screening_results_panel.set_screening_status(
                 self.last_screening_guardrail_message
             )
             return limited
+
+        if len(tickers) >= warning_threshold:
+            self.last_screening_guardrail_message = (
+                f"Large scan warning: {len(tickers)} ticker(s)"
+            )
+            self.screening_results_panel.set_screening_status(
+                self.last_screening_guardrail_message
+            )
 
         return tickers
 
@@ -2225,8 +2293,9 @@ class MainWindow(QMainWindow):
             f"Screening complete: {count} ranked candidate(s)",
         )
         self.screening_worker = None
-        self.refresh_screening_run_history_view()
-        self.refresh_ranked_candidates_view()
+        if self.app_preference("auto_refresh_results", True):
+            self.refresh_screening_run_history_view()
+            self.refresh_ranked_candidates_view()
 
     # ----------------------------------------------------------
 
@@ -2238,8 +2307,9 @@ class MainWindow(QMainWindow):
             f"Screening cancelled: {count} ranked candidate(s)",
         )
         self.screening_worker = None
-        self.refresh_screening_run_history_view()
-        self.refresh_ranked_candidates_view()
+        if self.app_preference("auto_refresh_results", True):
+            self.refresh_screening_run_history_view()
+            self.refresh_ranked_candidates_view()
 
     # ----------------------------------------------------------
 
@@ -2284,7 +2354,9 @@ class MainWindow(QMainWindow):
                 repository,
                 "fetch_latest_ranked_candidates",
             ):
-                candidates = self.fetch_latest_ranked_page(repository, 0)
+                candidates = self.displayable_ranked_candidates(
+                    self.fetch_latest_ranked_page(repository, 0)
+                )
                 total_count = self.count_latest_ranked_candidates(repository, candidates)
         except Exception:
             candidates = []
@@ -2313,7 +2385,9 @@ class MainWindow(QMainWindow):
 
         try:
             if repository is not None and hasattr(repository, "fetch_ranked_candidates"):
-                candidates = self.fetch_ranked_candidates_page(repository, run_id, 0)
+                candidates = self.displayable_ranked_candidates(
+                    self.fetch_ranked_candidates_page(repository, run_id, 0)
+                )
                 total_count = self.count_ranked_candidates(
                     repository,
                     run_id,
@@ -2351,9 +2425,13 @@ class MainWindow(QMainWindow):
             if repository is None:
                 candidates = []
             elif run_id:
-                candidates = self.fetch_ranked_candidates_page(repository, run_id, offset)
+                candidates = self.displayable_ranked_candidates(
+                    self.fetch_ranked_candidates_page(repository, run_id, offset)
+                )
             else:
-                candidates = self.fetch_latest_ranked_page(repository, offset)
+                candidates = self.displayable_ranked_candidates(
+                    self.fetch_latest_ranked_page(repository, offset)
+                )
         except Exception:
             candidates = []
 
@@ -2486,6 +2564,23 @@ class MainWindow(QMainWindow):
         if repository is not None and hasattr(repository, "count_screening_runs"):
             return repository.count_screening_runs()
         return len(fallback or [])
+
+    # ----------------------------------------------------------
+
+    def displayable_ranked_candidates(self, candidates):
+
+        rows = list(candidates or [])
+        if self.app_preference("show_rejected_candidates", True):
+            return rows
+        return [
+            candidate
+            for candidate in rows
+            if (
+                candidate.get("grade")
+                if isinstance(candidate, dict)
+                else getattr(candidate, "grade", None)
+            ) != "REJECT"
+        ]
 
     # ----------------------------------------------------------
 
