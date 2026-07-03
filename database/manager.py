@@ -6,6 +6,9 @@ import pandas as pd
 from database.institutional_data import InstitutionalData
 from database.schema import (
     APP_SETTINGS_TABLE,
+    BACKTEST_INDEXES,
+    BACKTEST_RUNS_TABLE,
+    BACKTEST_TRADE_RESULTS_TABLE,
     BOUNCE_VALIDATIONS_TABLE,
     EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
@@ -88,6 +91,10 @@ class DatabaseManager:
         for index_statement in SCREENING_RUNS_INDEXES:
             self.cursor.execute(index_statement)
         self.cursor.execute(APP_SETTINGS_TABLE)
+        self.cursor.execute(BACKTEST_RUNS_TABLE)
+        self.cursor.execute(BACKTEST_TRADE_RESULTS_TABLE)
+        for index_statement in BACKTEST_INDEXES:
+            self.cursor.execute(index_statement)
 
         self.connection.commit()
 
@@ -1581,6 +1588,184 @@ class DatabaseManager:
         )
         return self.cursor.fetchone()[0]
 
+    # ==========================================================
+    # Backtest Runs
+    # ==========================================================
+
+    def save_backtest_run(self, run_result, source_run_id=None):
+        run_id = self.record_value(run_result, "run_id")
+        if run_id in (None, ""):
+            return None
+        config = self.record_value(run_result, "config")
+        metrics = self.record_value(run_result, "metrics") or {}
+        warnings = self.record_value(run_result, "warnings") or []
+        errors = self.record_value(run_result, "errors") or []
+        trades = self.record_value(run_result, "trades") or []
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO backtest_runs
+            (
+                run_id,
+                source_run_id,
+                completed_at,
+                config_json,
+                metrics_json,
+                warnings_json,
+                errors_json
+            )
+            VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+            """,
+            (
+                str(run_id),
+                source_run_id,
+                json.dumps(self._json_safe(config)),
+                json.dumps(self._json_safe(metrics)),
+                self._json_text(warnings),
+                self._json_text(errors),
+            ),
+        )
+        self.clear_backtest_trade_results(run_id, commit=False)
+        self.save_backtest_trade_results(run_id, trades, commit=False)
+        self.connection.commit()
+        return self.fetch_backtest_run(run_id)
+
+    def save_backtest_trade_results(self, run_id, trades, commit=True):
+        payload = []
+        for trade in trades or []:
+            payload.append(
+                (
+                    str(run_id),
+                    self.record_value(trade, "ticker"),
+                    self.record_value(trade, "entry_date"),
+                    self.record_value(trade, "exit_date"),
+                    self._sqlite_float(self.record_value(trade, "entry_price")),
+                    self._sqlite_float(self.record_value(trade, "exit_price")),
+                    self._sqlite_float(self.record_value(trade, "return_pct")),
+                    self._sqlite_float(self.record_value(trade, "max_gain_pct")),
+                    self._sqlite_float(self.record_value(trade, "max_drawdown_pct")),
+                    self._sqlite_int_or_none(self.record_value(trade, "holding_days")),
+                    self.record_value(trade, "exit_reason"),
+                    self._sqlite_float(self.record_value(trade, "final_score")),
+                    self.record_value(trade, "grade"),
+                    self.record_value(trade, "confidence_level"),
+                    self.record_value(trade, "setup_label"),
+                    self.record_value(trade, "source_run_id"),
+                    self.record_value(trade, "signal_date"),
+                    self._json_text(self.record_value(trade, "warnings") or []),
+                )
+            )
+        if payload:
+            self.cursor.executemany(
+                """
+                INSERT INTO backtest_trade_results
+                (
+                    run_id,
+                    ticker,
+                    entry_date,
+                    exit_date,
+                    entry_price,
+                    exit_price,
+                    return_pct,
+                    max_gain_pct,
+                    max_drawdown_pct,
+                    holding_days,
+                    exit_reason,
+                    final_score,
+                    grade,
+                    confidence_level,
+                    setup_label,
+                    source_run_id,
+                    signal_date,
+                    warnings_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                payload,
+            )
+        if commit:
+            self.connection.commit()
+        return len(payload)
+
+    def fetch_backtest_run(self, run_id):
+        if run_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            SELECT run_id, source_run_id, started_at, completed_at, config_json,
+                   metrics_json, warnings_json, errors_json
+            FROM backtest_runs
+            WHERE run_id = ?
+            """,
+            (str(run_id),),
+        )
+        run = self._row_to_backtest_run(self.cursor.fetchone())
+        if run is not None:
+            run["trades"] = self.fetch_backtest_trade_results(run_id)
+        return run
+
+    def fetch_latest_backtest_run(self):
+        self.cursor.execute(
+            """
+            SELECT run_id, source_run_id, started_at, completed_at, config_json,
+                   metrics_json, warnings_json, errors_json
+            FROM backtest_runs
+            ORDER BY completed_at DESC, rowid DESC
+            LIMIT 1
+            """
+        )
+        row = self.cursor.fetchone()
+        return self.fetch_backtest_run(row["run_id"]) if row is not None else None
+
+    def fetch_backtest_run_history(self, limit=25, offset=0):
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
+        self.cursor.execute(
+            f"""
+            SELECT run_id, source_run_id, started_at, completed_at, config_json,
+                   metrics_json, warnings_json, errors_json
+            FROM backtest_runs
+            ORDER BY completed_at DESC, rowid DESC
+            {paging_sql}
+            """,
+            tuple(paging_values),
+        )
+        return [self._row_to_backtest_run(row) for row in self.cursor.fetchall()]
+
+    def fetch_backtest_trade_results(self, run_id):
+        if run_id in (None, ""):
+            return []
+        self.cursor.execute(
+            """
+            SELECT ticker, entry_date, exit_date, entry_price, exit_price,
+                   return_pct, max_gain_pct, max_drawdown_pct, holding_days,
+                   exit_reason, final_score, grade, confidence_level, setup_label,
+                   source_run_id, signal_date, warnings_json, created_at
+            FROM backtest_trade_results
+            WHERE run_id = ?
+            ORDER BY entry_date, ticker
+            """,
+            (str(run_id),),
+        )
+        return [self._row_to_backtest_trade_result(row) for row in self.cursor.fetchall()]
+
+    def clear_backtest_run(self, run_id):
+        if run_id in (None, ""):
+            return 0
+        deleted_trades = self.clear_backtest_trade_results(run_id, commit=False)
+        self.cursor.execute("DELETE FROM backtest_runs WHERE run_id = ?", (str(run_id),))
+        deleted_runs = self.cursor.rowcount
+        self.connection.commit()
+        return deleted_runs + deleted_trades
+
+    def clear_backtest_trade_results(self, run_id, commit=True):
+        self.cursor.execute(
+            "DELETE FROM backtest_trade_results WHERE run_id = ?",
+            (str(run_id),),
+        )
+        deleted = self.cursor.rowcount
+        if commit:
+            self.connection.commit()
+        return deleted
+
     @staticmethod
     def _limit_offset_clause(limit=None, offset=0):
         if limit is None:
@@ -2357,6 +2542,68 @@ class DatabaseManager:
         if isinstance(payload, list):
             return payload
         return [payload]
+
+    @staticmethod
+    def _json_dict(value):
+        if value in (None, ""):
+            return {}
+        try:
+            payload = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _json_safe(value):
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            return {str(key): DatabaseManager._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [DatabaseManager._json_safe(item) for item in value]
+        if hasattr(value, "__dict__"):
+            return DatabaseManager._json_safe(vars(value))
+        return value
+
+    @staticmethod
+    def _row_to_backtest_run(row):
+        if row is None:
+            return None
+        return {
+            "run_id": row["run_id"],
+            "source_run_id": row["source_run_id"],
+            "started_at": row["started_at"],
+            "completed_at": row["completed_at"],
+            "config": DatabaseManager._json_dict(row["config_json"]),
+            "metrics": DatabaseManager._json_dict(row["metrics_json"]),
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "errors": DatabaseManager._json_list(row["errors_json"]),
+        }
+
+    @staticmethod
+    def _row_to_backtest_trade_result(row):
+        if row is None:
+            return None
+        return {
+            "ticker": row["ticker"],
+            "entry_date": row["entry_date"],
+            "exit_date": row["exit_date"],
+            "entry_price": row["entry_price"],
+            "exit_price": row["exit_price"],
+            "return_pct": row["return_pct"],
+            "max_gain_pct": row["max_gain_pct"],
+            "max_drawdown_pct": row["max_drawdown_pct"],
+            "holding_days": row["holding_days"],
+            "exit_reason": row["exit_reason"],
+            "final_score": row["final_score"],
+            "grade": row["grade"],
+            "confidence_level": row["confidence_level"],
+            "setup_label": row["setup_label"],
+            "source_run_id": row["source_run_id"],
+            "signal_date": row["signal_date"],
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "created_at": row["created_at"],
+        }
 
     @staticmethod
     def _format_date(value):

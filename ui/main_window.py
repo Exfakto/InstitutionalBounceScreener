@@ -32,6 +32,8 @@ from controllers.trade_journal_controller import TradeJournalController
 from controllers.screener_preset_controller import ScreenerPresetController
 from controllers.dashboard_controller import DashboardController
 from controllers.results_export_controller import ResultsExportController
+from backtesting.signal_validation import BacktestConfig
+from backtesting.signal_validation import BacktestEngine as SignalBacktestEngine
 from services.market_status_service import MarketStatusService
 from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
@@ -336,6 +338,12 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.data_quality_report_requested.connect(
             self.show_data_quality_report
+        )
+        self.screening_results_panel.run_backtest_requested.connect(
+            self.run_backtest_from_results
+        )
+        self.screening_results_panel.cancel_backtest_requested.connect(
+            self.cancel_backtest
         )
         self.screening_results_panel.set_scan_presets(
             self.scan_preset_service.list_presets()
@@ -2199,6 +2207,63 @@ class MainWindow(QMainWindow):
             status = f"Provider diagnostics failed: {exc}"
         self.screening_results_panel.set_market_data_status(status)
         return result
+
+    # ----------------------------------------------------------
+
+    def backtest_engine(self):
+
+        explicit = getattr(self, "_backtest_engine", None)
+        if explicit is not None:
+            return explicit
+        return SignalBacktestEngine(repository=self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def run_backtest_from_results(self, config_values=None):
+
+        if not hasattr(self, "screening_results_panel"):
+            return None
+        candidates = getattr(self.screening_results_panel, "current_candidates", [])
+        if not candidates:
+            self.screening_results_panel.set_backtest_status(
+                "No ranked candidates available for backtest"
+            )
+            return None
+        config_values = config_values or {}
+        config = BacktestConfig(
+            min_score=float(config_values.get("min_score", 60)),
+            max_holding_days=int(config_values.get("max_holding_days", 30)),
+            profit_target_pct=float(config_values.get("profit_target_pct", 20)),
+            stop_loss_pct=float(config_values.get("stop_loss_pct", 8)),
+        )
+        self.screening_results_panel.set_backtest_active(True, "Running backtest")
+        try:
+            result = self.backtest_engine().run_backtest(candidates, config=config)
+            repository = self.screening_repository()
+            if repository is not None and hasattr(repository, "save_backtest_run"):
+                repository.save_backtest_run(
+                    result,
+                    source_run_id=getattr(self, "selected_results_run_id", None),
+                )
+            self.screening_results_panel.populate_backtest_results(result)
+            self.screening_results_panel.set_backtest_status(
+                f"Backtest complete: {len(result.trades)} trade(s)"
+            )
+            return result
+        except Exception as exc:
+            self.screening_results_panel.set_backtest_status(
+                f"Backtest failed: {exc}"
+            )
+            return None
+        finally:
+            self.screening_results_panel.set_backtest_active(False)
+
+    # ----------------------------------------------------------
+
+    def cancel_backtest(self):
+
+        self.screening_results_panel.set_backtest_active(False, "Backtest cancelled")
+        return True
 
     # ----------------------------------------------------------
 

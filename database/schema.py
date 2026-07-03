@@ -505,3 +505,85 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 );
 """
+
+
+BACKTEST_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS backtest_runs (
+
+    run_id TEXT PRIMARY KEY,
+
+    source_run_id TEXT,
+
+    started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    completed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    config_json TEXT,
+
+    metrics_json TEXT,
+
+    warnings_json TEXT,
+
+    errors_json TEXT
+
+);
+"""
+
+
+BACKTEST_TRADE_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS backtest_trade_results (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    run_id TEXT NOT NULL,
+
+    ticker TEXT NOT NULL,
+
+    entry_date TEXT,
+
+    exit_date TEXT,
+
+    entry_price REAL,
+
+    exit_price REAL,
+
+    return_pct REAL,
+
+    max_gain_pct REAL,
+
+    max_drawdown_pct REAL,
+
+    holding_days INTEGER,
+
+    exit_reason TEXT,
+
+    final_score REAL,
+
+    grade TEXT,
+
+    confidence_level TEXT,
+
+    setup_label TEXT,
+
+    source_run_id TEXT,
+
+    signal_date TEXT,
+
+    warnings_json TEXT,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""
+
+
+BACKTEST_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_backtest_trade_results_run_id
+    ON backtest_trade_results(run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_backtest_runs_completed_at
+    ON backtest_runs(completed_at);
+    """,
+]

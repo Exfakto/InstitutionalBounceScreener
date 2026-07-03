@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSpinBox,
+    QDoubleSpinBox,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -44,6 +46,8 @@ class ScreeningResultsPanel(QWidget):
     clear_all_cache_requested = Signal()
     provider_diagnostics_requested = Signal()
     data_quality_report_requested = Signal(str)
+    run_backtest_requested = Signal(dict)
+    cancel_backtest_requested = Signal()
 
     RANKED_HEADERS = [
         "Rank",
@@ -63,6 +67,18 @@ class ScreeningResultsPanel(QWidget):
         "Requested",
         "Processed",
         "Candidates",
+    ]
+    BACKTEST_HEADERS = [
+        "Ticker",
+        "Entry",
+        "Exit",
+        "Entry Price",
+        "Exit Price",
+        "Return %",
+        "Max Gain %",
+        "Max Drawdown %",
+        "Days",
+        "Exit Reason",
     ]
 
     def __init__(self, parent=None):
@@ -119,6 +135,7 @@ class ScreeningResultsPanel(QWidget):
         content_layout.addWidget(history_section, stretch=2)
         content_layout.addWidget(self.build_run_detail_section(), stretch=1)
         content_layout.addWidget(self.build_candidate_detail_section(), stretch=2)
+        content_layout.addWidget(self.build_backtest_section(), stretch=2)
         self.candidate_chart_panel = CandidateChartPanel()
         content_layout.addWidget(self.candidate_chart_panel, stretch=2)
         content_layout.addStretch(1)
@@ -366,6 +383,146 @@ class ScreeningResultsPanel(QWidget):
             self.cache_coverage_label.setText(
                 f"Cache: {total_tickers} tickers / {total_rows} rows / {stale_count} stale"
             )
+
+    def build_backtest_section(self):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        section.setStyleSheet(DesignSystem.card_style())
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+        )
+        layout.setSpacing(DesignSystem.Spacing.SM)
+
+        header = QHBoxLayout()
+        title = QLabel("Backtest Validation")
+        title.setObjectName("ResearchPreviewSectionTitle")
+        self.backtest_min_score_spin = QDoubleSpinBox()
+        self.backtest_min_score_spin.setRange(0, 100)
+        self.backtest_min_score_spin.setValue(60)
+        self.backtest_min_score_spin.setPrefix("Min ")
+        self.backtest_max_hold_spin = QSpinBox()
+        self.backtest_max_hold_spin.setRange(1, 365)
+        self.backtest_max_hold_spin.setValue(30)
+        self.backtest_max_hold_spin.setSuffix(" days")
+        self.backtest_target_spin = QDoubleSpinBox()
+        self.backtest_target_spin.setRange(0, 500)
+        self.backtest_target_spin.setValue(20)
+        self.backtest_target_spin.setSuffix("% target")
+        self.backtest_stop_spin = QDoubleSpinBox()
+        self.backtest_stop_spin.setRange(0, 100)
+        self.backtest_stop_spin.setValue(8)
+        self.backtest_stop_spin.setSuffix("% stop")
+        self.run_backtest_button = QPushButton("Run Backtest")
+        self.run_backtest_button.setObjectName("PrimaryButton")
+        self.run_backtest_button.clicked.connect(self.emit_run_backtest)
+        self.cancel_backtest_button = QPushButton("Cancel Backtest")
+        self.cancel_backtest_button.setObjectName("SecondaryButton")
+        self.cancel_backtest_button.setEnabled(False)
+        self.cancel_backtest_button.clicked.connect(self.cancel_backtest_requested.emit)
+        self.backtest_status_label = QLabel("No backtest run yet")
+        self.backtest_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.backtest_status_label.setWordWrap(True)
+
+        header.addWidget(title)
+        header.addWidget(self.backtest_min_score_spin)
+        header.addWidget(self.backtest_max_hold_spin)
+        header.addWidget(self.backtest_target_spin)
+        header.addWidget(self.backtest_stop_spin)
+        header.addWidget(self.run_backtest_button)
+        header.addWidget(self.cancel_backtest_button)
+        header.addWidget(self.backtest_status_label, stretch=1)
+        layout.addLayout(header)
+
+        self.backtest_summary_label = QLabel("Backtest summary: N/A")
+        self.backtest_summary_label.setObjectName("ResearchPreviewFieldValue")
+        self.backtest_summary_label.setWordWrap(True)
+        layout.addWidget(self.backtest_summary_label)
+
+        self.backtest_trades_table = QTableWidget(0, len(self.BACKTEST_HEADERS))
+        self.backtest_trades_table.setHorizontalHeaderLabels(self.BACKTEST_HEADERS)
+        self.backtest_trades_table.setAlternatingRowColors(True)
+        self.backtest_trades_table.setSortingEnabled(True)
+        self.backtest_trades_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.backtest_trades_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.backtest_trades_table.verticalHeader().setVisible(False)
+        self.backtest_trades_table.horizontalHeader().setStretchLastSection(True)
+        self.backtest_trades_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Interactive
+        )
+        self.backtest_trades_table.setStyleSheet(DesignSystem.table_style())
+        self.backtest_trades_table.setMinimumHeight(128)
+        layout.addWidget(self.backtest_trades_table)
+
+        self.backtest_empty_label = QLabel("No backtest trades available")
+        self.backtest_empty_label.setObjectName("EmptyStateLabel")
+        self.backtest_empty_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.backtest_empty_label)
+        self.set_empty_state(
+            self.backtest_trades_table,
+            self.backtest_empty_label,
+            True,
+        )
+        return section
+
+    def emit_run_backtest(self):
+        self.run_backtest_requested.emit(self.backtest_config_from_ui())
+
+    def backtest_config_from_ui(self):
+        return {
+            "min_score": self.backtest_min_score_spin.value(),
+            "max_holding_days": self.backtest_max_hold_spin.value(),
+            "profit_target_pct": self.backtest_target_spin.value(),
+            "stop_loss_pct": self.backtest_stop_spin.value(),
+        }
+
+    def set_backtest_active(self, active, status_text=None):
+        self.run_backtest_button.setEnabled(not active)
+        self.cancel_backtest_button.setEnabled(bool(active))
+        if status_text is not None:
+            self.set_backtest_status(status_text)
+
+    def set_backtest_status(self, status_text):
+        self.backtest_status_label.setText(status_text or "")
+        self.apply_status_property(self.backtest_status_label, status_text)
+
+    def populate_backtest_results(self, result):
+        trades = self.value(result, "trades") or []
+        metrics = self.value(result, "metrics") or {}
+        self.backtest_summary_label.setText(
+            "Backtest summary: "
+            f"{self.value(metrics, 'total_trades') or 0} trades, "
+            f"{(self.value(metrics, 'win_rate') or 0) * 100:.1f}% win rate, "
+            f"{self.value(metrics, 'average_return') or 0:.2f}% avg return"
+        )
+        self.populate_table(
+            self.backtest_trades_table,
+            [
+                [
+                    self.value(trade, "ticker"),
+                    self.value(trade, "entry_date"),
+                    self.value(trade, "exit_date"),
+                    self.value(trade, "entry_price"),
+                    self.value(trade, "exit_price"),
+                    self.value(trade, "return_pct"),
+                    self.value(trade, "max_gain_pct"),
+                    self.value(trade, "max_drawdown_pct"),
+                    self.value(trade, "holding_days"),
+                    self.value(trade, "exit_reason"),
+                ]
+                for trade in trades
+            ],
+            numeric_columns={3, 4, 5, 6, 7, 8},
+            source_rows=trades,
+        )
+        self.set_empty_state(
+            self.backtest_trades_table,
+            self.backtest_empty_label,
+            not trades,
+        )
 
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())

@@ -125,6 +125,57 @@ class ResultsExportService:
             count=len(payload.get("ticker_reports", {}) if isinstance(payload, dict) else []),
         )
 
+    def export_backtest_summary_json(self, backtest_run, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "json")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        payload = self.normalize_run_metadata(backtest_run)
+        return self.write_json(
+            payload,
+            destination,
+            "Backtest summary exported.",
+            count=len(payload.get("trades", []) if isinstance(payload, dict) else []),
+        )
+
+    def export_backtest_trades_csv(self, trades, output_dir, filename):
+        destination = self.destination_path(output_dir, filename, "csv")
+        if destination is None:
+            return self.result(False, "Output directory is required.")
+        fields = [
+            "ticker",
+            "entry_date",
+            "exit_date",
+            "entry_price",
+            "exit_price",
+            "return_pct",
+            "max_gain_pct",
+            "max_drawdown_pct",
+            "holding_days",
+            "exit_reason",
+            "final_score",
+            "grade",
+            "confidence_level",
+            "setup_label",
+            "source_run_id",
+            "signal_date",
+            "warnings",
+        ]
+        rows = [self.backtest_trade_row(trade) for trade in (trades or [])]
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(rows)
+            return self.result(
+                True,
+                "Backtest trades exported to CSV.",
+                path=destination,
+                count=len(rows),
+            )
+        except OSError as exc:
+            return self.result(False, f"Export failed: {exc}", path=destination)
+
     def write_json(self, payload, destination, message, count=None):
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +208,28 @@ class ResultsExportService:
                 cls.value(candidate, "created_at"),
                 cls.value(source, "created_at"),
             ),
+        }
+
+    @classmethod
+    def backtest_trade_row(cls, trade):
+        return {
+            "ticker": cls.value(trade, "ticker"),
+            "entry_date": cls.value(trade, "entry_date"),
+            "exit_date": cls.value(trade, "exit_date"),
+            "entry_price": cls.value(trade, "entry_price"),
+            "exit_price": cls.value(trade, "exit_price"),
+            "return_pct": cls.value(trade, "return_pct"),
+            "max_gain_pct": cls.value(trade, "max_gain_pct"),
+            "max_drawdown_pct": cls.value(trade, "max_drawdown_pct"),
+            "holding_days": cls.value(trade, "holding_days"),
+            "exit_reason": cls.value(trade, "exit_reason"),
+            "final_score": cls.value(trade, "final_score"),
+            "grade": cls.value(trade, "grade"),
+            "confidence_level": cls.value(trade, "confidence_level"),
+            "setup_label": cls.value(trade, "setup_label"),
+            "source_run_id": cls.value(trade, "source_run_id"),
+            "signal_date": cls.value(trade, "signal_date"),
+            "warnings": cls.list_text(cls.value(trade, "warnings")),
         }
 
     @classmethod
