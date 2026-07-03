@@ -72,9 +72,16 @@ def test_candidate_detail_window_accepts_candidate_object(app):
             "insider_selling_flag": 0,
             "insider_net_activity": 1250000,
             "upcoming_earnings": "2026-07-24",
+            "earnings_within_7_days": 1,
             "short_interest_pct": 6.5,
+            "price_below_200dma": 0,
+            "recent_support_break": 1,
             "support_failure_risk_pct": 22.0,
             "volatility_pct": 14.2,
+            "debt_to_equity": 0.85,
+            "excessive_debt": 0,
+            "heavy_insider_selling": 1,
+            "price_above_support_10pct": 0,
             "debt_risk_score": 35.0,
             "insider_selling_risk": 80.0,
             "overall_risk_score": 62.0,
@@ -177,22 +184,31 @@ def test_candidate_detail_window_accepts_candidate_object(app):
     )
     assert window.risk_labels["risk_rating"].text() == "Moderate"
     assert window.risk_labels["risk_rating"].property("status") == "watch"
+    assert window.risk_labels["overall_risk_score"].text() == "62.0"
+    assert window.risk_labels["overall_risk_score"].property("status") == "watch"
     assert window.risk_labels["upcoming_earnings"].text() == "2026-07-24"
+    assert window.risk_labels["earnings_within_7_days"].text() == "Yes"
+    assert window.risk_labels["earnings_within_7_days"].property("status") == "negative"
     assert window.risk_labels["short_interest"].text() == "6.5%"
     assert window.risk_labels["short_interest"].property("status") == "positive"
+    assert window.risk_labels["price_below_200dma"].text() == "No"
+    assert window.risk_labels["recent_support_break"].text() == "Yes"
     assert window.risk_labels["support_failure_risk"].text() == "22.0%"
     assert window.risk_labels["support_failure_risk"].property("status") == "negative"
     assert window.risk_labels["volatility"].text() == "14.2%"
     assert window.risk_labels["volatility"].property("status") == "watch"
+    assert window.risk_labels["debt_to_equity"].text() == "0.85"
+    assert window.risk_labels["excessive_debt"].text() == "No"
     assert window.risk_labels["debt_risk"].text() == "35.0"
     assert window.risk_labels["debt_risk"].property("status") == "positive"
+    assert window.risk_labels["heavy_insider_selling"].text() == "Yes"
     assert window.risk_labels["insider_selling_risk"].text() == "80.0"
     assert window.risk_labels["insider_selling_risk"].property("status") == "negative"
-    assert window.risk_labels["overall_risk_score"].text() == "62.0"
-    assert window.risk_labels["overall_risk_score"].property("status") == "watch"
+    assert window.risk_labels["price_above_support_10pct"].text() == "No"
     assert [label.text() for label in window.risk_warning_labels] == [
-        "* Support Failure Risk: 22.0%",
-        "* Insider Selling Risk: 80.0",
+        "* Earnings within 7 days",
+        "* Recent support break",
+        "* Heavy insider selling",
     ]
     assert window.bounce_summary_labels["support_tests"].text() == "5"
     assert window.bounce_summary_labels["successful_bounces"].text() == "4"
@@ -249,7 +265,7 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     assert window.institutional_summary_label.text() == "Institutional sponsorship is N/A."
     assert all(label.text() == "N/A" for label in window.risk_labels.values())
     assert [label.text() for label in window.risk_warning_labels] == [
-        "No active risks highlighted."
+        "No major active risk warnings."
     ]
     assert all(label.text() == "N/A" for label in window.bounce_summary_labels.values())
     assert window.bounce_empty_label.text() == "No historical bounce data available."
@@ -347,9 +363,16 @@ def test_candidate_detail_window_accepts_risk_detail_values(app):
             "risk": {
                 "rating": "High",
                 "next_earnings_date": "2026-08-01",
+                "earnings_soon": True,
                 "short_float_pct": 21.5,
+                "below_200_dma": True,
+                "recent_breakdown": True,
                 "breakdown_risk": 15.0,
                 "atr_pct": 8.0,
+                "debt_to_equity_ratio": 2.5,
+                "high_debt": True,
+                "heavy_selling": True,
+                "far_above_support": True,
                 "leverage_risk": 72.0,
                 "insider_selling_score": 0,
                 "composite_risk_score": 78.0,
@@ -360,23 +383,33 @@ def test_candidate_detail_window_accepts_risk_detail_values(app):
     assert window.risk_labels["risk_rating"].text() == "High"
     assert window.risk_labels["risk_rating"].property("status") == "negative"
     assert window.risk_labels["upcoming_earnings"].text() == "2026-08-01"
+    assert window.risk_labels["earnings_within_7_days"].text() == "Yes"
     assert window.risk_labels["short_interest"].text() == "21.5%"
     assert window.risk_labels["short_interest"].property("status") == "negative"
+    assert window.risk_labels["price_below_200dma"].text() == "Yes"
+    assert window.risk_labels["recent_support_break"].text() == "Yes"
     assert window.risk_labels["support_failure_risk"].text() == "15.0%"
     assert window.risk_labels["support_failure_risk"].property("status") == "watch"
     assert window.risk_labels["volatility"].text() == "8.0%"
     assert window.risk_labels["volatility"].property("status") == "positive"
+    assert window.risk_labels["debt_to_equity"].text() == "2.50"
+    assert window.risk_labels["debt_to_equity"].property("status") == "negative"
+    assert window.risk_labels["excessive_debt"].text() == "Yes"
     assert window.risk_labels["debt_risk"].text() == "72.0"
     assert window.risk_labels["debt_risk"].property("status") == "negative"
+    assert window.risk_labels["heavy_insider_selling"].text() == "Yes"
     assert window.risk_labels["insider_selling_risk"].text() == "0.0"
     assert window.risk_labels["insider_selling_risk"].property("status") == "positive"
+    assert window.risk_labels["price_above_support_10pct"].text() == "Yes"
     assert window.risk_labels["overall_risk_score"].text() == "78.0"
     assert window.risk_labels["overall_risk_score"].property("status") == "negative"
     assert [label.text() for label in window.risk_warning_labels] == [
-        "* Risk Rating: High",
-        "* Short Interest: 21.5%",
-        "* Debt Risk: 72.0",
-        "* Overall Risk Score: 78.0",
+        "* Earnings within 7 days",
+        "* Price below 200-day moving average",
+        "* Recent support break",
+        "* Heavy insider selling",
+        "* Current price more than 10% above support",
+        "* Excessive debt",
     ]
 
 
@@ -526,6 +559,53 @@ def test_candidate_detail_window_set_candidate_refreshes_institutional_values(ap
     assert window.institutional_labels["ownership"].text() == "68.0%"
     assert window.institutional_labels["holder_change"].text() == "+15"
     assert window.institutional_labels["net_buying"].text() == "$2.00M"
+
+
+def test_candidate_detail_window_set_candidate_refreshes_risk_values(app):
+    window = CandidateDetailWindow(
+        SimpleNamespace(
+            ticker="OLD",
+            risk_rating=SimpleNamespace(rating_label="High"),
+            metrics={
+                "overall_risk_score": 82,
+                "earnings_within_7_days": 1,
+                "below_200_dma": 1,
+                "heavy_insider_selling": 1,
+            },
+        )
+    )
+
+    assert window.risk_labels["risk_rating"].text() == "High"
+    assert window.risk_labels["risk_rating"].property("status") == "negative"
+    assert window.risk_labels["overall_risk_score"].text() == "82.0"
+    assert [label.text() for label in window.risk_warning_labels] == [
+        "* Earnings within 7 days",
+        "* Price below 200-day moving average",
+        "* Heavy insider selling",
+    ]
+
+    window.set_candidate(
+        SimpleNamespace(
+            ticker="NEW",
+            risk_rating=SimpleNamespace(rating_label="Low"),
+            metrics={
+                "overall_risk_score": 18,
+                "earnings_within_7_days": 0,
+                "below_200_dma": 0,
+                "heavy_insider_selling": 0,
+                "debt_to_equity": 0.4,
+            },
+        )
+    )
+
+    assert window.windowTitle() == "NEW Candidate Detail"
+    assert window.risk_labels["risk_rating"].text() == "Low"
+    assert window.risk_labels["risk_rating"].property("status") == "positive"
+    assert window.risk_labels["overall_risk_score"].text() == "18.0"
+    assert window.risk_labels["debt_to_equity"].text() == "0.40"
+    assert [label.text() for label in window.risk_warning_labels] == [
+        "No major active risk warnings."
+    ]
 
 
 def test_candidate_detail_window_set_candidate_refreshes_bounce_values(app):

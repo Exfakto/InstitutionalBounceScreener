@@ -1809,27 +1809,41 @@ class CandidateDetailWindow(QDialog):
 
     def active_risk_warnings(self):
         warnings = []
-        warning_order = [
-            "risk_rating",
-            "upcoming_earnings",
-            "short_interest",
-            "support_failure_risk",
-            "volatility",
-            "debt_risk",
-            "insider_selling_risk",
-            "overall_risk_score",
+        warning_fields = [
+            (
+                ("earnings_within_7_days", "earnings_soon", "near_term_earnings"),
+                "Earnings within 7 days",
+            ),
+            (
+                ("price_below_200dma", "below_200_dma", "below_ema200"),
+                "Price below 200-day moving average",
+            ),
+            (
+                ("recent_support_break", "support_break", "recent_breakdown"),
+                "Recent support break",
+            ),
+            (
+                ("heavy_insider_selling", "insider_selling_heavy", "heavy_selling"),
+                "Heavy insider selling",
+            ),
+            (
+                (
+                    "price_above_support_10pct",
+                    "more_than_10pct_above_support",
+                    "far_above_support",
+                ),
+                "Current price more than 10% above support",
+            ),
+            (("excessive_debt", "high_debt", "excess_debt_flag"), "Excessive debt"),
         ]
-        risk_items = {key: (title, value, role) for key, title, value, role in self.risk_items()}
-        for key in warning_order:
-            if key not in risk_items:
-                continue
-            title, value, role = risk_items[key]
-            if value == "N/A" or role != "negative":
-                continue
-            warnings.append(f"* {title}: {value}")
+
+        for aliases, message in warning_fields:
+            value = self.first_existing(*[self.risk_value(alias) for alias in aliases])
+            if self.truthy_value(value):
+                warnings.append(f"* {message}")
 
         if not warnings:
-            return ["No active risks highlighted."]
+            return ["No major active risk warnings."]
         return warnings
 
     def header_text(self):
