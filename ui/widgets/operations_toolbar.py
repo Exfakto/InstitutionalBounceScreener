@@ -1,6 +1,8 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
 
+from ui.design_system import DashboardDesignSystem as DesignSystem
+
 
 class OperationsToolbar(QWidget):
     """
@@ -60,7 +62,7 @@ class OperationsToolbar(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(DesignSystem.Spacing.MD)
 
         for group_index, (group_label, actions) in enumerate(self.ACTION_GROUPS):
             if group_index > 0:
@@ -68,7 +70,7 @@ class OperationsToolbar(QWidget):
 
             label = QLabel(group_label)
             label.setObjectName("ToolbarGroupLabel")
-            label.setMinimumHeight(34)
+            label.setMinimumHeight(36)
             layout.addWidget(label)
 
             for key, text, signal_name in actions:
@@ -77,7 +79,7 @@ class OperationsToolbar(QWidget):
                     "variant",
                     "primary" if key in {"run_screener", "refresh_results"} else "secondary",
                 )
-                button.setMinimumHeight(34)
+                button.setMinimumHeight(36)
                 button.setMinimumWidth(118)
                 button.clicked.connect(getattr(self, signal_name).emit)
 

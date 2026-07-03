@@ -3,6 +3,8 @@ from datetime import datetime
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
+from ui.design_system import DashboardDesignSystem as DesignSystem
+
 
 class HeaderBar(QFrame):
     """
@@ -20,21 +22,26 @@ class HeaderBar(QFrame):
         super().__init__(parent)
 
         self.setObjectName("HeaderBar")
-        self.setMaximumHeight(136)
-        self.setMinimumHeight(104)
+        self.setMaximumHeight(140)
+        self.setMinimumHeight(108)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 12, 20, 12)
-        layout.setSpacing(24)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.XL,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.XL,
+            DesignSystem.Spacing.MD,
+        )
+        layout.setSpacing(DesignSystem.Spacing.XXL)
 
         title_layout = QVBoxLayout()
         title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(3)
+        title_layout.setSpacing(DesignSystem.Spacing.XS)
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("HeaderTitle")
         title_font = self.title_label.font()
-        title_font.setPointSize(17)
+        title_font.setPointSize(DesignSystem.Typography.TITLE_PT)
         title_font.setBold(True)
         self.title_label.setFont(title_font)
 
@@ -84,7 +91,7 @@ class HeaderBar(QFrame):
 
         status_layout = QVBoxLayout()
         status_layout.setContentsMargins(0, 0, 0, 0)
-        status_layout.setSpacing(4)
+        status_layout.setSpacing(DesignSystem.Spacing.XS)
         status_layout.addWidget(self.version_label)
         status_layout.addWidget(self.status_label)
         status_layout.addWidget(self.market_status_label)

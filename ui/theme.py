@@ -1,23 +1,26 @@
+from ui.design_system import DashboardDesignSystem as DesignSystem
+
+
 class Theme:
     """
     Central application theme.
     """
 
-    BACKGROUND = "#0F1419"
-    PANEL_BACKGROUND = "#171D24"
-    ELEVATED_PANEL = "#202833"
-    BORDER = "#34404D"
-    MUTED_BORDER = "#26313B"
-    PRIMARY_TEXT = "#F4F7FA"
-    SECONDARY_TEXT = "#B9C4D0"
-    MUTED_TEXT = "#7F8C99"
-    POSITIVE = "#35B779"
-    NEGATIVE = "#E05A5A"
-    WARNING = "#D6A23A"
-    ACCENT = "#5A9BEF"
-    ACCENT_MUTED = "#1E3A56"
-    CARD_BACKGROUND = "#1B232C"
-    HEADER_BACKGROUND = "#151C24"
+    BACKGROUND = DesignSystem.Colors.BACKGROUND
+    PANEL_BACKGROUND = DesignSystem.Colors.PANEL
+    ELEVATED_PANEL = DesignSystem.Colors.ELEVATED
+    BORDER = DesignSystem.Colors.BORDER
+    MUTED_BORDER = DesignSystem.Colors.BORDER_MUTED
+    PRIMARY_TEXT = DesignSystem.Colors.TEXT_PRIMARY
+    SECONDARY_TEXT = DesignSystem.Colors.TEXT_SECONDARY
+    MUTED_TEXT = DesignSystem.Colors.TEXT_MUTED
+    POSITIVE = DesignSystem.Colors.SUCCESS
+    NEGATIVE = DesignSystem.Colors.DANGER
+    WARNING = DesignSystem.Colors.WARNING
+    ACCENT = DesignSystem.Colors.ACCENT
+    ACCENT_MUTED = DesignSystem.Colors.ACCENT_SOFT
+    CARD_BACKGROUND = DesignSystem.Colors.CARD
+    HEADER_BACKGROUND = DesignSystem.Colors.HEADER
 
     SECONDARY = PANEL_BACKGROUND
     SURFACE = CARD_BACKGROUND
@@ -32,21 +35,11 @@ class Theme:
 
     @classmethod
     def card_style(cls):
-        return (
-            f"background-color: {cls.CARD_BACKGROUND};"
-            f"border: 1px solid {cls.BORDER};"
-            "border-radius: 8px;"
-            "padding: 10px;"
-        )
+        return DesignSystem.card_style()
 
     @classmethod
     def section_title_style(cls):
-        return (
-            f"color: {cls.SECONDARY_TEXT};"
-            "font-size: 9pt;"
-            "font-weight: 700;"
-            "letter-spacing: 0px;"
-        )
+        return DesignSystem.section_title_style()
 
     @classmethod
     def muted_label_style(cls):
@@ -70,8 +63,8 @@ class Theme:
             f"color: {foreground};"
             f"background-color: {background};"
             f"border: 1px solid {foreground};"
-            "border-radius: 6px;"
-            "padding: 4px 8px;"
+            f"border-radius: {DesignSystem.Radius.MD}px;"
+            f"padding: {DesignSystem.Spacing.XS}px {DesignSystem.Spacing.SM}px;"
             "font-weight: 700;"
         )
 
@@ -82,16 +75,16 @@ class Theme:
                 f"background-color: {cls.ACCENT};"
                 f"color: {cls.PRIMARY_TEXT};"
                 f"border: 1px solid {cls.ACCENT};"
-                "border-radius: 6px;"
-                "padding: 8px 13px;"
+                f"border-radius: {DesignSystem.Radius.MD}px;"
+                f"padding: {DesignSystem.Spacing.SM}px {DesignSystem.Spacing.LG}px;"
                 "font-weight: 700;"
             )
         return (
             f"background-color: {cls.ELEVATED_PANEL};"
             f"color: {cls.PRIMARY_TEXT};"
             f"border: 1px solid {cls.BORDER};"
-            "border-radius: 6px;"
-            "padding: 8px 12px;"
+            f"border-radius: {DesignSystem.Radius.MD}px;"
+            f"padding: {DesignSystem.Spacing.SM}px {DesignSystem.Spacing.MD}px;"
             "font-weight: 600;"
         )
 
@@ -102,7 +95,7 @@ class Theme:
             f"alternate-background-color: {cls.CARD_BACKGROUND};"
             f"color: {cls.PRIMARY_TEXT};"
             f"border: 1px solid {cls.BORDER};"
-            "border-radius: 8px;"
+            f"border-radius: {DesignSystem.Table.RADIUS}px;"
             "gridline-color: transparent;"
             f"selection-background-color: {cls.ACCENT_MUTED};"
             f"selection-color: {cls.PRIMARY_TEXT};"
@@ -131,7 +124,7 @@ class Theme:
             background-color: {cls.BACKGROUND};
             color: {cls.TEXT};
             font-family: "Segoe UI", Arial, sans-serif;
-            font-size: 10pt;
+            font-size: {DesignSystem.Typography.BASE_PT}pt;
         }}
 
         QWidget#ActivityPanel {{
@@ -151,9 +144,9 @@ class Theme:
             background-color: {cls.ELEVATED_PANEL};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 6px;
-            padding: 8px 13px;
-            min-height: 26px;
+            border-radius: {DesignSystem.Radius.MD}px;
+            padding: {DesignSystem.Spacing.SM}px {DesignSystem.Spacing.LG}px;
+            min-height: 30px;
             font-weight: 600;
         }}
 
@@ -192,14 +185,14 @@ class Theme:
             color: {cls.TEXT};
             gridline-color: transparent;
             border: 1px solid {cls.BORDER};
-            border-radius: 8px;
+            border-radius: {DesignSystem.Table.RADIUS}px;
             selection-background-color: {cls.PRIMARY_SOFT};
             selection-color: {cls.TEXT};
             outline: none;
         }}
 
         QTableWidget::item {{
-            padding: 8px 9px;
+            padding: {DesignSystem.Table.CELL_PADDING_VERTICAL}px {DesignSystem.Table.CELL_PADDING_HORIZONTAL}px;
             border: none;
         }}
 
@@ -223,8 +216,8 @@ class Theme:
             border: none;
             border-right: 1px solid {cls.SOFT_BORDER};
             border-bottom: 1px solid {cls.BORDER};
-            padding: 9px 10px;
-            font-weight: 700;
+            padding: {DesignSystem.Table.HEADER_PADDING_VERTICAL}px {DesignSystem.Table.HEADER_PADDING_HORIZONTAL}px;
+            font-weight: 800;
         }}
 
         QTableCornerButton::section {{
@@ -274,20 +267,20 @@ class Theme:
             background-color: {cls.SECONDARY};
             color: {cls.TEXT};
             border: 1px solid {cls.BORDER};
-            border-radius: 8px;
-            margin-top: 16px;
-            padding-top: 16px;
+            border-radius: {DesignSystem.Radius.LG}px;
+            margin-top: {DesignSystem.Spacing.LG}px;
+            padding-top: {DesignSystem.Spacing.LG}px;
             font-weight: 700;
         }}
 
         QGroupBox::title {{
             subcontrol-origin: margin;
             subcontrol-position: top left;
-            left: 10px;
-            padding: 0 7px;
+            left: {DesignSystem.Spacing.MD}px;
+            padding: 0 {DesignSystem.Spacing.SM}px;
             color: {cls.SECONDARY_TEXT};
             background-color: {cls.SECONDARY};
-            font-size: 9pt;
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
             font-weight: 800;
         }}
 
@@ -300,13 +293,14 @@ class Theme:
         QFrame#HeaderBar {{
             background-color: {cls.HEADER_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 9px;
+            border-radius: {DesignSystem.Radius.XL}px;
         }}
 
         QLabel#HeaderTitle {{
             color: {cls.TEXT};
-            font-size: 18pt;
+            font-size: {DesignSystem.Typography.TITLE_PT}pt;
             font-weight: 800;
+            letter-spacing: 0px;
         }}
 
         QLabel#HeaderSubtitle,
@@ -340,15 +334,17 @@ class Theme:
         }}
 
         QLabel#ToolbarGroupLabel {{
-            font-size: 8pt;
-            font-weight: 700;
+            font-size: {DesignSystem.Typography.CAPTION_PT}pt;
+            font-weight: 800;
             text-transform: uppercase;
-            padding-left: 4px;
-            padding-right: 4px;
+            padding-left: {DesignSystem.Spacing.XS}px;
+            padding-right: {DesignSystem.Spacing.XS}px;
         }}
 
         QWidget#OperationsToolbar {{
             background-color: transparent;
+            padding-top: {DesignSystem.Spacing.XS}px;
+            padding-bottom: {DesignSystem.Spacing.XS}px;
         }}
 
         QFrame#ToolbarSeparator {{
@@ -376,19 +372,19 @@ class Theme:
         QFrame#ResearchPreviewSection {{
             background-color: {cls.CARD_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 8px;
+            border-radius: {DesignSystem.Radius.LG}px;
         }}
 
         QFrame#KpiCard {{
             background-color: {cls.CARD_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 9px;
+            border-radius: {DesignSystem.Radius.LG}px;
         }}
 
         QLabel#KpiTitle {{
             color: {cls.MUTED_TEXT};
-            font-size: 9pt;
-            font-weight: 700;
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
+            font-weight: 800;
         }}
 
         QLabel#KpiValue {{
@@ -475,8 +471,8 @@ class Theme:
             color: {cls.SECONDARY_TEXT};
             background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.MUTED_BORDER};
-            border-radius: 8px;
-            padding: 18px;
+            border-radius: {DesignSystem.Radius.LG}px;
+            padding: {DesignSystem.Spacing.XL}px;
             font-weight: 600;
             line-height: 130%;
         }}
@@ -583,7 +579,7 @@ class Theme:
         QWidget#PriceChartPanel {{
             background-color: {cls.PANEL_BACKGROUND};
             border: 1px solid {cls.BORDER};
-            border-radius: 8px;
+            border-radius: {DesignSystem.Radius.LG}px;
         }}
 
         QScrollBar:vertical {{

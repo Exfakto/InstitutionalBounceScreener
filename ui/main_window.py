@@ -52,6 +52,7 @@ from ui.stock_detail_window import StockDetailWindow
 from ui.export_dialog import ExportDialog
 from ui.settings_dialog import SettingsDialog
 from ui.about_dialog import AboutDialog
+from ui.design_system import DashboardDesignSystem as DesignSystem
 
 
 class MainWindow(QMainWindow):
@@ -148,8 +149,13 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(14, 14, 14, 14)
-        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(
+            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.LG,
+        )
+        main_layout.setSpacing(DesignSystem.Spacing.MD)
 
         ##########################################################
         # Header
@@ -273,8 +279,13 @@ class MainWindow(QMainWindow):
         panel = QFrame()
         panel.setObjectName("ResearchPreviewSection")
         layout = QHBoxLayout(panel)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(18)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.MD,
+        )
+        layout.setSpacing(DesignSystem.Spacing.XL)
 
         self.dashboard_summary_labels = {}
 
@@ -287,7 +298,7 @@ class MainWindow(QMainWindow):
             container = QWidget()
             item_layout = QVBoxLayout(container)
             item_layout.setContentsMargins(0, 0, 0, 0)
-            item_layout.setSpacing(3)
+            item_layout.setSpacing(DesignSystem.Spacing.XS)
 
             label = QLabel(title)
             label.setObjectName("ResearchPreviewFieldLabel")
