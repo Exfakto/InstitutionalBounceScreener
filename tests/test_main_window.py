@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDockWidget
 
 from ui import main_window as main_window_module
@@ -413,6 +414,51 @@ def test_main_window_toolbar_wiring(patched_window):
     assert "load_preset" in window.operations_toolbar.buttons
     assert "reset_filters" in window.operations_toolbar.buttons
     assert "refresh_results" in window.operations_toolbar.buttons
+
+
+def test_main_window_dashboard_results_table_sorting_enabled(patched_window):
+    window = patched_window
+
+    assert window.candidates_table.isSortingEnabled() is True
+
+
+def test_main_window_dashboard_results_table_expected_headers(patched_window):
+    window = patched_window
+    headers = [
+        window.candidates_table.horizontalHeaderItem(column).text()
+        for column in range(window.candidates_table.columnCount())
+    ]
+
+    assert headers == [
+        "Ticker",
+        "Overall (Gen 2)",
+        "Opportunity",
+        "Quality",
+        "Technical",
+        "Institutional",
+        "Risk/Reward",
+        "Confidence",
+        "Support",
+        "Bounce",
+    ]
+    assert len(headers) == len(set(headers))
+
+
+def test_main_window_dashboard_results_table_numeric_sort_values(patched_window):
+    window = patched_window
+    candidates = [
+        FakeScoringController.make_candidate("LOW", "Low Corp", 9.0),
+        FakeScoringController.make_candidate("HIGH", "High Corp", 100.0),
+        FakeScoringController.make_candidate("MID", "Mid Corp", 50.0),
+    ]
+
+    window.candidates_table.populate(candidates)
+    window.candidates_table.sortItems(1, Qt.AscendingOrder)
+
+    assert window.candidates_table.item(0, 0).text() == "LOW"
+    assert window.candidates_table.item(1, 0).text() == "MID"
+    assert window.candidates_table.item(2, 0).text() == "HIGH"
+    assert window.candidates_table.item(2, 1).data(Qt.UserRole) == 100.0
 
 
 def test_main_window_preset_actions_update_status(patched_window):
