@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QTableWidget
 
 from ui.candidate_detail_window import CandidateDetailWindow
 
@@ -665,3 +665,119 @@ def test_candidate_detail_window_set_candidate_refreshes_bounce_values(app):
         "This support zone has held 3 of 4 times with a 75.0% success rate "
         "and an average bounce of 11.5%."
     )
+
+
+def test_candidate_detail_window_detail_values_override_or_supplement_candidate(app):
+    candidate = SimpleNamespace(
+        ticker="MIXED",
+        metrics={
+            "rsi14": 40,
+            "institutional_ownership_pct": 20,
+            "support_tests": 1,
+            "risk_score": 65,
+        },
+    )
+    detail = {
+        "technical": {"rsi14": 63, "market_structure": "Bullish"},
+        "institutional": {"institutional_ownership_pct": 66, "holder_change": 4},
+        "bounce": {
+            "support_test_count": 6,
+            "successful_bounce_count": 5,
+            "bounce_success_rate": 83,
+        },
+        "risk": {
+            "risk_score": 22,
+            "earnings_within_7_days": True,
+        },
+    }
+
+    window = CandidateDetailWindow(candidate, detail=detail)
+
+    assert window.technical_labels["rsi"].text() == "63.0 (Bullish)"
+    assert window.technical_labels["market_structure"].text() == "Bullish"
+    assert window.institutional_labels["ownership"].text() == "66.0%"
+    assert window.institutional_labels["holder_change"].text() == "+4"
+    assert window.bounce_summary_labels["support_tests"].text() == "6"
+    assert window.bounce_summary_labels["successful_bounces"].text() == "5"
+    assert window.bounce_summary_labels["success_pct"].text() == "83.0%"
+    assert window.risk_labels["overall_risk_score"].text() == "22.0"
+    assert window.risk_labels["earnings_within_7_days"].text() == "Yes"
+
+
+def test_candidate_detail_window_set_candidate_refreshes_all_tabs(app):
+    window = CandidateDetailWindow(SimpleNamespace(ticker="OLD"))
+
+    window.set_candidate(
+        SimpleNamespace(
+            ticker="FULL",
+            company_name="Full Candidate Inc.",
+            price=25.5,
+            primary_score_value=72,
+            risk_rating=SimpleNamespace(rating_label="Moderate"),
+            metrics={
+                "trend": "Bullish",
+                "rsi14": 61,
+                "institutional_ownership_pct": 64,
+                "institutional_holders_change": 8,
+                "net_institutional_buying": 3000000,
+                "support_tests": 3,
+                "successful_bounces": 2,
+                "bounce_success_rate": 66,
+                "average_bounce": 8.4,
+                "bounce_history": [
+                    {
+                        "date": "2026-06-20",
+                        "support_price": 24,
+                        "low_price": 23.8,
+                        "peak_price": 26.1,
+                        "bounce_pct": 8.8,
+                        "days_to_peak": 4,
+                        "successful": True,
+                    }
+                ],
+                "overall_risk_score": 44,
+                "recent_support_break": True,
+            },
+        )
+    )
+
+    assert window.summary_labels["ticker"].text() == "FULL"
+    assert window.summary_labels["company_name"].text() == "Full Candidate Inc."
+    assert window.technical_labels["trend"].text() == "Bullish"
+    assert window.technical_labels["rsi"].text() == "61.0 (Bullish)"
+    assert window.institutional_labels["ownership"].text() == "64.0%"
+    assert window.bounce_history_table.rowCount() == 1
+    assert window.risk_labels["risk_rating"].text() == "Moderate"
+    assert window.risk_labels["overall_risk_score"].text() == "44.0"
+    assert [label.text() for label in window.risk_warning_labels] == [
+        "* Recent support break"
+    ]
+
+
+def test_candidate_detail_window_repeated_updates_do_not_duplicate_tabs_or_tables(app):
+    window = CandidateDetailWindow(SimpleNamespace(ticker="START"))
+
+    for index in range(5):
+        window.set_candidate(
+            SimpleNamespace(
+                ticker=f"UPD{index}",
+                metrics={
+                    "support_tests": index + 1,
+                    "bounce_history": [
+                        {
+                            "date": f"2026-06-{index + 1:02d}",
+                            "support_price": 10 + index,
+                            "bounce_pct": 5 + index,
+                            "days_to_peak": index + 1,
+                            "successful": True,
+                        }
+                    ],
+                },
+            )
+        )
+
+    assert window.tabs.count() == 5
+    assert window.layout().count() == 2
+    assert len(window.findChildren(QTableWidget)) == 1
+    assert window.bounce_history_table.rowCount() == 1
+    assert window.bounce_summary_labels["support_tests"].text() == "5"

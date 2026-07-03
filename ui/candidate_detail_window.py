@@ -82,6 +82,7 @@ class CandidateDetailWindow(QDialog):
                 item = old_layout.takeAt(0)
                 widget = item.widget()
                 if widget is not None:
+                    widget.setParent(None)
                     widget.deleteLater()
 
         self.build_ui()
@@ -421,18 +422,18 @@ class CandidateDetailWindow(QDialog):
             return str(value)
 
         if value_type == "price":
-            return f"${number:,.2f}"
+            return self.format_price_value(number)
         if value_type in {"percent", "percent_high_good", "percent_low_good"}:
-            return f"{number:.1f}%"
+            return self.format_percent_value(number)
         if value_type == "integer":
-            return f"{int(number):,}"
+            return self.format_integer_value(number)
         if value_type == "confidence":
-            return f"{number:.1f} / 100"
+            return self.format_score_value(number, suffix=" / 100")
         if value_type == "rsi_status":
-            return f"{number:.1f} ({self.technical_status_text(value, value_type)})"
+            return f"{self.format_score_value(number)} ({self.technical_status_text(value, value_type)})"
         if value_type in {"signed_status", "score_status"}:
-            return f"{number:.1f} ({self.technical_status_text(value, value_type)})"
-        return f"{number:.1f}"
+            return f"{self.format_score_value(number)} ({self.technical_status_text(value, value_type)})"
+        return self.format_score_value(number)
 
     def technical_status_text(self, value, value_type):
         role = self.technical_role(value, value_type)
@@ -828,13 +829,13 @@ class CandidateDetailWindow(QDialog):
         number = self.number_value(value)
 
         if value_type == "percent_high_good":
-            return f"{number:.1f}%" if number is not None else str(value)
+            return self.format_percent_value(number) if number is not None else str(value)
         if value_type == "signed_percent":
             return f"{number:+.1f}%" if number is not None else str(value)
         if value_type == "currency":
             return self.format_currency_value(number, value)
         if value_type == "integer":
-            return f"{int(number):,}" if number is not None else str(value)
+            return self.format_integer_value(number) if number is not None else str(value)
         if value_type == "signed_integer":
             return f"{int(number):+,}" if number is not None else str(value)
         if value_type == "signed_text":
@@ -1257,11 +1258,23 @@ class CandidateDetailWindow(QDialog):
         ]
 
     def bounce_summary_item(self, key, title, aliases, value_type):
-        raw_value = self.first_existing(
-            *[self.bounce_value(alias) for alias in aliases]
-        )
+        raw_value = self.bounce_value_from_aliases(aliases)
         display = self.format_bounce_value(raw_value, value_type)
         return key, title, display, self.bounce_role(raw_value, value_type)
+
+    def bounce_value_from_aliases(self, aliases):
+        bounce = self.detail.get("bounce")
+        if isinstance(bounce, dict):
+            value = self.first_existing(*[bounce.get(alias) for alias in aliases])
+            if value is not None:
+                return value
+
+        metrics = self.metrics()
+        value = self.first_existing(*[metrics.get(alias) for alias in aliases])
+        if value is not None:
+            return value
+
+        return self.first_existing(*[self.candidate_value(alias) for alias in aliases])
 
     def bounce_value(self, key):
         bounce = self.detail.get("bounce")
@@ -1387,16 +1400,16 @@ class CandidateDetailWindow(QDialog):
         if number is None:
             return str(value)
         if value_type == "price":
-            return f"${number:,.2f}"
+            return self.format_price_value(number)
         if value_type == "integer":
-            return f"{int(number):,}"
+            return self.format_integer_value(number)
         if value_type == "integer_high_bad":
-            return f"{int(number):,}"
+            return self.format_integer_value(number)
         if value_type == "confidence":
-            return f"{number:.1f} / 100"
+            return self.format_score_value(number, suffix=" / 100")
         if value_type == "percent_high_good":
-            return f"{number:.1f}%"
-        return f"{number:.1f}"
+            return self.format_percent_value(number)
+        return self.format_score_value(number)
 
     def format_successful_value(self, value):
         if value in (None, ""):
@@ -1434,26 +1447,38 @@ class CandidateDetailWindow(QDialog):
 
     def bounce_interpretation_text(self):
         support_tests = self.first_existing(
-            self.bounce_value("support_tests"),
-            self.bounce_value("support_test_count"),
-            self.bounce_value("bounce_count"),
+            self.bounce_value_from_aliases(
+                ("support_tests", "support_test_count", "bounce_count")
+            ),
         )
         successful_bounces = self.first_existing(
-            self.bounce_value("successful_bounces"),
-            self.bounce_value("successful_bounce_count"),
-            self.bounce_value("successful_support_tests"),
-            self.bounce_value("validated_bounces"),
+            self.bounce_value_from_aliases(
+                (
+                    "successful_bounces",
+                    "successful_bounce_count",
+                    "successful_support_tests",
+                    "validated_bounces",
+                )
+            ),
         )
         success_rate = self.first_existing(
-            self.bounce_value("bounce_success_rate"),
-            self.bounce_value("bounce_success_pct"),
-            self.bounce_value("historical_bounce_success_rate"),
+            self.bounce_value_from_aliases(
+                (
+                    "bounce_success_rate",
+                    "bounce_success_pct",
+                    "historical_bounce_success_rate",
+                )
+            ),
         )
         average_bounce = self.first_existing(
-            self.bounce_value("average_historical_bounce"),
-            self.bounce_value("average_bounce"),
-            self.bounce_value("avg_bounce"),
-            self.bounce_value("average_bounce_pct"),
+            self.bounce_value_from_aliases(
+                (
+                    "average_historical_bounce",
+                    "average_bounce",
+                    "avg_bounce",
+                    "average_bounce_pct",
+                )
+            ),
         )
 
         support_tests_number = self.number_value(support_tests)
@@ -1764,11 +1789,11 @@ class CandidateDetailWindow(QDialog):
             return str(value)
 
         if value_type == "percent_high_bad":
-            return f"{number:.1f}%"
+            return self.format_percent_value(number)
         if value_type == "ratio_high_bad":
             return f"{number:.2f}"
         if value_type == "risk_score":
-            return f"{number:.1f}"
+            return self.format_score_value(number)
         return str(value)
 
     def risk_role(self, value, value_type):
@@ -2098,3 +2123,19 @@ class CandidateDetailWindow(QDialog):
         if value in (None, ""):
             return "N/A"
         return str(value)
+
+    @staticmethod
+    def format_price_value(number):
+        return f"${number:,.2f}"
+
+    @staticmethod
+    def format_percent_value(number):
+        return f"{number:.1f}%"
+
+    @staticmethod
+    def format_score_value(number, suffix=""):
+        return f"{number:.1f}{suffix}"
+
+    @staticmethod
+    def format_integer_value(number):
+        return f"{int(number):,}"
