@@ -19,6 +19,7 @@ def test_main_window_uses_professional_dock_layout():
             "watchlist",
             "activity",
             "portfolio",
+            "results",
         }
         assert all(
             isinstance(dock, QDockWidget)
@@ -30,6 +31,7 @@ def test_main_window_uses_professional_dock_layout():
         assert window.watchlist_dock.windowTitle() == "Watchlist"
         assert window.activity_dock.windowTitle() == "Activity"
         assert window.portfolio_dock.windowTitle() == "Portfolio"
+        assert window.results_dock.windowTitle() == "Results"
 
         assert window.chart_dock.widget() is window.price_chart
         assert window.research_dock.widget() is window.research_preview
@@ -37,6 +39,7 @@ def test_main_window_uses_professional_dock_layout():
         assert window.watchlist_dock.widget() is window.watchlist_panel
         assert window.activity_dock.widget() is window.activity_panel
         assert window.portfolio_dock.widget() is window.performance_dashboard
+        assert window.results_dock.widget() is window.screening_results_panel
     finally:
         window.close()
 

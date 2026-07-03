@@ -45,6 +45,7 @@ from ui.widgets.header_bar import HeaderBar
 from ui.widgets.pipeline_progress_panel import PipelineProgressPanel
 from ui.widgets.price_chart import PriceChart
 from ui.widgets.research_preview import ResearchPreview
+from ui.widgets.screening_results_panel import ScreeningResultsPanel
 from ui.widgets.trade_card import TradeCard
 from ui.widgets.watchlist_panel import WatchlistPanel
 from ui.widgets.trade_journal_panel import TradeJournalPanel
@@ -251,6 +252,13 @@ class MainWindow(QMainWindow):
         )
         self.trade_journal_panel.refresh_requested.connect(self.refresh_trade_journal)
         self.performance_dashboard = PerformanceDashboard()
+        self.screening_results_panel = ScreeningResultsPanel()
+        self.screening_results_panel.refresh_ranked_candidates_requested.connect(
+            self.refresh_ranked_candidates_view
+        )
+        self.screening_results_panel.refresh_run_history_requested.connect(
+            self.refresh_screening_run_history_view
+        )
         self.activity_panel = ActivityPanel()
 
         self.screener_filters_panel = self.build_screener_filters_panel()
@@ -283,6 +291,8 @@ class MainWindow(QMainWindow):
         self.refresh_dashboard()
         self.refresh_watchlist()
         self.refresh_trade_journal()
+        self.refresh_ranked_candidates_view()
+        self.refresh_screening_run_history_view()
 
     # ----------------------------------------------------------
 
@@ -410,6 +420,7 @@ class MainWindow(QMainWindow):
             "watchlist": self.create_dock("Watchlist", self.watchlist_panel),
             "activity": self.create_dock("Activity", self.activity_panel),
             "portfolio": self.create_dock("Portfolio", self.performance_dashboard),
+            "results": self.create_dock("Results", self.screening_results_panel),
         }
 
         self.chart_dock = self.workspace_docks["chart"]
@@ -418,6 +429,7 @@ class MainWindow(QMainWindow):
         self.watchlist_dock = self.workspace_docks["watchlist"]
         self.activity_dock = self.workspace_docks["activity"]
         self.portfolio_dock = self.workspace_docks["portfolio"]
+        self.results_dock = self.workspace_docks["results"]
 
     # ----------------------------------------------------------
 
@@ -449,6 +461,7 @@ class MainWindow(QMainWindow):
                 "watchlist": True,
                 "activity": True,
                 "portfolio": True,
+                "results": True,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
@@ -458,6 +471,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.watchlist_dock)
         self.splitDockWidget(self.watchlist_dock, self.activity_dock, Qt.Horizontal)
         self.tabifyDockWidget(self.activity_dock, self.portfolio_dock)
+        self.tabifyDockWidget(self.portfolio_dock, self.results_dock)
         self.activity_dock.raise_()
 
         self.resizeDocks(
@@ -493,6 +507,7 @@ class MainWindow(QMainWindow):
                 "watchlist": True,
                 "activity": True,
                 "portfolio": False,
+                "results": True,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.research_dock)
@@ -527,6 +542,7 @@ class MainWindow(QMainWindow):
                 "watchlist": True,
                 "activity": False,
                 "portfolio": True,
+                "results": True,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
@@ -534,6 +550,7 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self.research_dock, self.trade_card_dock, Qt.Vertical)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.watchlist_dock)
         self.tabifyDockWidget(self.watchlist_dock, self.portfolio_dock)
+        self.tabifyDockWidget(self.portfolio_dock, self.results_dock)
         self.chart_dock.raise_()
         self.screener_workspace_splitter.setSizes([260, 1140])
         self.resizeDocks(
@@ -562,6 +579,7 @@ class MainWindow(QMainWindow):
                 "watchlist": False,
                 "activity": False,
                 "portfolio": False,
+                "results": False,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
@@ -1885,6 +1903,61 @@ class MainWindow(QMainWindow):
             self.trade_journal_panel.refresh_trades(result.get("trades") or [])
         else:
             self.trade_journal_panel.clear()
+
+    # ----------------------------------------------------------
+
+    def screening_repository(self):
+
+        explicit = getattr(self, "_screening_repository", None)
+        if explicit is not None:
+            return explicit
+
+        market_service = getattr(self.controller, "market", None)
+        return getattr(market_service, "db", None)
+
+    # ----------------------------------------------------------
+
+    def refresh_ranked_candidates_view(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return []
+
+        repository = self.screening_repository()
+        candidates = []
+
+        try:
+            if repository is not None and hasattr(
+                repository,
+                "fetch_latest_ranked_candidates",
+            ):
+                candidates = repository.fetch_latest_ranked_candidates() or []
+        except Exception:
+            candidates = []
+
+        self.screening_results_panel.populate_ranked_candidates(candidates)
+        return candidates
+
+    # ----------------------------------------------------------
+
+    def refresh_screening_run_history_view(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return []
+
+        repository = self.screening_repository()
+        runs = []
+
+        try:
+            if repository is not None and hasattr(
+                repository,
+                "fetch_screening_run_history",
+            ):
+                runs = repository.fetch_screening_run_history() or []
+        except Exception:
+            runs = []
+
+        self.screening_results_panel.populate_run_history(runs)
+        return runs
 
     # ----------------------------------------------------------
 

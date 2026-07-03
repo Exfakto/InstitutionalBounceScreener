@@ -196,6 +196,22 @@ class FakeWorkspaceStateService:
         return state
 
 
+class FakeScreeningRepository:
+    def __init__(self):
+        self.ranked_candidates = []
+        self.run_history = []
+        self.ranked_calls = 0
+        self.history_calls = 0
+
+    def fetch_latest_ranked_candidates(self):
+        self.ranked_calls += 1
+        return list(self.ranked_candidates)
+
+    def fetch_screening_run_history(self, limit=25):
+        self.history_calls += 1
+        return list(self.run_history)[:limit]
+
+
 @pytest.fixture
 def patched_window(monkeypatch, app):
     monkeypatch.setattr(main_window_module, "MarketController", FakeMarketController)
@@ -222,6 +238,7 @@ def test_professional_screener_workspace_creation(patched_window):
 
     assert window.dashboard is not None
     assert window.dashboard_controller is not None
+    assert window.screening_results_panel is not None
     assert window.pipeline_progress_panel is not None
     assert window.dashboard.activity_feed_table is not None
     assert window.dashboard.activity_count() >= 1
@@ -443,6 +460,7 @@ def test_main_window_creates_dock_widgets(patched_window):
         "watchlist",
         "activity",
         "portfolio",
+        "results",
     }
     assert all(isinstance(dock, QDockWidget) for dock in window.workspace_docks.values())
     assert window.chart_dock.windowTitle() == "Chart"
@@ -451,6 +469,7 @@ def test_main_window_creates_dock_widgets(patched_window):
     assert window.watchlist_dock.windowTitle() == "Watchlist"
     assert window.activity_dock.windowTitle() == "Activity"
     assert window.portfolio_dock.windowTitle() == "Portfolio"
+    assert window.results_dock.windowTitle() == "Results"
 
 
 def test_main_window_embeds_existing_widgets_in_docks(patched_window):
@@ -462,6 +481,7 @@ def test_main_window_embeds_existing_widgets_in_docks(patched_window):
     assert window.watchlist_dock.widget() is window.watchlist_panel
     assert window.activity_dock.widget() is window.activity_panel
     assert window.portfolio_dock.widget() is window.performance_dashboard
+    assert window.results_dock.widget() is window.screening_results_panel
 
 
 def test_main_window_toolbar_wiring(patched_window):
@@ -729,6 +749,149 @@ def test_main_window_dashboard_empty_market_universe_shows_empty_message(patched
     assert window.dashboard.best_opportunities_table.rowCount() == 0
     assert window.dashboard_status_label.text() == "No results available"
     assert window.dashboard_status_label.isHidden() is False
+
+
+def test_main_window_screening_results_view_construction(patched_window):
+    window = patched_window
+    panel = window.screening_results_panel
+
+    ranked_headers = [
+        panel.ranked_candidates_table.horizontalHeaderItem(column).text()
+        for column in range(panel.ranked_candidates_table.columnCount())
+    ]
+    history_headers = [
+        panel.run_history_table.horizontalHeaderItem(column).text()
+        for column in range(panel.run_history_table.columnCount())
+    ]
+
+    assert ranked_headers == [
+        "Rank",
+        "Ticker",
+        "Final Score",
+        "Grade",
+        "Confidence",
+        "Setup",
+        "Warnings",
+        "Rejections",
+    ]
+    assert history_headers == [
+        "Run ID",
+        "Status",
+        "Started",
+        "Completed",
+        "Requested",
+        "Processed",
+        "Candidates",
+    ]
+    assert window.results_dock.widget() is panel
+
+
+def test_main_window_loads_ranked_candidates_view(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=1,
+            ticker="AAPL",
+            final_score=91.25,
+            grade="A+",
+            confidence_level="HIGH",
+            setup_label="Elite Institutional Bounce",
+            warnings=["Minor"],
+            rejection_reasons=[],
+        )
+    ]
+    window._screening_repository = repository
+
+    rows = window.refresh_ranked_candidates_view()
+    table = window.screening_results_panel.ranked_candidates_table
+
+    assert rows == repository.ranked_candidates
+    assert table.rowCount() == 1
+    assert table.item(0, 0).text() == "1"
+    assert table.item(0, 1).text() == "AAPL"
+    assert table.item(0, 2).text() == "91.25"
+    assert table.item(0, 6).text() == "1"
+    assert window.screening_results_panel.ranked_empty_label.isHidden() is True
+
+
+def test_main_window_loads_screening_run_history_view(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.run_history = [
+        {
+            "run_id": "run-1",
+            "status": "COMPLETED",
+            "started_at": "2026-07-03T10:00:00+00:00",
+            "completed_at": "2026-07-03T10:01:00+00:00",
+            "tickers_requested": 25,
+            "tickers_processed": 25,
+            "candidate_count": 4,
+        }
+    ]
+    window._screening_repository = repository
+
+    rows = window.refresh_screening_run_history_view()
+    table = window.screening_results_panel.run_history_table
+
+    assert rows == repository.run_history
+    assert table.rowCount() == 1
+    assert table.item(0, 0).text() == "run-1"
+    assert table.item(0, 1).text() == "COMPLETED"
+    assert table.item(0, 4).text() == "25"
+    assert table.item(0, 6).text() == "4"
+    assert window.screening_results_panel.run_history_empty_label.isHidden() is True
+
+
+def test_main_window_screening_results_refresh_buttons(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    repository.ranked_candidates = [
+        SimpleNamespace(
+            rank=1,
+            ticker="MSFT",
+            final_score=82.0,
+            grade="A",
+            confidence_level="HIGH",
+            setup_label="High-Quality Bounce",
+            warnings=[],
+            rejection_reasons=[],
+        )
+    ]
+    repository.run_history = [
+        {
+            "run_id": "run-refresh",
+            "status": "COMPLETED",
+            "tickers_requested": 1,
+            "tickers_processed": 1,
+            "candidate_count": 1,
+        }
+    ]
+    window._screening_repository = repository
+
+    window.screening_results_panel.refresh_ranked_candidates_requested.emit()
+    window.screening_results_panel.refresh_run_history_requested.emit()
+
+    assert repository.ranked_calls == 1
+    assert repository.history_calls == 1
+    assert window.screening_results_panel.ranked_candidates_table.item(0, 1).text() == "MSFT"
+    assert window.screening_results_panel.run_history_table.item(0, 0).text() == "run-refresh"
+
+
+def test_main_window_screening_results_empty_states(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    window._screening_repository = repository
+
+    window.refresh_ranked_candidates_view()
+    window.refresh_screening_run_history_view()
+
+    assert window.screening_results_panel.ranked_candidates_table.isHidden() is True
+    assert window.screening_results_panel.ranked_empty_label.text() == "No ranked candidates available"
+    assert window.screening_results_panel.ranked_empty_label.isHidden() is False
+    assert window.screening_results_panel.run_history_table.isHidden() is True
+    assert window.screening_results_panel.run_history_empty_label.text() == "No screening runs available"
+    assert window.screening_results_panel.run_history_empty_label.isHidden() is False
 
 
 def test_main_window_dashboard_refresh_clears_old_rows_before_loading_new_rows(patched_window):
