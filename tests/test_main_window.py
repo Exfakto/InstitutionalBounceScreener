@@ -207,17 +207,26 @@ class FakeScreeningRepository:
         self.history_calls = 0
         self.run_candidate_calls = []
 
-    def fetch_latest_ranked_candidates(self):
+    def fetch_latest_ranked_candidates(self, limit=None, offset=0):
         self.ranked_calls += 1
-        return list(self.ranked_candidates)
+        return self.page(self.ranked_candidates, limit, offset)
 
-    def fetch_screening_run_history(self, limit=25):
+    def fetch_screening_run_history(self, limit=25, offset=0):
         self.history_calls += 1
-        return list(self.run_history)[:limit]
+        return self.page(self.run_history, limit, offset)
 
-    def fetch_ranked_candidates(self, run_id):
+    def fetch_ranked_candidates(self, run_id, limit=None, offset=0):
         self.run_candidate_calls.append(run_id)
-        return list(self.ranked_by_run.get(run_id, []))
+        return self.page(self.ranked_by_run.get(run_id, []), limit, offset)
+
+    def count_ranked_candidates(self, run_id):
+        return len(self.ranked_by_run.get(run_id, []))
+
+    def count_latest_ranked_candidates(self):
+        return len(self.ranked_candidates)
+
+    def count_screening_runs(self):
+        return len(self.run_history)
 
     def fetch_screening_run(self, run_id):
         if run_id in self.runs_by_id:
@@ -232,6 +241,13 @@ class FakeScreeningRepository:
         if self.latest_run is not None:
             return self.latest_run
         return self.run_history[0] if self.run_history else None
+
+    @staticmethod
+    def page(rows, limit=None, offset=0):
+        rows = list(rows or [])
+        if limit is None:
+            return rows
+        return rows[offset:offset + limit]
 
 
 class FakeResultsExportService:
@@ -976,6 +992,66 @@ def test_main_window_screening_results_refresh_buttons(patched_window):
     assert window.screening_results_panel.run_history_table.item(0, 0).text() == "run-refresh"
 
 
+def test_main_window_ranked_candidates_load_incrementally(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    window.RESULTS_PAGE_SIZE = 2
+    repository.ranked_candidates = [
+        SimpleNamespace(rank=1, ticker="AAA", final_score=95),
+        SimpleNamespace(rank=2, ticker="BBB", final_score=90),
+        SimpleNamespace(rank=3, ticker="CCC", final_score=85),
+    ]
+    window._screening_repository = repository
+
+    first_page = window.refresh_ranked_candidates_view()
+    table = window.screening_results_panel.ranked_candidates_table
+
+    assert [item.ticker for item in first_page] == ["AAA", "BBB"]
+    assert table.rowCount() == 2
+    assert window.screening_results_panel.ranked_count_label.text() == "Loaded 2 of 3"
+    assert window.screening_results_panel.ranked_load_more_button.isEnabled() is True
+
+    window.screening_results_panel.ranked_load_more_button.click()
+
+    assert table.rowCount() == 3
+    assert {
+        table.item(row, 1).text()
+        for row in range(table.rowCount())
+    } == {"AAA", "BBB", "CCC"}
+    assert window.screening_results_panel.ranked_count_label.text() == "Loaded 3 of 3"
+    assert window.screening_results_panel.ranked_load_more_button.isEnabled() is False
+
+
+def test_main_window_run_history_loads_incrementally(patched_window):
+    window = patched_window
+    repository = FakeScreeningRepository()
+    window.RUN_HISTORY_PAGE_SIZE = 2
+    repository.run_history = [
+        {"run_id": "run-1", "status": "COMPLETED"},
+        {"run_id": "run-2", "status": "COMPLETED"},
+        {"run_id": "run-3", "status": "PARTIAL"},
+    ]
+    window._screening_repository = repository
+
+    first_page = window.refresh_screening_run_history_view()
+    table = window.screening_results_panel.run_history_table
+
+    assert [row["run_id"] for row in first_page] == ["run-1", "run-2"]
+    assert table.rowCount() == 2
+    assert window.screening_results_panel.run_history_count_label.text() == "Loaded 2 of 3"
+    assert window.screening_results_panel.run_history_load_more_button.isEnabled() is True
+
+    window.screening_results_panel.run_history_load_more_button.click()
+
+    assert table.rowCount() == 3
+    assert {
+        table.item(row, 0).text()
+        for row in range(table.rowCount())
+    } == {"run-1", "run-2", "run-3"}
+    assert window.screening_results_panel.run_history_count_label.text() == "Loaded 3 of 3"
+    assert window.screening_results_panel.run_history_load_more_button.isEnabled() is False
+
+
 def test_main_window_screening_results_empty_states(patched_window):
     window = patched_window
     repository = FakeScreeningRepository()
@@ -992,6 +1068,8 @@ def test_main_window_screening_results_empty_states(patched_window):
     assert window.screening_results_panel.run_history_empty_label.isHidden() is False
     assert window.screening_results_panel.export_candidates_csv_button.isEnabled() is False
     assert window.screening_results_panel.export_status_label.text() == "No exportable results"
+    assert window.screening_results_panel.ranked_count_label.text() == "Loaded 0 of 0"
+    assert window.screening_results_panel.run_history_count_label.text() == "Loaded 0 of 0"
 
 
 def test_main_window_selected_run_export_uses_selected_candidates(patched_window):

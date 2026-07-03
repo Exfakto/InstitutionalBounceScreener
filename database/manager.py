@@ -1179,12 +1179,13 @@ class DatabaseManager:
 
         return len(rows)
 
-    def fetch_ranked_candidates(self, run_id):
+    def fetch_ranked_candidates(self, run_id, limit=None, offset=0):
         if run_id in (None, ""):
             return []
 
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
         self.cursor.execute(
-            """
+            f"""
             SELECT
                 ticker,
                 rank,
@@ -1204,13 +1205,14 @@ class DatabaseManager:
                 rank ASC,
                 final_score DESC,
                 ticker ASC
+            {paging_sql}
             """,
-            (str(run_id),),
+            (str(run_id), *paging_values),
         )
 
         return [self._row_to_ranked_candidate(row) for row in self.cursor.fetchall()]
 
-    def fetch_latest_ranked_candidates(self):
+    def fetch_latest_ranked_candidates(self, limit=None, offset=0):
         self.cursor.execute(
             """
             SELECT run_id
@@ -1222,7 +1224,33 @@ class DatabaseManager:
         row = self.cursor.fetchone()
         if row is None:
             return []
-        return self.fetch_ranked_candidates(row["run_id"])
+        return self.fetch_ranked_candidates(row["run_id"], limit=limit, offset=offset)
+
+    def count_ranked_candidates(self, run_id):
+        if run_id in (None, ""):
+            return 0
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM ranked_candidates
+            WHERE run_id = ?
+            """,
+            (str(run_id),),
+        )
+        return self.cursor.fetchone()[0]
+
+    def count_latest_ranked_candidates(self):
+        self.cursor.execute(
+            """
+            SELECT run_id
+            FROM ranked_candidates
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """
+        )
+        row = self.cursor.fetchone()
+        return 0 if row is None else self.count_ranked_candidates(row["run_id"])
 
     def clear_ranked_candidates(self, run_id):
         if run_id in (None, ""):
@@ -1383,9 +1411,10 @@ class DatabaseManager:
         )
         return self._row_to_screening_run(self.cursor.fetchone())
 
-    def fetch_screening_run_history(self, limit=25):
+    def fetch_screening_run_history(self, limit=25, offset=0):
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
         self.cursor.execute(
-            """
+            f"""
             SELECT
                 run_id,
                 status,
@@ -1398,11 +1427,28 @@ class DatabaseManager:
                 errors_json
             FROM screening_runs
             ORDER BY COALESCE(completed_at, started_at) DESC, rowid DESC
-            LIMIT ?
+            {paging_sql}
             """,
-            (self._sqlite_int(limit) or 25,),
+            tuple(paging_values),
         )
         return [self._row_to_screening_run(row) for row in self.cursor.fetchall()]
+
+    def count_screening_runs(self):
+        self.cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM screening_runs
+            """
+        )
+        return self.cursor.fetchone()[0]
+
+    @staticmethod
+    def _limit_offset_clause(limit=None, offset=0):
+        if limit is None:
+            return "", []
+        safe_limit = max(0, int(limit or 0))
+        safe_offset = max(0, int(offset or 0))
+        return "LIMIT ? OFFSET ?", [safe_limit, safe_offset]
 
     # ==========================================================
     # Earnings

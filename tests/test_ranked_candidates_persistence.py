@@ -162,3 +162,37 @@ def test_json_explanation_warning_and_rejection_persistence():
         "Low confidence candidates are rejected",
     ]
     manager.close()
+
+
+def test_fetch_ranked_candidates_supports_limit_and_offset():
+    manager = build_manager()
+    manager.save_ranked_candidates(
+        "paged-run",
+        [
+            ranked("AAA", 1, 95),
+            ranked("BBB", 2, 90),
+            ranked("CCC", 3, 85),
+            ranked("DDD", 4, 80),
+        ],
+    )
+
+    page = manager.fetch_ranked_candidates("paged-run", limit=2, offset=1)
+
+    assert [item.ticker for item in page] == ["BBB", "CCC"]
+    assert manager.count_ranked_candidates("paged-run") == 4
+    manager.close()
+
+
+def test_fetch_latest_ranked_candidates_supports_pagination():
+    manager = build_manager()
+    manager.save_ranked_candidates("old-run", [ranked("OLD", 1, 70)])
+    manager.save_ranked_candidates(
+        "latest-paged-run",
+        [ranked("AAA", 1, 95), ranked("BBB", 2, 90), ranked("CCC", 3, 85)],
+    )
+
+    page = manager.fetch_latest_ranked_candidates(limit=1, offset=1)
+
+    assert [item.ticker for item in page] == ["BBB"]
+    assert manager.count_latest_ranked_candidates() == 3
+    manager.close()

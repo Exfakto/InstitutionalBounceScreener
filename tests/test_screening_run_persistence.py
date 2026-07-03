@@ -116,3 +116,25 @@ def test_screening_run_cancelled_statuses_persist():
     assert manager.fetch_screening_run("cancelled")["status"] == "CANCELLED"
     assert manager.fetch_screening_run("partial-cancelled")["status"] == "PARTIAL_CANCELLED"
     manager.close()
+
+
+def test_fetch_screening_run_history_supports_limit_and_offset():
+    manager = build_manager()
+
+    for index in range(5):
+        run_id = f"paged-run-{index}"
+        manager.create_screening_run(
+            run_id,
+            started_at=f"2026-07-03T10:0{index}:00+00:00",
+        )
+        manager.update_screening_run(
+            run_id,
+            status="COMPLETED",
+            completed_at=f"2026-07-03T10:0{index}:30+00:00",
+        )
+
+    page = manager.fetch_screening_run_history(limit=2, offset=1)
+
+    assert [row["run_id"] for row in page] == ["paged-run-3", "paged-run-2"]
+    assert manager.count_screening_runs() == 5
+    manager.close()

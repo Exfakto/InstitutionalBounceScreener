@@ -31,6 +31,8 @@ class ScreeningResultsPanel(QWidget):
     export_candidates_csv_requested = Signal()
     export_candidates_json_requested = Signal()
     export_full_run_package_requested = Signal()
+    load_more_ranked_candidates_requested = Signal()
+    load_more_run_history_requested = Signal()
 
     RANKED_HEADERS = [
         "Rank",
@@ -78,6 +80,7 @@ class ScreeningResultsPanel(QWidget):
                 "No ranked candidates available",
                 self.RANKED_HEADERS,
                 self.refresh_ranked_candidates_requested,
+                self.load_more_ranked_candidates_requested,
             )
         )
         history_section, self.run_history_table, self.run_history_empty_label = (
@@ -86,6 +89,7 @@ class ScreeningResultsPanel(QWidget):
                 "No screening runs available",
                 self.HISTORY_HEADERS,
                 self.refresh_run_history_requested,
+                self.load_more_run_history_requested,
             )
         )
 
@@ -256,7 +260,7 @@ class ScreeningResultsPanel(QWidget):
     def set_export_status(self, status_text):
         self.export_status_label.setText(status_text or "")
 
-    def build_table_section(self, title, empty_text, headers, signal):
+    def build_table_section(self, title, empty_text, headers, signal, load_more_signal):
         section = QFrame()
         section.setObjectName("ResearchPreviewSection")
         section.setStyleSheet(DesignSystem.card_style())
@@ -275,8 +279,15 @@ class ScreeningResultsPanel(QWidget):
         refresh_button = QPushButton("Refresh")
         refresh_button.setObjectName("SecondaryButton")
         refresh_button.clicked.connect(signal.emit)
+        count_label = QLabel("Loaded 0")
+        count_label.setObjectName("ResearchPreviewFieldValue")
+        load_more_button = QPushButton("Load More")
+        load_more_button.setObjectName("SecondaryButton")
+        load_more_button.clicked.connect(load_more_signal.emit)
         header.addWidget(label)
         header.addStretch()
+        header.addWidget(count_label)
+        header.addWidget(load_more_button)
         header.addWidget(refresh_button)
         layout.addLayout(header)
 
@@ -297,6 +308,13 @@ class ScreeningResultsPanel(QWidget):
         empty_label.setObjectName("EmptyStateLabel")
         empty_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(empty_label)
+
+        if title == "Ranked Candidates":
+            self.ranked_count_label = count_label
+            self.ranked_load_more_button = load_more_button
+        else:
+            self.run_history_count_label = count_label
+            self.run_history_load_more_button = load_more_button
 
         return section, table, empty_label
 
@@ -410,8 +428,12 @@ class ScreeningResultsPanel(QWidget):
         self.candidate_detail_content.hide()
         return section
 
-    def populate_ranked_candidates(self, candidates):
-        self.current_candidates = list(candidates or [])
+    def populate_ranked_candidates(self, candidates, total_count=None, append=False):
+        self.current_candidates = (
+            [*self.current_candidates, *(candidates or [])]
+            if append
+            else list(candidates or [])
+        )
         if not candidates:
             self.ranked_empty_label.setText("No ranked candidates available")
         self.populate_table(
@@ -427,7 +449,7 @@ class ScreeningResultsPanel(QWidget):
                     len(self.value(candidate, "warnings") or []),
                     len(self.value(candidate, "rejection_reasons") or []),
                 ]
-                for candidate in (candidates or [])
+                for candidate in self.current_candidates
             ],
             numeric_columns={0, 2, 6, 7},
             source_rows=self.current_candidates,
@@ -435,12 +457,22 @@ class ScreeningResultsPanel(QWidget):
         self.set_empty_state(
             self.ranked_candidates_table,
             self.ranked_empty_label,
-            not candidates,
+            not self.current_candidates,
+        )
+        self.update_loaded_count(
+            self.ranked_count_label,
+            self.ranked_load_more_button,
+            len(self.current_candidates),
+            total_count,
         )
         self.clear_candidate_detail()
 
-    def populate_run_history(self, runs):
-        self.current_runs = list(runs or [])
+    def populate_run_history(self, runs, total_count=None, append=False):
+        self.current_runs = (
+            [*self.current_runs, *(runs or [])]
+            if append
+            else list(runs or [])
+        )
         self.populate_table(
             self.run_history_table,
             [
@@ -453,7 +485,7 @@ class ScreeningResultsPanel(QWidget):
                     self.value(run, "tickers_processed"),
                     self.value(run, "candidate_count"),
                 ]
-                for run in (runs or [])
+                for run in self.current_runs
             ],
             numeric_columns={4, 5, 6},
             source_rows=self.current_runs,
@@ -461,10 +493,22 @@ class ScreeningResultsPanel(QWidget):
         self.set_empty_state(
             self.run_history_table,
             self.run_history_empty_label,
-            not runs,
+            not self.current_runs,
         )
-        if not runs:
+        self.update_loaded_count(
+            self.run_history_count_label,
+            self.run_history_load_more_button,
+            len(self.current_runs),
+            total_count,
+        )
+        if not self.current_runs:
             self.clear_run_detail()
+
+    @staticmethod
+    def update_loaded_count(label, button, loaded_count, total_count=None):
+        total = total_count if total_count is not None else loaded_count
+        label.setText(f"Loaded {loaded_count} of {total}")
+        button.setEnabled(total_count is None and loaded_count > 0 or loaded_count < total)
 
     def show_ranked_empty_message(self, message):
         self.ranked_empty_label.setText(message)

@@ -21,8 +21,10 @@ class FakePriceProvider:
         self.rows = rows or [
             {"date": "2026-01-01", "open": 10, "high": 11, "low": 9, "close": 10, "volume": 1000}
         ]
+        self.calls = []
 
     def get_price_history(self, ticker):
+        self.calls.append(ticker)
         return list(self.rows)
 
 
@@ -30,8 +32,10 @@ class FakeSupportEngine:
     def __init__(self, fail_tickers=None, warnings=None):
         self.fail_tickers = set(fail_tickers or [])
         self.warnings = warnings or {}
+        self.calls = []
 
     def detect_support_zones(self, ticker, prices):
+        self.calls.append(ticker)
         if ticker in self.fail_tickers:
             raise RuntimeError("support failed")
         zone = SimpleNamespace(ticker=ticker, support_strength_score=85, confidence_score=85)
@@ -46,8 +50,10 @@ class FakeSupportEngine:
 class FakeBounceEngine:
     def __init__(self, warnings=None):
         self.warnings = warnings or {}
+        self.calls = []
 
     def analyze_bounces(self, ticker, prices, zones):
+        self.calls.append(ticker)
         return [
             SimpleNamespace(
                 ticker=ticker,
@@ -64,8 +70,10 @@ class FakeBounceEngine:
 class FakeTechnicalEngine:
     def __init__(self, warnings=None):
         self.warnings = warnings or {}
+        self.calls = []
 
     def calculate(self, prices, ticker=None):
+        self.calls.append(ticker)
         return SimpleNamespace(
             ticker=ticker,
             close=100,
@@ -82,8 +90,10 @@ class FakeTechnicalEngine:
 class FakeInstitutionalEngine:
     def __init__(self, warnings=None):
         self.warnings = warnings or {}
+        self.calls = []
 
     def score_ticker(self, ticker):
+        self.calls.append(ticker)
         score_result = SimpleNamespace(
             overall_institutional_strength_score=88,
             warnings=[],
@@ -99,8 +109,10 @@ class FakeCompositeEngine:
     def __init__(self, scores=None, warnings=None):
         self.scores = scores or {}
         self.warnings = warnings or {}
+        self.calls = []
 
     def score(self, ticker=None, support=None, bounce=None, technical=None, institutional=None):
+        self.calls.append(ticker)
         final_score = self.scores.get(ticker, 90)
         return BounceCompositeScoreResult(
             ticker=ticker,
@@ -334,4 +346,61 @@ def test_screening_orchestrator_cancel_before_processing_persists_cancelled():
     assert result.status == "CANCELLED"
     assert result.tickers_processed == 0
     assert run["status"] == "CANCELLED"
+    manager.close()
+
+
+def test_screening_orchestrator_batch_processing_emits_batch_progress():
+    manager = build_manager()
+    progress_events = []
+    orchestrator = build_orchestrator(
+        manager,
+        composite_engine=FakeCompositeEngine(
+            {"AAA": 92, "BBB": 90, "CCC": 88, "DDD": 86, "EEE": 84}
+        ),
+    )
+
+    result = orchestrator.run(
+        ["AAA", "BBB", "CCC", "DDD", "EEE"],
+        run_id="batch-run",
+        batch_size=2,
+        progress_callback=progress_events.append,
+    )
+
+    batch_events = [event for event in progress_events if "batch_index" in event]
+    assert result.tickers_processed == 5
+    assert [event["batch_index"] for event in batch_events if event["status_message"].startswith("Starting")] == [1, 2, 3]
+    assert batch_events[0]["batch_count"] == 3
+    assert batch_events[0]["batch_size"] == 2
+    assert batch_events[-1]["status_message"] == "Completed batch 3 of 3"
+    manager.close()
+
+
+def test_screening_orchestrator_duplicate_ticker_caching_avoids_recomputation():
+    manager = build_manager()
+    price_provider = FakePriceProvider()
+    support_engine = FakeSupportEngine()
+    bounce_engine = FakeBounceEngine()
+    technical_engine = FakeTechnicalEngine()
+    institutional_engine = FakeInstitutionalEngine()
+    composite_engine = FakeCompositeEngine({"AAA": 92})
+    orchestrator = build_orchestrator(
+        manager,
+        price_history_provider=price_provider,
+        support_engine=support_engine,
+        bounce_engine=bounce_engine,
+        technical_engine=technical_engine,
+        institutional_engine=institutional_engine,
+        composite_engine=composite_engine,
+    )
+
+    result = orchestrator.run(["aaa", "AAA", " aaa "], run_id="dedupe-run", batch_size=1)
+
+    assert result.tickers_requested == 1
+    assert result.tickers_processed == 1
+    assert price_provider.calls == ["AAA"]
+    assert support_engine.calls == ["AAA"]
+    assert bounce_engine.calls == ["AAA"]
+    assert technical_engine.calls == ["AAA"]
+    assert institutional_engine.calls == ["AAA"]
+    assert composite_engine.calls == ["AAA"]
     manager.close()

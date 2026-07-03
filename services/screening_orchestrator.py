@@ -45,6 +45,7 @@ class ScreeningOrchestrator:
         composite_engine=None,
         pipeline_adapter=None,
         repository=None,
+        batch_size=50,
     ):
         self.price_history_provider = price_history_provider
         self.support_engine = support_engine or SupportZoneEngine()
@@ -56,6 +57,7 @@ class ScreeningOrchestrator:
         if self.pipeline_adapter is None and repository is not None:
             self.pipeline_adapter = CandidatePipelineAdapter(repository)
         self.repository = repository or getattr(self.pipeline_adapter, "repository", None)
+        self.batch_size = max(1, int(batch_size or 50))
 
     def run(
         self,
@@ -65,6 +67,7 @@ class ScreeningOrchestrator:
         allow_low_confidence=False,
         progress_callback=None,
         cancellation_callback=None,
+        batch_size=None,
     ):
         run_id = str(run_id or uuid4())
         started_at = self.timestamp()
@@ -72,6 +75,14 @@ class ScreeningOrchestrator:
         warnings = []
         errors = []
         composite_scores = []
+        run_cache = {
+            "prices": {},
+            "support": {},
+            "bounce": {},
+            "technical": {},
+            "institutional": {},
+            "composite": {},
+        }
         processed = 0
         cancelled = False
         self.create_run_record(
@@ -122,60 +133,70 @@ class ScreeningOrchestrator:
                 errors=errors,
             )
 
-        for ticker in normalized_tickers:
-            if self.cancel_requested(cancellation_callback):
-                cancelled = True
-                warnings.append("Screening cancelled")
-                self.report_progress(
-                    progress_callback,
-                    total=len(normalized_tickers),
-                    processed=processed,
-                    current_ticker=ticker,
-                    status_message="Cancellation requested",
-                )
-                break
+        batches = self.ticker_batches(normalized_tickers, batch_size or self.batch_size)
+        for batch_index, batch in enumerate(batches, start=1):
+            self.report_batch_progress(
+                progress_callback,
+                batch_index=batch_index,
+                batch_count=len(batches),
+                batch_size=len(batch),
+                total=len(normalized_tickers),
+                processed=processed,
+                status_message=f"Starting batch {batch_index} of {len(batches)}",
+            )
+            for ticker in batch:
+                if self.cancel_requested(cancellation_callback):
+                    cancelled = True
+                    warnings.append("Screening cancelled")
+                    self.report_progress(
+                        progress_callback,
+                        total=len(normalized_tickers),
+                        processed=processed,
+                        current_ticker=ticker,
+                        status_message="Cancellation requested",
+                    )
+                    break
 
-            try:
-                self.report_progress(
-                    progress_callback,
-                    total=len(normalized_tickers),
-                    processed=processed,
-                    current_ticker=ticker,
-                    status_message=f"Processing {ticker}",
-                )
-                prices = self.fetch_price_history(ticker)
-                support_result = self.support_engine.detect_support_zones(ticker, prices)
-                zones = self.value(support_result, "zones") or []
-                bounce_result = self.bounce_engine.analyze_bounces(ticker, prices, zones)
-                technical_result = self.technical_engine.calculate(prices, ticker=ticker)
-                institutional_result = self.institutional_engine.score_ticker(ticker)
-                composite_result = self.composite_engine.score(
-                    ticker=ticker,
-                    support=support_result,
-                    bounce=bounce_result,
-                    technical=technical_result,
-                    institutional=institutional_result,
-                )
-                composite_scores.append(composite_result)
-                processed += 1
-                self.report_progress(
-                    progress_callback,
-                    total=len(normalized_tickers),
-                    processed=processed,
-                    current_ticker=ticker,
-                    status_message=f"Processed {ticker}",
-                )
-                self.collect_warnings(
-                    ticker,
-                    warnings,
-                    support_result,
-                    bounce_result,
-                    technical_result,
-                    institutional_result,
-                    composite_result,
-                )
-            except Exception as exc:
-                errors.append(f"{ticker}: {exc}")
+                try:
+                    self.report_progress(
+                        progress_callback,
+                        total=len(normalized_tickers),
+                        processed=processed,
+                        current_ticker=ticker,
+                        status_message=f"Processing {ticker}",
+                    )
+                    composite_result, component_results = self.score_ticker_cached(
+                        ticker,
+                        run_cache,
+                    )
+                    composite_scores.append(composite_result)
+                    processed += 1
+                    self.report_progress(
+                        progress_callback,
+                        total=len(normalized_tickers),
+                        processed=processed,
+                        current_ticker=ticker,
+                        status_message=f"Processed {ticker}",
+                    )
+                    self.collect_warnings(
+                        ticker,
+                        warnings,
+                        *component_results,
+                        composite_result,
+                    )
+                except Exception as exc:
+                    errors.append(f"{ticker}: {exc}")
+            self.report_batch_progress(
+                progress_callback,
+                batch_index=batch_index,
+                batch_count=len(batches),
+                batch_size=len(batch),
+                total=len(normalized_tickers),
+                processed=processed,
+                status_message=f"Completed batch {batch_index} of {len(batches)}",
+            )
+            if cancelled:
+                break
 
         pipeline_result = self.persist_scores(
             composite_scores,
@@ -319,6 +340,53 @@ class ScreeningOrchestrator:
 
         return self.normalize_price_rows(prices)
 
+    def score_ticker_cached(self, ticker, cache):
+        prices = self.cached_value(cache["prices"], ticker, self.fetch_price_history)
+        support_result = self.cached_value(
+            cache["support"],
+            ticker,
+            lambda symbol: self.support_engine.detect_support_zones(symbol, prices),
+        )
+        zones = self.value(support_result, "zones") or []
+        bounce_result = self.cached_value(
+            cache["bounce"],
+            ticker,
+            lambda symbol: self.bounce_engine.analyze_bounces(symbol, prices, zones),
+        )
+        technical_result = self.cached_value(
+            cache["technical"],
+            ticker,
+            lambda symbol: self.technical_engine.calculate(prices, ticker=symbol),
+        )
+        institutional_result = self.cached_value(
+            cache["institutional"],
+            ticker,
+            self.institutional_engine.score_ticker,
+        )
+        composite_result = self.cached_value(
+            cache["composite"],
+            ticker,
+            lambda symbol: self.composite_engine.score(
+                ticker=symbol,
+                support=support_result,
+                bounce=bounce_result,
+                technical=technical_result,
+                institutional=institutional_result,
+            ),
+        )
+        return composite_result, (
+            support_result,
+            bounce_result,
+            technical_result,
+            institutional_result,
+        )
+
+    @staticmethod
+    def cached_value(cache, key, producer):
+        if key not in cache:
+            cache[key] = producer(key)
+        return cache[key]
+
     @staticmethod
     def normalize_price_rows(prices):
         if prices is None:
@@ -357,6 +425,14 @@ class ScreeningOrchestrator:
             if value and value not in normalized:
                 normalized.append(value)
         return normalized
+
+    @staticmethod
+    def ticker_batches(tickers, batch_size):
+        size = max(1, int(batch_size or 1))
+        return [
+            list(tickers[index:index + size])
+            for index in range(0, len(tickers or []), size)
+        ]
 
     @staticmethod
     def timestamp():
@@ -400,6 +476,32 @@ class ScreeningOrchestrator:
             "status_message": status_message,
         }
         progress_callback(progress)
+
+    @staticmethod
+    def report_batch_progress(
+        progress_callback,
+        batch_index,
+        batch_count,
+        batch_size,
+        total,
+        processed,
+        status_message,
+    ):
+        if progress_callback is None:
+            return
+        percentage = 100 if total == 0 else round(processed / total * 100, 2)
+        progress_callback(
+            {
+                "total_tickers": total,
+                "processed_tickers": processed,
+                "current_ticker": None,
+                "progress_percentage": percentage,
+                "status_message": status_message,
+                "batch_index": batch_index,
+                "batch_count": batch_count,
+                "batch_size": batch_size,
+            }
+        )
 
     @staticmethod
     def value(source, key):

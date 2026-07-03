@@ -66,6 +66,8 @@ class MainWindow(QMainWindow):
 
     DEFAULT_WORKSPACE_LAYOUT = "Default"
     MAX_UNIVERSE_SCAN_TICKERS = 250
+    RESULTS_PAGE_SIZE = 100
+    RUN_HISTORY_PAGE_SIZE = 50
 
     LIVE_REFRESH_INTERVALS = {
         "Open": 300,
@@ -139,6 +141,10 @@ class MainWindow(QMainWindow):
         self.candidates_by_ticker = {}
         self.active_workspace_layout = self.DEFAULT_WORKSPACE_LAYOUT
         self.selected_results_run_id = None
+        self.ranked_candidates_offset = 0
+        self.ranked_candidates_total_count = 0
+        self.run_history_offset = 0
+        self.run_history_total_count = 0
 
         self.setWindowTitle("Institutional Bounce Screener")
         self.resize(1600, 900)
@@ -265,6 +271,12 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.refresh_run_history_requested.connect(
             self.refresh_screening_run_history_view
+        )
+        self.screening_results_panel.load_more_ranked_candidates_requested.connect(
+            self.load_more_ranked_candidates_view
+        )
+        self.screening_results_panel.load_more_run_history_requested.connect(
+            self.load_more_screening_run_history_view
         )
         self.screening_results_panel.run_selected.connect(
             self.load_ranked_candidates_for_run
@@ -2262,19 +2274,27 @@ class MainWindow(QMainWindow):
             return []
 
         self.selected_results_run_id = None
+        self.ranked_candidates_offset = 0
         repository = self.screening_repository()
         candidates = []
+        total_count = 0
 
         try:
             if repository is not None and hasattr(
                 repository,
                 "fetch_latest_ranked_candidates",
             ):
-                candidates = repository.fetch_latest_ranked_candidates() or []
+                candidates = self.fetch_latest_ranked_page(repository, 0)
+                total_count = self.count_latest_ranked_candidates(repository, candidates)
         except Exception:
             candidates = []
 
-        self.screening_results_panel.populate_ranked_candidates(candidates)
+        self.ranked_candidates_offset = len(candidates)
+        self.ranked_candidates_total_count = total_count
+        self.screening_results_panel.populate_ranked_candidates(
+            candidates,
+            total_count=total_count,
+        )
         self.update_results_export_state(candidates)
         return candidates
 
@@ -2286,21 +2306,64 @@ class MainWindow(QMainWindow):
             return []
 
         self.selected_results_run_id = run_id
+        self.ranked_candidates_offset = 0
         repository = self.screening_repository()
         candidates = []
+        total_count = 0
 
         try:
             if repository is not None and hasattr(repository, "fetch_ranked_candidates"):
-                candidates = repository.fetch_ranked_candidates(run_id) or []
+                candidates = self.fetch_ranked_candidates_page(repository, run_id, 0)
+                total_count = self.count_ranked_candidates(
+                    repository,
+                    run_id,
+                    candidates,
+                )
         except Exception:
             candidates = []
 
-        self.screening_results_panel.populate_ranked_candidates(candidates)
+        self.ranked_candidates_offset = len(candidates)
+        self.ranked_candidates_total_count = total_count
+        self.screening_results_panel.populate_ranked_candidates(
+            candidates,
+            total_count=total_count,
+        )
         if not candidates:
             self.screening_results_panel.show_ranked_empty_message(
                 "Run has no candidates"
             )
         self.update_results_export_state(candidates)
+        return candidates
+
+    # ----------------------------------------------------------
+
+    def load_more_ranked_candidates_view(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return []
+
+        repository = self.screening_repository()
+        candidates = []
+        offset = getattr(self, "ranked_candidates_offset", 0)
+        run_id = getattr(self, "selected_results_run_id", None)
+
+        try:
+            if repository is None:
+                candidates = []
+            elif run_id:
+                candidates = self.fetch_ranked_candidates_page(repository, run_id, offset)
+            else:
+                candidates = self.fetch_latest_ranked_page(repository, offset)
+        except Exception:
+            candidates = []
+
+        self.ranked_candidates_offset = offset + len(candidates)
+        self.screening_results_panel.populate_ranked_candidates(
+            candidates,
+            total_count=getattr(self, "ranked_candidates_total_count", None),
+            append=True,
+        )
+        self.update_results_export_state()
         return candidates
 
     # ----------------------------------------------------------
@@ -2312,18 +2375,117 @@ class MainWindow(QMainWindow):
 
         repository = self.screening_repository()
         runs = []
+        self.run_history_offset = 0
+        total_count = 0
 
         try:
             if repository is not None and hasattr(
                 repository,
                 "fetch_screening_run_history",
             ):
-                runs = repository.fetch_screening_run_history() or []
+                runs = self.fetch_screening_run_history_page(repository, 0)
+                total_count = self.count_screening_runs(repository, runs)
         except Exception:
             runs = []
 
-        self.screening_results_panel.populate_run_history(runs)
+        self.run_history_offset = len(runs)
+        self.run_history_total_count = total_count
+        self.screening_results_panel.populate_run_history(
+            runs,
+            total_count=total_count,
+        )
         return runs
+
+    # ----------------------------------------------------------
+
+    def load_more_screening_run_history_view(self):
+
+        if not hasattr(self, "screening_results_panel"):
+            return []
+
+        repository = self.screening_repository()
+        offset = getattr(self, "run_history_offset", 0)
+        runs = []
+
+        try:
+            if repository is not None and hasattr(
+                repository,
+                "fetch_screening_run_history",
+            ):
+                runs = self.fetch_screening_run_history_page(repository, offset)
+        except Exception:
+            runs = []
+
+        self.run_history_offset = offset + len(runs)
+        self.screening_results_panel.populate_run_history(
+            runs,
+            total_count=getattr(self, "run_history_total_count", None),
+            append=True,
+        )
+        return runs
+
+    # ----------------------------------------------------------
+
+    def fetch_ranked_candidates_page(self, repository, run_id, offset):
+
+        try:
+            return repository.fetch_ranked_candidates(
+                run_id,
+                limit=self.RESULTS_PAGE_SIZE,
+                offset=offset,
+            ) or []
+        except TypeError:
+            return repository.fetch_ranked_candidates(run_id) or []
+
+    # ----------------------------------------------------------
+
+    def fetch_latest_ranked_page(self, repository, offset):
+
+        try:
+            return repository.fetch_latest_ranked_candidates(
+                limit=self.RESULTS_PAGE_SIZE,
+                offset=offset,
+            ) or []
+        except TypeError:
+            return repository.fetch_latest_ranked_candidates() or []
+
+    # ----------------------------------------------------------
+
+    def fetch_screening_run_history_page(self, repository, offset):
+
+        try:
+            return repository.fetch_screening_run_history(
+                limit=self.RUN_HISTORY_PAGE_SIZE,
+                offset=offset,
+            ) or []
+        except TypeError:
+            return repository.fetch_screening_run_history(
+                limit=self.RUN_HISTORY_PAGE_SIZE,
+            ) or []
+
+    # ----------------------------------------------------------
+
+    def count_ranked_candidates(self, repository, run_id, fallback):
+
+        if repository is not None and hasattr(repository, "count_ranked_candidates"):
+            return repository.count_ranked_candidates(run_id)
+        return len(fallback or [])
+
+    # ----------------------------------------------------------
+
+    def count_latest_ranked_candidates(self, repository, fallback):
+
+        if repository is not None and hasattr(repository, "count_latest_ranked_candidates"):
+            return repository.count_latest_ranked_candidates()
+        return len(fallback or [])
+
+    # ----------------------------------------------------------
+
+    def count_screening_runs(self, repository, fallback):
+
+        if repository is not None and hasattr(repository, "count_screening_runs"):
+            return repository.count_screening_runs()
+        return len(fallback or [])
 
     # ----------------------------------------------------------
 
