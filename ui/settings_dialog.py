@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -77,6 +78,10 @@ class SettingsDialog(QDialog):
         self.update_provider_status(self.controller.provider_status())
 
     def save_settings(self) -> None:
+        validation_message = self.validate_provider_credentials()
+        if validation_message:
+            QMessageBox.warning(self, "Provider Credentials", validation_message)
+            return
         self.controller.save_settings(self.settings_from_ui())
         self.controller.save_app_preferences(self.app_preferences_from_ui())
         self.accept()
@@ -117,7 +122,30 @@ class SettingsDialog(QDialog):
             "ui_density": self.ui_density_combo.currentText(),
             "auto_refresh_results": self.auto_refresh_results_checkbox.isChecked(),
             "show_rejected_candidates": self.show_rejected_candidates_checkbox.isChecked(),
+            "selected_market_data_provider": self.market_data_provider_combo.currentText(),
+            "polygon_api_key": self.polygon_api_key_input.text().strip(),
+            "fmp_api_key": self.fmp_api_key_input.text().strip(),
+            "alpaca_api_key": self.alpaca_api_key_input.text().strip(),
+            "alpaca_api_secret": self.alpaca_api_secret_input.text().strip(),
+            "request_timeout_seconds": self.request_timeout_spin.value(),
+            "max_retries": self.max_retries_spin.value(),
+            "rate_limit_sleep_seconds": self.rate_limit_sleep_spin.value(),
         }
+
+    def validate_provider_credentials(self) -> str:
+        provider = self.market_data_provider_combo.currentText()
+        if provider == "local_csv":
+            return ""
+        if provider == "polygon" and not self.polygon_api_key_input.text().strip():
+            return "Polygon requires an API key."
+        if provider == "fmp" and not self.fmp_api_key_input.text().strip():
+            return "Financial Modeling Prep requires an API key."
+        if provider == "alpaca":
+            if not self.alpaca_api_key_input.text().strip():
+                return "Alpaca requires an API key."
+            if not self.alpaca_api_secret_input.text().strip():
+                return "Alpaca requires an API secret."
+        return ""
 
     def update_provider_status(self, status: dict[str, Any] | None) -> None:
         status = status if isinstance(status, dict) else {}
@@ -221,6 +249,21 @@ class SettingsDialog(QDialog):
         self.show_rejected_candidates_checkbox.setChecked(
             bool(preferences.get("show_rejected_candidates", True))
         )
+        self._set_combo_text(
+            self.market_data_provider_combo,
+            str(preferences.get("selected_market_data_provider") or "local_csv"),
+        )
+        self.polygon_api_key_input.setText(str(preferences.get("polygon_api_key") or ""))
+        self.fmp_api_key_input.setText(str(preferences.get("fmp_api_key") or ""))
+        self.alpaca_api_key_input.setText(str(preferences.get("alpaca_api_key") or ""))
+        self.alpaca_api_secret_input.setText(str(preferences.get("alpaca_api_secret") or ""))
+        self.request_timeout_spin.setValue(
+            int(preferences.get("request_timeout_seconds") or 10)
+        )
+        self.max_retries_spin.setValue(int(preferences.get("max_retries") or 2))
+        self.rate_limit_sleep_spin.setValue(
+            int(preferences.get("rate_limit_sleep_seconds") or 1)
+        )
 
     def _build_general_tab(self) -> None:
         tab, layout = self._scrollable_form_tab()
@@ -318,6 +361,24 @@ class SettingsDialog(QDialog):
         self.ui_density_combo.addItems(["COMPACT", "NORMAL", "COMFORTABLE"])
         self.auto_refresh_results_checkbox = QCheckBox("Refresh results after screening")
         self.show_rejected_candidates_checkbox = QCheckBox("Show rejected candidates")
+        self.market_data_provider_combo = QComboBox()
+        self.market_data_provider_combo.addItems(["local_csv", "polygon", "fmp", "alpaca"])
+        self.polygon_api_key_input = QLineEdit()
+        self.polygon_api_key_input.setEchoMode(QLineEdit.Password)
+        self.fmp_api_key_input = QLineEdit()
+        self.fmp_api_key_input.setEchoMode(QLineEdit.Password)
+        self.alpaca_api_key_input = QLineEdit()
+        self.alpaca_api_key_input.setEchoMode(QLineEdit.Password)
+        self.alpaca_api_secret_input = QLineEdit()
+        self.alpaca_api_secret_input.setEchoMode(QLineEdit.Password)
+        self.request_timeout_spin = QSpinBox()
+        self.request_timeout_spin.setRange(1, 120)
+        self.request_timeout_spin.setSuffix(" sec")
+        self.max_retries_spin = QSpinBox()
+        self.max_retries_spin.setRange(0, 10)
+        self.rate_limit_sleep_spin = QSpinBox()
+        self.rate_limit_sleep_spin.setRange(0, 120)
+        self.rate_limit_sleep_spin.setSuffix(" sec")
 
         layout.addRow("Default scan mode", self.default_scan_mode_combo)
         layout.addRow("Default scan preset", self.default_scan_preset_input)
@@ -327,6 +388,14 @@ class SettingsDialog(QDialog):
         layout.addRow("UI density", self.ui_density_combo)
         layout.addRow("", self.auto_refresh_results_checkbox)
         layout.addRow("", self.show_rejected_candidates_checkbox)
+        layout.addRow("Market data provider", self.market_data_provider_combo)
+        layout.addRow("Polygon API key", self.polygon_api_key_input)
+        layout.addRow("FMP API key", self.fmp_api_key_input)
+        layout.addRow("Alpaca API key", self.alpaca_api_key_input)
+        layout.addRow("Alpaca API secret", self.alpaca_api_secret_input)
+        layout.addRow("Request timeout", self.request_timeout_spin)
+        layout.addRow("Max retries", self.max_retries_spin)
+        layout.addRow("Rate limit sleep", self.rate_limit_sleep_spin)
 
         self.tabs.addTab(tab, "App Preferences")
 

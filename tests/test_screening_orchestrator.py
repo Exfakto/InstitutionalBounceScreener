@@ -136,6 +136,7 @@ def build_orchestrator(manager, **overrides):
         institutional_engine=overrides.get("institutional_engine", FakeInstitutionalEngine()),
         composite_engine=overrides.get("composite_engine", FakeCompositeEngine()),
         pipeline_adapter=CandidatePipelineAdapter(manager),
+        market_data_refresh_service=overrides.get("market_data_refresh_service"),
     )
 
 
@@ -145,6 +146,48 @@ class FailingPipelineAdapter:
 
     def run(self, *args, **kwargs):
         raise RuntimeError("adapter failed")
+
+
+class FakeMarketDataRefreshService:
+    def __init__(self, rows=None, success=True, warnings=None, errors=None):
+        self.rows = (
+            [
+                {
+                    "date": "2026-01-02",
+                    "open": 20,
+                    "high": 21,
+                    "low": 19,
+                    "close": 20,
+                    "volume": 2000,
+                }
+            ]
+            if rows is None
+            else rows
+        )
+        self.success = success
+        self.warnings = warnings or []
+        self.errors = errors or []
+        self.calls = []
+
+    def refresh_ticker(self, ticker):
+        self.calls.append(ticker)
+        return SimpleNamespace(
+            ticker=ticker,
+            success=self.success,
+            rows=list(self.rows),
+            warnings=list(self.warnings),
+            errors=list(self.errors),
+        )
+
+
+class CapturingSupportEngine(FakeSupportEngine):
+    def __init__(self):
+        super().__init__()
+        self.prices_by_ticker = {}
+
+    def detect_support_zones(self, ticker, prices):
+        self.prices_by_ticker[ticker] = prices
+        return super().detect_support_zones(ticker, prices)
 
 
 def test_screening_orchestrator_successful_multi_ticker_run():
@@ -403,4 +446,48 @@ def test_screening_orchestrator_duplicate_ticker_caching_avoids_recomputation():
     assert technical_engine.calls == ["AAA"]
     assert institutional_engine.calls == ["AAA"]
     assert composite_engine.calls == ["AAA"]
+    manager.close()
+
+
+def test_screening_orchestrator_uses_market_data_refresh_service():
+    manager = build_manager()
+    refresh_service = FakeMarketDataRefreshService()
+    support_engine = CapturingSupportEngine()
+    orchestrator = build_orchestrator(
+        manager,
+        price_history_provider=None,
+        market_data_refresh_service=refresh_service,
+        support_engine=support_engine,
+    )
+
+    result = orchestrator.run(["AAA"], run_id="market-data-run")
+
+    assert result.tickers_processed == 1
+    assert refresh_service.calls == ["AAA"]
+    assert support_engine.prices_by_ticker["AAA"][0]["close"] == 20
+    assert result.errors == []
+    manager.close()
+
+
+def test_screening_orchestrator_missing_market_data_adds_warning_not_error():
+    manager = build_manager()
+    refresh_service = FakeMarketDataRefreshService(
+        rows=[],
+        success=False,
+        warnings=["No cached data"],
+        errors=["Provider unavailable"],
+    )
+    orchestrator = build_orchestrator(
+        manager,
+        price_history_provider=None,
+        market_data_refresh_service=refresh_service,
+    )
+
+    result = orchestrator.run(["AAA"], run_id="missing-market-data-run")
+
+    assert result.tickers_processed == 1
+    assert "AAA: No cached data" in result.warnings
+    assert "AAA: Provider unavailable" in result.warnings
+    assert "AAA: Missing OHLCV data" in result.warnings
+    assert result.errors == []
     manager.close()

@@ -45,9 +45,12 @@ class ScreeningOrchestrator:
         composite_engine=None,
         pipeline_adapter=None,
         repository=None,
+        market_data_refresh_service=None,
         batch_size=50,
     ):
         self.price_history_provider = price_history_provider
+        self.market_data_refresh_service = market_data_refresh_service
+        self.price_history_warnings_by_ticker = {}
         self.support_engine = support_engine or SupportZoneEngine()
         self.bounce_engine = bounce_engine or BounceDetectionEngine()
         self.technical_engine = technical_engine or TechnicalIndicatorEngine()
@@ -328,6 +331,21 @@ class ScreeningOrchestrator:
         )
 
     def fetch_price_history(self, ticker):
+        if self.market_data_refresh_service is not None:
+            result = self.market_data_refresh_service.refresh_ticker(ticker)
+            warnings = []
+            warnings.extend(self.value(result, "warnings") or [])
+            warnings.extend(self.value(result, "errors") or [])
+            rows = self.value(result, "rows") or []
+            success = bool(self.value(result, "success"))
+            if not rows:
+                warnings.append("Missing OHLCV data")
+            if warnings:
+                self.price_history_warnings_by_ticker[ticker] = self.unique(warnings)
+            if success or rows:
+                return self.normalize_price_rows(rows)
+            return []
+
         if self.price_history_provider is None:
             return []
 
@@ -342,6 +360,7 @@ class ScreeningOrchestrator:
 
     def score_ticker_cached(self, ticker, cache):
         prices = self.cached_value(cache["prices"], ticker, self.fetch_price_history)
+        price_warnings = self.price_history_warnings_by_ticker.get(ticker, [])
         support_result = self.cached_value(
             cache["support"],
             ticker,
@@ -375,6 +394,7 @@ class ScreeningOrchestrator:
             ),
         )
         return composite_result, (
+            {"warnings": price_warnings},
             support_result,
             bounce_result,
             technical_result,
