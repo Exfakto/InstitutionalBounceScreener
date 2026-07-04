@@ -27,6 +27,9 @@ from database.schema import (
     SCREENING_RUNS_INDEXES,
     SCREENING_RUNS_TABLE,
     SIGNAL_QUALITY_RECOMMENDATION_REPORTS_TABLE,
+    STRATEGY_VALIDATION_INDEXES,
+    STRATEGY_VALIDATION_RUNS_TABLE,
+    STRATEGY_VALIDATION_SAMPLES_TABLE,
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
     TECHNICAL_INDICATORS_TABLE,
@@ -108,6 +111,10 @@ class DatabaseManager:
         self.cursor.execute(BACKTEST_RUNS_TABLE)
         self.cursor.execute(BACKTEST_TRADE_RESULTS_TABLE)
         for index_statement in BACKTEST_INDEXES:
+            self.cursor.execute(index_statement)
+        self.cursor.execute(STRATEGY_VALIDATION_RUNS_TABLE)
+        self.cursor.execute(STRATEGY_VALIDATION_SAMPLES_TABLE)
+        for index_statement in STRATEGY_VALIDATION_INDEXES:
             self.cursor.execute(index_statement)
         self.cursor.execute(VALIDATION_RUNS_TABLE)
         self.cursor.execute(VALIDATION_SIGNAL_RESULTS_TABLE)

@@ -893,3 +893,85 @@ BACKTEST_INDEXES = [
     ON backtest_runs(completed_at);
     """,
 ]
+
+
+STRATEGY_VALIDATION_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS strategy_validation_runs (
+
+    id TEXT PRIMARY KEY,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    strategy_name TEXT,
+
+    universe_size INTEGER,
+
+    sample_count INTEGER,
+
+    notes TEXT
+
+);
+"""
+
+
+STRATEGY_VALIDATION_SAMPLES_TABLE = """
+CREATE TABLE IF NOT EXISTS strategy_validation_samples (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    run_id TEXT NOT NULL,
+
+    ticker TEXT NOT NULL,
+
+    screen_date TEXT,
+
+    score REAL,
+
+    score_bucket TEXT,
+
+    entry_price REAL,
+
+    return_5d REAL,
+
+    return_10d REAL,
+
+    return_20d REAL,
+
+    return_60d REAL,
+
+    max_gain REAL,
+
+    max_drawdown REAL,
+
+    outcome TEXT,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(run_id, ticker, screen_date)
+
+);
+"""
+
+
+STRATEGY_VALIDATION_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_strategy_validation_runs_created_at
+    ON strategy_validation_runs(created_at);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_strategy_validation_samples_run_id
+    ON strategy_validation_samples(run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_strategy_validation_samples_ticker
+    ON strategy_validation_samples(ticker);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_strategy_validation_samples_bucket
+    ON strategy_validation_samples(score_bucket);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_strategy_validation_samples_screen_date
+    ON strategy_validation_samples(screen_date);
+    """,
+]

@@ -79,6 +79,7 @@ from ui.widgets.header_bar import HeaderBar
 from ui.widgets.pipeline_progress_panel import PipelineProgressPanel
 from ui.widgets.price_chart import PriceChart
 from ui.widgets.research_preview import ResearchPreview
+from ui.widgets.research_lab_panel import ResearchLabPanel
 from ui.widgets.screening_results_panel import ScreeningResultsPanel
 from ui.widgets.trade_card import TradeCard
 from ui.widgets.watchlist_panel import WatchlistPanel
@@ -311,6 +312,7 @@ class MainWindow(QMainWindow):
         )
         self.trade_journal_panel.refresh_requested.connect(self.refresh_trade_journal)
         self.performance_dashboard = PerformanceDashboard()
+        self.research_lab_panel = ResearchLabPanel()
         self.screening_results_panel = ScreeningResultsPanel()
         self.screening_results_panel.refresh_ranked_candidates_requested.connect(
             self.refresh_ranked_candidates_view
@@ -599,6 +601,7 @@ class MainWindow(QMainWindow):
             "activity": self.create_dock("Activity", self.activity_panel),
             "portfolio": self.create_dock("Portfolio", self.performance_dashboard),
             "results": self.create_dock("Results", self.screening_results_panel),
+            "research_lab": self.create_dock("Research Lab", self.research_lab_panel),
         }
 
         self.chart_dock = self.workspace_docks["chart"]
@@ -608,6 +611,7 @@ class MainWindow(QMainWindow):
         self.activity_dock = self.workspace_docks["activity"]
         self.portfolio_dock = self.workspace_docks["portfolio"]
         self.results_dock = self.workspace_docks["results"]
+        self.research_lab_dock = self.workspace_docks["research_lab"]
 
     # ----------------------------------------------------------
 
@@ -640,6 +644,7 @@ class MainWindow(QMainWindow):
                 "activity": True,
                 "portfolio": True,
                 "results": True,
+                "research_lab": True,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
@@ -650,6 +655,7 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self.watchlist_dock, self.activity_dock, Qt.Horizontal)
         self.tabifyDockWidget(self.activity_dock, self.portfolio_dock)
         self.tabifyDockWidget(self.portfolio_dock, self.results_dock)
+        self.tabifyDockWidget(self.results_dock, self.research_lab_dock)
         self.activity_dock.raise_()
 
         self.resizeDocks(
@@ -686,12 +692,15 @@ class MainWindow(QMainWindow):
                 "activity": True,
                 "portfolio": False,
                 "results": True,
+                "research_lab": True,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.research_dock)
         self.splitDockWidget(self.research_dock, self.chart_dock, Qt.Vertical)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.watchlist_dock)
         self.splitDockWidget(self.watchlist_dock, self.activity_dock, Qt.Horizontal)
+        self.tabifyDockWidget(self.activity_dock, self.results_dock)
+        self.tabifyDockWidget(self.results_dock, self.research_lab_dock)
         self.research_dock.raise_()
         self.screener_workspace_splitter.setSizes([240, 1160])
         self.resizeDocks(
@@ -721,6 +730,7 @@ class MainWindow(QMainWindow):
                 "activity": False,
                 "portfolio": True,
                 "results": True,
+                "research_lab": True,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
@@ -729,6 +739,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.watchlist_dock)
         self.tabifyDockWidget(self.watchlist_dock, self.portfolio_dock)
         self.tabifyDockWidget(self.portfolio_dock, self.results_dock)
+        self.tabifyDockWidget(self.results_dock, self.research_lab_dock)
         self.chart_dock.raise_()
         self.screener_workspace_splitter.setSizes([260, 1140])
         self.resizeDocks(
@@ -758,6 +769,7 @@ class MainWindow(QMainWindow):
                 "activity": False,
                 "portfolio": False,
                 "results": False,
+                "research_lab": False,
             }
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)

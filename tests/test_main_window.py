@@ -620,6 +620,7 @@ def test_main_window_creates_dock_widgets(patched_window):
         "activity",
         "portfolio",
         "results",
+        "research_lab",
     }
     assert all(isinstance(dock, QDockWidget) for dock in window.workspace_docks.values())
     assert window.chart_dock.windowTitle() == "Chart"
@@ -629,6 +630,7 @@ def test_main_window_creates_dock_widgets(patched_window):
     assert window.activity_dock.windowTitle() == "Activity"
     assert window.portfolio_dock.windowTitle() == "Portfolio"
     assert window.results_dock.windowTitle() == "Results"
+    assert window.research_lab_dock.windowTitle() == "Research Lab"
 
 
 def test_main_window_embeds_existing_widgets_in_docks(patched_window):
@@ -641,6 +643,7 @@ def test_main_window_embeds_existing_widgets_in_docks(patched_window):
     assert window.activity_dock.widget() is window.activity_panel
     assert window.portfolio_dock.widget() is window.performance_dashboard
     assert window.results_dock.widget() is window.screening_results_panel
+    assert window.research_lab_dock.widget() is window.research_lab_panel
 
 
 def test_main_window_toolbar_wiring(patched_window):
@@ -2184,6 +2187,7 @@ def test_main_window_default_layout_sets_expected_docks(patched_window):
     assert window.watchlist_dock.isHidden() is False
     assert window.activity_dock.isHidden() is False
     assert window.portfolio_dock.isHidden() is False
+    assert window.research_lab_dock.isHidden() is False
     assert window.screener_workspace_splitter.sizes()[0] > 0
 
 
@@ -2198,6 +2202,7 @@ def test_main_window_research_layout_prioritizes_research_panel(patched_window):
     assert window.watchlist_dock.isHidden() is False
     assert window.trade_card_dock.isHidden() is True
     assert window.portfolio_dock.isHidden() is True
+    assert window.research_lab_dock.isHidden() is False
     assert window.screener_workspace_splitter.sizes()[0] <= 260
 
 
@@ -2212,6 +2217,7 @@ def test_main_window_trading_layout_prioritizes_chart_and_trade_card(patched_win
     assert window.research_dock.isHidden() is False
     assert window.activity_dock.isHidden() is True
     assert window.portfolio_dock.isHidden() is False
+    assert window.research_lab_dock.isHidden() is False
 
 
 def test_main_window_compact_layout_reduces_dock_footprint(patched_window):
@@ -2226,6 +2232,7 @@ def test_main_window_compact_layout_reduces_dock_footprint(patched_window):
     assert window.watchlist_dock.isHidden() is True
     assert window.activity_dock.isHidden() is True
     assert window.portfolio_dock.isHidden() is True
+    assert window.research_lab_dock.isHidden() is True
 
 
 def test_main_window_capture_workspace_state_includes_layout_metadata(patched_window):

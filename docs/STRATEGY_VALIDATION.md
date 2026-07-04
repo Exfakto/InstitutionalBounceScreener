@@ -35,6 +35,111 @@ The service returns a `StrategyValidationReport` containing:
 - score bucket summaries
 - warnings for incomplete samples
 
+## Storage Model
+
+Historical validation output can be persisted through `StrategyValidationRepository`.
+The repository uses the existing SQLite `DatabaseManager` and does not introduce a
+new persistence framework.
+
+### Tables
+
+`strategy_validation_runs`
+
+- `id`
+- `created_at`
+- `strategy_name`
+- `universe_size`
+- `sample_count`
+- `notes`
+
+`strategy_validation_samples`
+
+- `run_id`
+- `ticker`
+- `screen_date`
+- `score`
+- `score_bucket`
+- `entry_price`
+- `return_5d`
+- `return_10d`
+- `return_20d`
+- `return_60d`
+- `max_gain`
+- `max_drawdown`
+- `outcome`
+
+Indexes are maintained for run lookup, ticker lookup, score bucket lookup, and
+screen-date filtering.
+
+## Repository Responsibilities
+
+`StrategyValidationRepository` is responsible for:
+
+- saving validation run metadata
+- saving or updating validation samples
+- loading recent validation runs
+- loading samples by ticker
+- loading samples by score bucket
+- loading samples by screen-date range
+- calculating lightweight summary statistics for stored samples
+
+Duplicate samples are handled by `(run_id, ticker, screen_date)` upsert behavior,
+so rerunning the same validation batch updates the existing sample instead of
+creating duplicate rows.
+
+## Analytics
+
+`StrategyValidationAnalyticsService` computes research summaries from persisted
+validation samples through `StrategyValidationRepository`.
+
+The analytics report includes:
+
+- overall performance
+- forward return statistics for 5d, 10d, 20d, and 60d horizons
+- score bucket performance
+- sector performance when a `sector` field is available in sample rows
+- outcome distribution
+
+Overall performance includes total samples, completed samples, win rate, average
+return, median return, average drawdown, average max gain, expectancy, and profit
+factor when it can be calculated.
+
+Forward return summaries include average, median, standard deviation, best, and
+worst return for each horizon.
+
+Analytics are intentionally presentation-neutral. The service returns lightweight
+dataclasses and does not format results for UI display.
+
+## Score Calibration Engine
+
+`ScoreCalibrationService` evaluates how predictive each scoring component is
+against stored forward-return outcomes. It is a research-only service and does
+not update production model weights.
+
+The calibration engine currently evaluates:
+
+- overall score
+- quality score
+- institutional score
+- technical score
+- support score
+- bounce score
+
+For each component, the service calculates correlation against 5d, 10d, 20d,
+and 60d forward returns. It also groups component scores into the standard score
+buckets and reports sample count, win rate, average return, drawdown, and
+expectancy for each bucket.
+
+The service ranks components by predictive power and emits lightweight
+recommendation objects:
+
+- increase weight
+- decrease weight
+- keep current weight
+
+Recommendations are intended for analyst review. They are not applied
+automatically to scoring weights.
+
 ## Forward Return Horizons
 
 The default horizons are:
@@ -80,3 +185,15 @@ Each bucket reports sample count, completed count, average return, median return
 - Add optional benchmark-relative return calculations.
 - Add export/report generation for validation batches.
 - Add a future UI/controller integration once the service API stabilizes.
+
+## Future Research Workflow
+
+1. Load historical ranked candidates and historical OHLCV data.
+2. Run `StrategyValidationService.validate(...)`.
+3. Persist run metadata with `StrategyValidationRepository.save_run(...)`.
+4. Persist sample-level outcomes with `save_samples(...)`.
+5. Compare score buckets, horizons, and setup cohorts across stored runs.
+6. Use `StrategyValidationAnalyticsService.analyze(...)` to summarize stored
+   validation samples for research review.
+7. Use `ScoreCalibrationService.calibrate(...)` to compare scoring-factor
+   predictive power before proposing future model weight changes.
