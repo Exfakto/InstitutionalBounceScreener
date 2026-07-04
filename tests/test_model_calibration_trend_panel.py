@@ -52,6 +52,11 @@ def test_model_calibration_trend_panel_renders_trend_points():
     assert panel.trend_table.item(0, 1).text() == "70"
     assert panel.trend_table.item(0, 2).text() == "0.6"
     assert panel.trend_table.item(0, 6).text() == "100"
+    if panel.chart_view is not None:
+        assert not panel.chart_view.isHidden()
+        assert len(panel.chart.series()) > 0
+    else:
+        assert panel.chart_placeholder_label.text() == "Chart preview unavailable"
 
 
 def test_model_calibration_trend_panel_insufficient_history_state():
