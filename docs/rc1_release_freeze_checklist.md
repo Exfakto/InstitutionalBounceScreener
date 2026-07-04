@@ -17,17 +17,18 @@ Run and confirm:
 
 1. RC1 smoke tests.
 2. Full regression test suite.
-3. Repository architecture audit.
-4. Release Candidate Validation suite.
-5. Production readiness dashboard review.
-6. Provider configuration validation.
-7. Provider health and failover history review.
-8. Full universe validation.
-9. Screening diagnostics review.
-10. Export validation.
-11. Packaging validation.
-12. Clean Windows install validation.
-13. Documentation review.
+3. RC1 full regression runner.
+4. Repository architecture audit.
+5. Release Candidate Validation suite.
+6. Production readiness dashboard review.
+7. Provider configuration validation.
+8. Provider health and failover history review.
+9. Full universe validation.
+10. Screening diagnostics review.
+11. Export validation.
+12. Packaging validation.
+13. Clean Windows install validation.
+14. Documentation review.
 
 ## RC1 Smoke Tests
 
@@ -48,6 +49,16 @@ Required command:
 ```
 
 Expected result: audit passes and any architecture exceptions are documented in `docs/repository_architecture_audit.md`.
+
+## RC1 Full Regression
+
+Required command:
+
+```powershell
+.venv\Scripts\python.exe scripts\run_rc1_regression.py
+```
+
+Expected result: all ordered RC1 regression sections pass before final packaging.
 
 ## Production Readiness
 
@@ -118,6 +129,7 @@ Confirm these documents are current:
 - `docs/rc1_release_freeze_checklist.md`
 - `docs/rc1_packaging_verification.md`
 - `docs/rc1_clean_windows_install_validation.md`
+- `docs/rc1_full_regression_checklist.md`
 
 ## Critical Blockers
 

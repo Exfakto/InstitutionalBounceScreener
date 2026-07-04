@@ -61,6 +61,7 @@ Release-candidate capabilities:
 - Model calibration recommendations, history, trend, comparison, apply, validation, and integration audit
 - Production readiness dashboard, Release Candidate Validation, repository architecture audit, and end-to-end workflow validation
 - RC1 packaging verification using `scripts/verify_packaging.py`
+- RC1 full regression runner using `scripts/run_rc1_regression.py`
 
 Current focus:
 
@@ -79,11 +80,18 @@ End-to-end workflow validation is documented in `docs/end_to_end_validation.md`.
 Release Candidate Validation is documented in `docs/release_candidate_validation.md`.
 RC1 release freeze criteria are documented in `docs/rc1_release_freeze_checklist.md`.
 RC1 packaging verification is documented in `docs/rc1_packaging_verification.md`.
+RC1 full regression validation is documented in `docs/rc1_full_regression_checklist.md`.
 
 Packaging verification command:
 
 ```powershell
 .venv\Scripts\python.exe scripts\verify_packaging.py
+```
+
+RC1 full regression command:
+
+```powershell
+.venv\Scripts\python.exe scripts\run_rc1_regression.py
 ```
 
 ## Testing
