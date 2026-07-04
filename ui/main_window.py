@@ -88,6 +88,7 @@ from ui.candidate_detail_window import CandidateDetailWindow
 from ui.stock_detail_window import StockDetailWindow
 from ui.export_dialog import ExportDialog
 from ui.screening_worker import ScreeningWorker
+from ui.task_worker import TaskWorker
 from ui.algorithm_validation_worker import AlgorithmValidationWorker
 from ui.beta_testing_worker import BetaTestingWorker
 from ui.settings_dialog import SettingsDialog
