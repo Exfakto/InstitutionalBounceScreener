@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
+from providers.provider_result import ProviderResult
 from services.market_data_refresh_service import MarketDataRefreshService
 from services.screening_orchestrator import ScreeningOrchestrator
 
@@ -53,11 +54,24 @@ class UniverseDownloaderService:
         symbols = []
         for exchange in exchanges or []:
             try:
-                fetched = provider.fetch_universe_symbols(exchange=exchange) or []
-                symbols.extend(fetched)
+                fetched = provider.fetch_universe_symbols(exchange=exchange)
+                rows, fetched_warnings, fetched_errors = self.unpack_provider_symbols(
+                    fetched,
+                    exchange,
+                )
+                symbols.extend(rows)
+                warnings.extend(fetched_warnings)
+                errors.extend(fetched_errors)
             except Exception as exc:
                 errors.append(f"{exchange}: {exc}")
-        eligible = [record for record in (self.normalize_symbol(row, provider_result.provider_name) for row in symbols) if record and self.is_eligible(record)]
+        eligible = self.unique_records(
+            record
+            for record in (
+                self.normalize_symbol(row, provider_result.provider_name)
+                for row in symbols
+            )
+            if record and self.is_eligible(record)
+        )
         persisted = 0
         if self.repository is not None and hasattr(self.repository, "upsert_universe_symbols"):
             persisted = self.repository.upsert_universe_symbols(eligible)
@@ -86,6 +100,9 @@ class UniverseDownloaderService:
             "sector": cls.value(record, "sector"),
             "industry": cls.value(record, "industry"),
             "market_cap": cls.value(record, "market_cap"),
+            "price": cls.value(record, "price"),
+            "average_volume": cls.value(record, "average_volume"),
+            "average_dollar_volume": cls.value(record, "average_dollar_volume"),
             "active": cls.active_flag(
                 cls.value(record, "active")
                 if cls.value(record, "active") is not None
@@ -106,6 +123,26 @@ class UniverseDownloaderService:
         if any(keyword in text for keyword in EXCLUDED_SECURITY_KEYWORDS):
             return False
         return "COMMON" in security_type or security_type in {"STOCK", "COMMON STOCK", "EQUITY"}
+
+    @classmethod
+    def unpack_provider_symbols(cls, fetched, exchange=None):
+        if isinstance(fetched, ProviderResult):
+            warnings = [f"{exchange}: {warning}" for warning in fetched.warnings]
+            if not fetched.success:
+                return [], warnings, [f"{exchange}: {fetched.message}"]
+            return list(fetched.data or []), warnings, []
+        return list(fetched or []), [], []
+
+    @staticmethod
+    def unique_records(records):
+        unique = {}
+        for record in records or []:
+            ticker = record.get("ticker")
+            exchange = record.get("exchange")
+            if not ticker or not exchange:
+                continue
+            unique[(ticker, exchange)] = record
+        return list(unique.values())
 
     @staticmethod
     def value(source, key, default=None):

@@ -262,3 +262,47 @@ def test_fmp_provider_price_history_not_implemented(monkeypatch):
     assert result.source == "fmp"
     assert result.message == "FMP price history provider is not yet implemented."
     assert "Not yet implemented." in result.warnings
+
+
+def test_fmp_provider_fetch_universe_symbols_maps_and_filters(monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test-key")
+    opener = FakeOpener(
+        payload=[
+            {
+                "symbol": "AAPL",
+                "companyName": "Apple Inc.",
+                "exchangeShortName": "NASDAQ",
+                "type": "stock",
+                "marketCap": 3000,
+                "price": 200,
+                "avgVolume": 50000000,
+            },
+            {
+                "symbol": "IBM",
+                "companyName": "IBM",
+                "exchangeShortName": "NYSE",
+                "type": "stock",
+            },
+        ]
+    )
+    provider = FMPProvider(opener=opener)
+
+    result = provider.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert result.success is True
+    assert [row["ticker"] for row in result.data] == ["AAPL"]
+    assert result.data[0]["company_name"] == "Apple Inc."
+    assert result.data[0]["exchange"] == "NASDAQ"
+    assert result.data[0]["market_cap"] == 3000
+    assert result.data[0]["average_volume"] == 50000000
+    assert "apikey=test-key" in opener.calls[0][0]
+
+
+def test_fmp_provider_fetch_universe_symbols_malformed_response(monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test-key")
+    provider = FMPProvider(opener=FakeOpener(payload={"bad": "shape"}))
+
+    result = provider.fetch_universe_symbols()
+
+    assert result.success is False
+    assert result.message == "FMP universe response was malformed."

@@ -43,6 +43,14 @@ class FakeProvider:
     def get_company_profile(self, ticker):
         return self.result("get_company_profile", ticker)
 
+    def fetch_universe_symbols(self, exchange=None):
+        self.calls.append(("fetch_universe_symbols", exchange))
+        return ProviderResult.ok(
+            data=[{"ticker": f"{self.name.upper()}1", "exchange": exchange}],
+            message="universe ok",
+            source=self.name,
+        )
+
 
 class RaisingProvider(FakeProvider):
 
@@ -122,6 +130,29 @@ def test_unknown_provider_returns_safe_failure():
     assert result.metadata["provider"] == "missing"
     assert "Provider is not registered." in result.warnings
     assert manager.active_provider_name == "local"
+
+
+def test_fetch_universe_symbols_uses_configured_priority():
+    polygon = FakeProvider("polygon")
+    fmp = FakeProvider("fmp")
+    local = FakeProvider("local")
+    manager = ProviderManager(
+        default_provider=local,
+        provider_priorities={
+            "fetch_universe_symbols": ["polygon", "fmp", "finnhub", "local"]
+        },
+    )
+    manager.register_provider("polygon", polygon)
+    manager.register_provider("fmp", fmp)
+
+    result = manager.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert result.success is True
+    assert result.source == "polygon"
+    assert result.data == [{"ticker": "POLYGON1", "exchange": "NASDAQ"}]
+    assert polygon.calls == [("fetch_universe_symbols", "NASDAQ")]
+    assert fmp.calls == []
+    assert local.calls == []
 
 
 def test_missing_provider_never_crashes():

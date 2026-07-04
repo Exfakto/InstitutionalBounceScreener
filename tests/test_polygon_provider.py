@@ -227,3 +227,96 @@ def test_polygon_provider_unimplemented_methods(monkeypatch):
     assert all(result.success is False for result in results)
     assert all(result.source == "polygon" for result in results)
     assert all("Not yet implemented." in result.warnings for result in results)
+
+
+def test_polygon_provider_fetch_universe_symbols_normalizes_exchange(monkeypatch):
+    monkeypatch.setenv("POLYGON_API_KEY", "test-key")
+    opener = FakeOpener(
+        payload={
+            "results": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple Inc.",
+                    "primary_exchange": "XNAS",
+                    "type": "CS",
+                    "active": True,
+                }
+            ]
+        }
+    )
+    provider = PolygonProvider(opener=opener)
+
+    result = provider.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert result.success is True
+    assert result.data == [
+        {
+            "ticker": "AAPL",
+            "company_name": "Apple Inc.",
+            "exchange": "NASDAQ",
+            "security_type": "CS",
+            "sector": None,
+            "industry": None,
+            "market_cap": None,
+            "price": None,
+            "average_volume": None,
+            "average_dollar_volume": None,
+            "active": True,
+            "source": "polygon",
+        }
+    ]
+    assert "exchange=NASDAQ" in opener.calls[0][0]
+
+
+def test_polygon_provider_fetch_universe_symbols_paginates(monkeypatch):
+    monkeypatch.setenv("POLYGON_API_KEY", "test-key")
+    opener = FakeOpener(
+        payload=None,
+    )
+    opener.payloads = [
+        {
+            "results": [{"ticker": "AAPL", "name": "Apple Inc.", "primary_exchange": "XNAS", "type": "CS"}],
+            "next_url": "https://api.polygon.io/v3/reference/tickers?cursor=abc",
+        },
+        {
+            "results": [{"ticker": "IBM", "name": "IBM", "primary_exchange": "XNYS", "type": "CS"}],
+        },
+    ]
+
+    def next_payload(url, timeout=None):
+        opener.calls.append((url, timeout))
+        return FakeResponse(opener.payloads.pop(0))
+
+    opener.__call__ = next_payload
+    provider = PolygonProvider(opener=next_payload)
+
+    result = provider.fetch_universe_symbols()
+
+    assert result.success is True
+    assert [row["ticker"] for row in result.data] == ["AAPL", "IBM"]
+    assert len(opener.calls) == 2
+    assert "apiKey=test-key" in opener.calls[1][0]
+
+
+def test_polygon_provider_fetch_universe_symbols_missing_key(monkeypatch):
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    opener = FakeOpener(payload={"results": []})
+    provider = PolygonProvider(opener=opener)
+
+    result = provider.fetch_universe_symbols(exchange="NYSE")
+
+    assert result.success is False
+    assert result.message == "Polygon API key is required."
+    assert "Missing POLYGON_API_KEY." in result.warnings
+    assert opener.calls == []
+
+
+def test_polygon_provider_fetch_universe_symbols_malformed_response(monkeypatch):
+    monkeypatch.setenv("POLYGON_API_KEY", "test-key")
+    provider = PolygonProvider(opener=FakeOpener(payload={"results": {"bad": "shape"}}))
+
+    result = provider.fetch_universe_symbols()
+
+    assert result.success is False
+    assert result.message == "Polygon universe response was malformed."
+    assert "Malformed response." in result.warnings

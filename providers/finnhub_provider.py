@@ -171,6 +171,59 @@ class FinnhubProvider(BaseProvider):
             metadata={"ticker": normalized_ticker},
         )
 
+    def fetch_universe_symbols(self, exchange=None):
+        normalized_exchange = self.normalize_exchange(exchange)
+
+        if not self.api_key:
+            return self.failure(
+                "Finnhub API key is required.",
+                warnings=["Missing FINNHUB_API_KEY."],
+                metadata={"exchange": normalized_exchange},
+            )
+
+        try:
+            payload = self.fetch_json(
+                self.endpoint_url(
+                    "stock/symbol",
+                    {"exchange": self.finnhub_exchange_code(normalized_exchange)},
+                )
+            )
+        except HTTPError as exc:
+            warning = "Rate limited." if exc.code == 429 else f"HTTP {exc.code}"
+            return self.failure(
+                "Finnhub universe request failed.",
+                warnings=[warning],
+                metadata={"exchange": normalized_exchange},
+            )
+        except (URLError, TimeoutError, OSError) as exc:
+            return self.failure(
+                "Finnhub universe request failed.",
+                warnings=[str(exc)],
+                metadata={"exchange": normalized_exchange},
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            return self.failure(
+                "Finnhub universe response was malformed.",
+                warnings=[str(exc)],
+                metadata={"exchange": normalized_exchange},
+            )
+
+        normalized = self.normalize_symbol_payload(payload, normalized_exchange)
+
+        if normalized is None:
+            return self.failure(
+                "Finnhub universe response was malformed.",
+                warnings=["Malformed response."],
+                metadata={"exchange": normalized_exchange},
+            )
+
+        return ProviderResult.ok(
+            data=normalized,
+            message="Finnhub universe symbols retrieved.",
+            source=self.SOURCE,
+            metadata={"exchange": normalized_exchange, "rows": len(normalized)},
+        )
+
     def endpoint_url(self, endpoint, parameters):
         query = dict(parameters)
         query["token"] = self.api_key
@@ -272,6 +325,39 @@ class FinnhubProvider(BaseProvider):
             "web_url": payload.get("weburl"),
         }
 
+    @classmethod
+    def normalize_symbol_payload(cls, payload, exchange=None):
+        if not isinstance(payload, list):
+            return None
+
+        rows = []
+        for item in payload:
+            if not isinstance(item, dict):
+                return None
+            ticker = item.get("symbol") or item.get("displaySymbol")
+            if not ticker:
+                continue
+            normalized_exchange = cls.normalize_exchange(
+                item.get("mic") or item.get("exchange") or exchange
+            )
+            rows.append(
+                {
+                    "ticker": str(ticker).strip().upper(),
+                    "company_name": item.get("description"),
+                    "exchange": normalized_exchange,
+                    "security_type": item.get("type") or "Common Stock",
+                    "sector": item.get("sector"),
+                    "industry": item.get("industry"),
+                    "market_cap": item.get("marketCapitalization"),
+                    "price": item.get("price"),
+                    "average_volume": item.get("averageVolume"),
+                    "average_dollar_volume": item.get("averageDollarVolume"),
+                    "active": True,
+                    "source": cls.SOURCE,
+                }
+            )
+        return rows
+
     def not_implemented_result(self, ticker, data_type):
         normalized_ticker = self.normalize_ticker(ticker)
 
@@ -347,3 +433,23 @@ class FinnhubProvider(BaseProvider):
             return None
 
         return normalized
+
+    @staticmethod
+    def normalize_exchange(exchange):
+        if exchange is None:
+            return None
+        normalized = str(exchange).strip().upper()
+        mapping = {
+            "US": None,
+            "XNAS": "NASDAQ",
+            "NASDAQ": "NASDAQ",
+            "XNYS": "NYSE",
+            "NYSE": "NYSE",
+        }
+        return mapping.get(normalized, normalized)
+
+    @staticmethod
+    def finnhub_exchange_code(exchange):
+        if exchange in {"NYSE", "NASDAQ"}:
+            return "US"
+        return exchange or "US"

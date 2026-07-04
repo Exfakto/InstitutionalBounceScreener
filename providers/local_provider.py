@@ -102,6 +102,32 @@ class LocalProvider(BaseProvider):
             "No local company profile found",
         )
 
+    def fetch_universe_symbols(self, exchange=None):
+        if not hasattr(self.database_manager, "fetch_universe_symbols"):
+            return ProviderResult.ok(
+                data=[],
+                message="No local universe source is configured.",
+                source=self.SOURCE,
+            )
+
+        try:
+            rows = self.database_manager.fetch_universe_symbols(
+                exchange=exchange,
+                active_only=True,
+            )
+        except Exception as exc:
+            return self.failure(
+                "Local universe symbols unavailable.",
+                warnings=[str(exc)],
+            )
+
+        return ProviderResult.ok(
+            data=[self.row_to_dict(row) for row in rows],
+            message="Local universe symbols retrieved.",
+            source=self.SOURCE,
+            metadata={"exchange": exchange, "rows": len(rows)},
+        )
+
     def get_row_result(
         self,
         ticker,

@@ -31,3 +31,7 @@ class BaseProvider(ABC):
     @abstractmethod
     def get_company_profile(self, ticker):
         raise NotImplementedError
+
+    @abstractmethod
+    def fetch_universe_symbols(self, exchange=None):
+        raise NotImplementedError

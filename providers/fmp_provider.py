@@ -26,6 +26,7 @@ class FMPProvider(BaseProvider):
         "ratios": "ratios",
         "earnings": "earnings",
         "insider_activity": "insider-trading",
+        "stock_list": "stock/list",
     }
 
     def __init__(self, api_key=None, opener=None, base_url=None):
@@ -150,6 +151,54 @@ class FMPProvider(BaseProvider):
             missing_message="No FMP insider activity found",
         )
 
+    def fetch_universe_symbols(self, exchange=None):
+        normalized_exchange = self.normalize_exchange(exchange)
+
+        if not self.api_key:
+            return self.failure(
+                "FMP API key is required.",
+                warnings=["Missing FMP_API_KEY."],
+                metadata={"exchange": normalized_exchange},
+            )
+
+        try:
+            payload = self.fetch_json(self.stock_list_url())
+        except HTTPError as exc:
+            warning = "Rate limited." if exc.code == 429 else f"HTTP {exc.code}"
+            return self.failure(
+                "FMP universe request failed.",
+                warnings=[warning],
+                metadata={"exchange": normalized_exchange},
+            )
+        except (URLError, TimeoutError, OSError) as exc:
+            return self.failure(
+                "FMP universe request failed.",
+                warnings=[str(exc)],
+                metadata={"exchange": normalized_exchange},
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            return self.failure(
+                "FMP universe response was malformed.",
+                warnings=[str(exc)],
+                metadata={"exchange": normalized_exchange},
+            )
+
+        normalized = self.normalize_stock_list(payload, normalized_exchange)
+
+        if normalized is None:
+            return self.failure(
+                "FMP universe response was malformed.",
+                warnings=["Malformed response."],
+                metadata={"exchange": normalized_exchange},
+            )
+
+        return ProviderResult.ok(
+            data=normalized,
+            message="FMP universe symbols retrieved.",
+            source=self.SOURCE,
+            metadata={"exchange": normalized_exchange, "rows": len(normalized)},
+        )
+
     def get_endpoint_result(
         self,
         ticker,
@@ -226,6 +275,9 @@ class FMPProvider(BaseProvider):
 
         return f"{self.base_url}/{endpoint}?{urlencode(query)}"
 
+    def stock_list_url(self):
+        return f"{self.base_url}/{self.ENDPOINTS['stock_list']}?{urlencode({'apikey': self.api_key})}"
+
     def fetch_json(self, url):
         with self.opener(url, timeout=30) as response:
             raw = response.read()
@@ -248,6 +300,41 @@ class FMPProvider(BaseProvider):
         if first_item:
             return rows[0] if rows else {}
 
+        return rows
+
+    @classmethod
+    def normalize_stock_list(cls, payload, exchange=None):
+        if not isinstance(payload, list):
+            return None
+
+        rows = []
+        for item in payload:
+            if not isinstance(item, dict):
+                return None
+            normalized_exchange = cls.normalize_exchange(
+                item.get("exchangeShortName") or item.get("exchange")
+            )
+            if exchange and normalized_exchange != exchange:
+                continue
+            ticker = item.get("symbol") or item.get("ticker")
+            if not ticker:
+                continue
+            rows.append(
+                {
+                    "ticker": str(ticker).strip().upper(),
+                    "company_name": item.get("companyName") or item.get("name"),
+                    "exchange": normalized_exchange,
+                    "security_type": item.get("type") or item.get("security_type") or "Stock",
+                    "sector": item.get("sector"),
+                    "industry": item.get("industry"),
+                    "market_cap": item.get("marketCap") or item.get("market_cap"),
+                    "price": item.get("price"),
+                    "average_volume": item.get("avgVolume") or item.get("volume"),
+                    "average_dollar_volume": item.get("averageDollarVolume"),
+                    "active": item.get("isActivelyTrading", True),
+                    "source": cls.SOURCE,
+                }
+            )
         return rows
 
     @classmethod
@@ -297,3 +384,16 @@ class FMPProvider(BaseProvider):
             return None
 
         return normalized
+
+    @staticmethod
+    def normalize_exchange(exchange):
+        if exchange is None:
+            return None
+        normalized = str(exchange).strip().upper()
+        mapping = {
+            "NASDAQ": "NASDAQ",
+            "NYSE": "NYSE",
+            "NEW YORK STOCK EXCHANGE": "NYSE",
+            "NASDAQ GLOBAL SELECT": "NASDAQ",
+        }
+        return mapping.get(normalized, normalized)

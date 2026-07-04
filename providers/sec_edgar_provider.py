@@ -36,6 +36,14 @@ class SECEdgarProvider(BaseProvider):
     def get_earnings(self, ticker):
         return self.not_implemented_result(ticker, "earnings")
 
+    def fetch_universe_symbols(self, exchange=None):
+        return ProviderResult.fail(
+            message="SEC EDGAR universe provider is not implemented.",
+            source=self.SOURCE,
+            warnings=["Not yet implemented."],
+            metadata={"exchange": exchange},
+        )
+
     def get_institutional_metrics(self, ticker):
         normalized_ticker = self.normalize_ticker(ticker)
 

@@ -4,7 +4,7 @@ import json
 import os
 from datetime import date, datetime, timedelta
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
 import pandas as pd
@@ -105,6 +105,75 @@ class PolygonProvider(BaseProvider):
     def get_company_profile(self, ticker):
         return self.not_implemented_result(ticker, "company profile")
 
+    def fetch_universe_symbols(self, exchange=None):
+        normalized_exchange = self.normalize_exchange(exchange)
+
+        if not self.api_key:
+            return self.failure(
+                "Polygon API key is required.",
+                warnings=["Missing POLYGON_API_KEY."],
+                metadata={"exchange": normalized_exchange},
+            )
+
+        results = []
+        warnings = []
+        url = self.reference_tickers_url(normalized_exchange)
+
+        while url:
+            try:
+                payload = self.fetch_json(url)
+            except HTTPError as exc:
+                warning = f"HTTP {exc.code}"
+                if results:
+                    warnings.append(warning)
+                    break
+                return self.failure(
+                    "Polygon universe request failed.",
+                    warnings=[warning],
+                    metadata={"exchange": normalized_exchange},
+                )
+            except (URLError, TimeoutError, OSError) as exc:
+                if results:
+                    warnings.append(str(exc))
+                    break
+                return self.failure(
+                    "Polygon universe request failed.",
+                    warnings=[str(exc)],
+                    metadata={"exchange": normalized_exchange},
+                )
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                if results:
+                    warnings.append(str(exc))
+                    break
+                return self.failure(
+                    "Polygon universe response was malformed.",
+                    warnings=[str(exc)],
+                    metadata={"exchange": normalized_exchange},
+                )
+
+            normalized = self.normalize_reference_tickers(payload)
+
+            if normalized is None:
+                if results:
+                    warnings.append("Malformed response.")
+                    break
+                return self.failure(
+                    "Polygon universe response was malformed.",
+                    warnings=["Malformed response."],
+                    metadata={"exchange": normalized_exchange},
+                )
+
+            results.extend(normalized)
+            url = self.next_page_url(payload)
+
+        return ProviderResult.ok(
+            data=results,
+            message="Polygon universe symbols retrieved.",
+            source=self.SOURCE,
+            warnings=warnings,
+            metadata={"exchange": normalized_exchange, "rows": len(results)},
+        )
+
     def not_implemented_result(self, ticker, data_type):
         normalized_ticker = self.normalize_ticker(ticker)
 
@@ -134,11 +203,72 @@ class PolygonProvider(BaseProvider):
             f"{start}/{end}?{query}"
         )
 
+    def reference_tickers_url(self, exchange=None):
+        query = {
+            "market": "stocks",
+            "active": "true",
+            "limit": 1000,
+            "apiKey": self.api_key,
+        }
+        if exchange:
+            query["exchange"] = exchange
+        return f"{self.base_url}/v3/reference/tickers?{urlencode(query)}"
+
     def fetch_json(self, url):
         with self.opener(url, timeout=30) as response:
             raw = response.read()
 
         return json.loads(raw.decode("utf-8"))
+
+    @classmethod
+    def normalize_reference_tickers(cls, payload):
+        if not isinstance(payload, dict):
+            return None
+
+        rows = payload.get("results")
+        if rows is None:
+            return []
+        if not isinstance(rows, list):
+            return None
+
+        normalized = []
+        for item in rows:
+            if not isinstance(item, dict):
+                return None
+            exchange = cls.normalize_exchange(
+                item.get("primary_exchange")
+                or item.get("exchange")
+                or item.get("market")
+            )
+            ticker = item.get("ticker") or item.get("symbol")
+            if not ticker:
+                continue
+            normalized.append(
+                {
+                    "ticker": str(ticker).strip().upper(),
+                    "company_name": item.get("name"),
+                    "exchange": exchange,
+                    "security_type": item.get("type") or item.get("security_type"),
+                    "sector": item.get("sector"),
+                    "industry": item.get("industry"),
+                    "market_cap": item.get("market_cap"),
+                    "price": item.get("price"),
+                    "average_volume": item.get("average_volume"),
+                    "average_dollar_volume": item.get("average_dollar_volume"),
+                    "active": item.get("active", True),
+                    "source": cls.SOURCE,
+                }
+            )
+        return normalized
+
+    def next_page_url(self, payload):
+        next_url = payload.get("next_url") if isinstance(payload, dict) else None
+        if not next_url:
+            return None
+        parsed = urlparse(next_url)
+        query = dict(parse_qsl(parsed.query))
+        query.setdefault("apiKey", self.api_key)
+        return urlunparse(parsed._replace(query=urlencode(query)))
 
     @classmethod
     def normalize_aggregates(cls, payload, ticker):
@@ -227,6 +357,22 @@ class PolygonProvider(BaseProvider):
             return None
 
         return normalized
+
+    @staticmethod
+    def normalize_exchange(exchange):
+        if exchange is None:
+            return None
+        normalized = str(exchange).strip().upper()
+        mapping = {
+            "XNAS": "NASDAQ",
+            "NASDAQ": "NASDAQ",
+            "NAS": "NASDAQ",
+            "XNYS": "NYSE",
+            "NYSE": "NYSE",
+            "NYQ": "NYSE",
+            "ARCX": "NYSE",
+        }
+        return mapping.get(normalized, normalized)
 
     @staticmethod
     def date_range(start, end):

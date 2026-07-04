@@ -4,6 +4,8 @@ import logging
 from threading import RLock
 
 from providers.cache_manager import CacheManager
+from providers.finnhub_provider import FinnhubProvider
+from providers.fmp_provider import FMPProvider
 from providers.local_provider import LocalProvider
 from providers.polygon_provider import PolygonProvider
 from providers.provider_config import ProviderConfig
@@ -26,6 +28,7 @@ class ProviderManager:
         "get_insider_activity": ["sec_edgar", "finnhub", "local"],
         "get_earnings": ["finnhub", "fmp", "local"],
         "get_fundamentals": ["fmp", "local"],
+        "fetch_universe_symbols": ["polygon", "fmp", "finnhub", "local"],
     }
     DEFAULT_TTLS = {
         "get_price_history": 6 * 60 * 60,
@@ -34,6 +37,7 @@ class ProviderManager:
         "get_institutional_metrics": 24 * 60 * 60,
         "get_insider_activity": 24 * 60 * 60,
         "get_company_profile": 7 * 24 * 60 * 60,
+        "fetch_universe_symbols": 24 * 60 * 60,
     }
 
     def __init__(
@@ -126,6 +130,24 @@ class ProviderManager:
                     base_url=settings.get("base_url"),
                 ),
             )
+        if self.provider_config.is_enabled("fmp"):
+            settings = self.provider_config.provider_settings("fmp")
+            self.register_provider(
+                "fmp",
+                FMPProvider(
+                    api_key=None,
+                    base_url=settings.get("base_url"),
+                ),
+            )
+        if self.provider_config.is_enabled("finnhub"):
+            settings = self.provider_config.provider_settings("finnhub")
+            self.register_provider(
+                "finnhub",
+                FinnhubProvider(
+                    api_key=None,
+                    base_url=settings.get("base_url"),
+                ),
+            )
 
     def apply_configured_active_provider(self):
         configured_name = self.normalize_name(self.provider_config.active_provider)
@@ -164,6 +186,9 @@ class ProviderManager:
 
     def get_company_profile(self, ticker):
         return self.delegate("get_company_profile", ticker)
+
+    def fetch_universe_symbols(self, exchange=None):
+        return self.delegate("fetch_universe_symbols", exchange=exchange)
 
     def delegate(self, method_name, *args, **kwargs):
         failures = []

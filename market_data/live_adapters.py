@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
 from market_data.live_provider import LiveMarketDataProvider
 from market_data.models import OhlcvRow, UniverseSymbol
 
@@ -49,13 +51,25 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
         }
 
     def fetch_universe_symbols(self, exchange=None):
+        exchange_filter = self.normalize_exchange(exchange)
         params = {"market": "stocks", "active": "true", "limit": 1000, "apiKey": self.api_key}
+        if exchange_filter:
+            params["exchange"] = exchange_filter
+        results = []
         data = self.safe_get_json("/v3/reference/tickers", params=params)
-        results = (data or {}).get("results") if isinstance(data, dict) else []
-        exchange_filter = str(exchange or "").upper()
+        while isinstance(data, dict):
+            page = data.get("results") or []
+            if isinstance(page, list):
+                results.extend(page)
+            next_url = data.get("next_url")
+            if not next_url:
+                break
+            data = self.fetch_next_page(next_url)
+            if data is None:
+                break
         symbols = []
         for item in results or []:
-            item_exchange = str(item.get("primary_exchange") or "").upper()
+            item_exchange = self.normalize_exchange(item.get("primary_exchange"))
             if exchange_filter and item_exchange != exchange_filter:
                 continue
             symbols.append(
@@ -65,8 +79,24 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
                     security_type=item.get("type"),
                     company_name=item.get("name"),
                 )
-            )
+        )
         return [symbol for symbol in symbols if symbol.ticker]
+
+    def fetch_next_page(self, next_url):
+        self.last_errors = []
+        url = self.with_api_key(next_url)
+        response = self.http_client.get_json(url)
+        self.last_warnings.extend(response.warnings)
+        if not response.success:
+            self.last_errors.append(response.error or "Request failed")
+            return None
+        return response.data
+
+    def with_api_key(self, url):
+        parsed = urlparse(url)
+        query = dict(parse_qsl(parsed.query))
+        query.setdefault("apiKey", self.api_key)
+        return urlunparse(parsed._replace(query=urlencode(query)))
 
     @staticmethod
     def date_from_polygon(item):
@@ -80,6 +110,18 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
     @staticmethod
     def normalize_ticker(ticker):
         return str(ticker or "").strip().upper()
+
+    @staticmethod
+    def normalize_exchange(exchange):
+        if exchange is None:
+            return None
+        normalized = str(exchange).strip().upper()
+        return {
+            "XNAS": "NASDAQ",
+            "NASDAQ": "NASDAQ",
+            "XNYS": "NYSE",
+            "NYSE": "NYSE",
+        }.get(normalized, normalized)
 
 
 class FinancialModelingPrepProvider(LiveMarketDataProvider):
@@ -125,10 +167,10 @@ class FinancialModelingPrepProvider(LiveMarketDataProvider):
 
     def fetch_universe_symbols(self, exchange=None):
         data = self.safe_get_json("/stock/list", params={"apikey": self.api_key})
-        exchange_filter = str(exchange or "").upper()
+        exchange_filter = self.normalize_exchange(exchange)
         symbols = []
         for item in data or []:
-            item_exchange = str(item.get("exchangeShortName") or item.get("exchange") or "").upper()
+            item_exchange = self.normalize_exchange(item.get("exchangeShortName") or item.get("exchange"))
             if exchange_filter and item_exchange != exchange_filter:
                 continue
             symbols.append(
@@ -144,6 +186,17 @@ class FinancialModelingPrepProvider(LiveMarketDataProvider):
     @staticmethod
     def normalize_ticker(ticker):
         return str(ticker or "").strip().upper()
+
+    @staticmethod
+    def normalize_exchange(exchange):
+        if exchange is None:
+            return None
+        normalized = str(exchange).strip().upper()
+        return {
+            "NASDAQ": "NASDAQ",
+            "NYSE": "NYSE",
+            "NEW YORK STOCK EXCHANGE": "NYSE",
+        }.get(normalized, normalized)
 
 
 class AlpacaMarketDataProvider(LiveMarketDataProvider):

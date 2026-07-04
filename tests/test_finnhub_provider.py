@@ -258,3 +258,42 @@ def test_finnhub_provider_not_implemented_methods_return_safe_failures(monkeypat
     assert all(result.success is False for result in results)
     assert all(result.source == "finnhub" for result in results)
     assert all("Not yet implemented." in result.warnings for result in results)
+
+
+def test_finnhub_provider_fetch_universe_symbols_maps_records(monkeypatch):
+    monkeypatch.setenv("FINNHUB_API_KEY", "test-key")
+    opener = FakeOpener(
+        responses=[
+            [
+                {
+                    "symbol": "AAPL",
+                    "description": "Apple Inc.",
+                    "mic": "XNAS",
+                    "type": "Common Stock",
+                }
+            ]
+        ]
+    )
+    provider = FinnhubProvider(opener=opener)
+
+    result = provider.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert result.success is True
+    assert result.data[0]["ticker"] == "AAPL"
+    assert result.data[0]["company_name"] == "Apple Inc."
+    assert result.data[0]["exchange"] == "NASDAQ"
+    assert result.data[0]["source"] == "finnhub"
+    assert "exchange=US" in opener.calls[0][0]
+    assert "token=test-key" in opener.calls[0][0]
+
+
+def test_finnhub_provider_fetch_universe_symbols_missing_key(monkeypatch):
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
+    opener = FakeOpener(responses=[[]])
+    provider = FinnhubProvider(opener=opener)
+
+    result = provider.fetch_universe_symbols(exchange="NYSE")
+
+    assert result.success is False
+    assert result.message == "Finnhub API key is required."
+    assert opener.calls == []
