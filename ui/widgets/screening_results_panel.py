@@ -1057,11 +1057,11 @@ class ScreeningResultsPanel(QWidget):
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         table.setShowGrid(False)
-        table.setIconSize(QSize(26, 26))
+        table.setIconSize(QSize(32, 32))
         table.setWordWrap(False)
         table.verticalHeader().setVisible(False)
         table.verticalHeader().setDefaultSectionSize(
-            40 if title == "Ranked Candidates" else 32
+            46 if title == "Ranked Candidates" else 32
         )
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.horizontalHeader().setStretchLastSection(True)
@@ -1382,7 +1382,7 @@ class ScreeningResultsPanel(QWidget):
                 else:
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                 if table.objectName() == "RankedCandidatesTable" and column == 1:
-                    item.setIcon(TickerLogoProvider.icon_for(value, size=26))
+                    item.setIcon(TickerLogoProvider.icon_for(value, size=32))
                     font = item.font()
                     font.setBold(True)
                     item.setFont(font)

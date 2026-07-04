@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QRectF
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPixmap
 
 
@@ -19,8 +19,8 @@ class TickerLogoProvider:
         "MSFT": ("M", "#10B981"),
     }
 
-    LOGO_DIR = Path(__file__).resolve().parent.parent / "assets" / "logos"
-    EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+    LOGO_DIR = Path(__file__).resolve().parents[2] / "assets" / "logos"
+    EXTENSIONS = (".svg", ".png", ".jpg", ".jpeg", ".webp")
     _cache = {}
 
     @classmethod
@@ -47,9 +47,32 @@ class TickerLogoProvider:
             for extension in cls.EXTENSIONS:
                 path = cls.LOGO_DIR / f"{name}{extension}"
                 if path.exists():
-                    icon = QIcon(str(path))
-                    if not icon.isNull():
-                        return icon
+                    logo = QIcon(str(path))
+                    if logo.isNull():
+                        continue
+
+                    canvas = QPixmap(QSize(32, 32))
+                    canvas.fill(Qt.transparent)
+
+                    painter = QPainter(canvas)
+                    painter.setRenderHint(QPainter.Antialiasing, True)
+                    painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+
+                    tile_rect = QRectF(1.0, 1.0, 30.0, 30.0)
+                    painter.setBrush(QColor("#FFFFFF"))
+                    painter.setPen(QColor("#D8DEE6"))
+                    painter.drawRoundedRect(tile_rect, 8.0, 8.0)
+
+                    logo_pixmap = logo.pixmap(QSize(44, 44)).scaled(
+                        QSize(22, 22),
+                        Qt.KeepAspectRatio,
+                        Qt.SmoothTransformation,
+                    )
+                    x = int((32 - logo_pixmap.width()) / 2)
+                    y = int((32 - logo_pixmap.height()) / 2)
+                    painter.drawPixmap(x, y, logo_pixmap)
+                    painter.end()
+                    return QIcon(canvas)
         return None
 
     @classmethod

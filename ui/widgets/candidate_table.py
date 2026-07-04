@@ -50,11 +50,11 @@ class CandidateTable(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setShowGrid(False)
         self.setMouseTracking(True)
-        self.setIconSize(QSize(26, 26))
+        self.setIconSize(QSize(32, 32))
         self.setSortingEnabled(False)
         self.setWordWrap(False)
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(42)
+        self.verticalHeader().setDefaultSectionSize(46)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setMinimumSectionSize(104)
@@ -93,7 +93,7 @@ class CandidateTable(QTableWidget):
                     item.setData(Qt.UserRole, sort_value)
                 item.setTextAlignment(self.alignment_for_column(column))
                 if column == 1:
-                    item.setIcon(TickerLogoProvider.icon_for(value, size=26))
+                    item.setIcon(TickerLogoProvider.icon_for(value, size=32))
                 self.apply_item_style(item, role)
                 self.setItem(row, column, item)
 
