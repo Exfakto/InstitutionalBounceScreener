@@ -54,6 +54,10 @@ class ScreeningResultsPanel(QWidget):
     export_algorithm_validation_report_requested = Signal()
     export_signal_quality_recommendations_requested = Signal()
     cancel_algorithm_validation_requested = Signal()
+    run_beta_workflow_requested = Signal(dict)
+    generate_beta_review_pack_requested = Signal()
+    export_beta_report_requested = Signal()
+    cancel_beta_workflow_requested = Signal()
     update_full_market_universe_requested = Signal()
     refresh_full_market_data_requested = Signal()
     run_full_market_scan_requested = Signal()
@@ -148,6 +152,7 @@ class ScreeningResultsPanel(QWidget):
         content_layout.addWidget(self.build_candidate_detail_section(), stretch=2)
         content_layout.addWidget(self.build_backtest_section(), stretch=2)
         content_layout.addWidget(self.build_algorithm_validation_section(), stretch=2)
+        content_layout.addWidget(self.build_beta_testing_section(), stretch=2)
         self.backtest_analytics_panel = BacktestAnalyticsPanel()
         content_layout.addWidget(self.backtest_analytics_panel, stretch=2)
         self.candidate_chart_panel = CandidateChartPanel()
@@ -805,6 +810,152 @@ class ScreeningResultsPanel(QWidget):
             + (recommendation_text if recommendation_text else "No threshold changes recommended")
         )
         self.export_signal_quality_recommendations_button.setEnabled(bool(report))
+
+    def build_beta_testing_section(self):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        section.setStyleSheet(DesignSystem.card_style())
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+        )
+        layout.setSpacing(DesignSystem.Spacing.SM)
+
+        header = QHBoxLayout()
+        title = QLabel("Beta Testing")
+        title.setObjectName("ResearchPreviewSectionTitle")
+        self.beta_top_n_spin = QSpinBox()
+        self.beta_top_n_spin.setRange(1, 100)
+        self.beta_top_n_spin.setValue(10)
+        self.beta_top_n_spin.setPrefix("Top ")
+        self.beta_backtest_checkbox = QCheckBox("Backtest")
+        self.run_beta_workflow_button = QPushButton("Run Beta Workflow")
+        self.run_beta_workflow_button.setObjectName("PrimaryButton")
+        self.run_beta_workflow_button.clicked.connect(self.emit_run_beta_workflow)
+        self.generate_beta_review_pack_button = QPushButton("Generate Review Pack")
+        self.generate_beta_review_pack_button.setObjectName("SecondaryButton")
+        self.generate_beta_review_pack_button.clicked.connect(
+            self.generate_beta_review_pack_requested.emit
+        )
+        self.export_beta_report_button = QPushButton("Export Beta Report")
+        self.export_beta_report_button.setObjectName("SecondaryButton")
+        self.export_beta_report_button.clicked.connect(self.export_beta_report_requested.emit)
+        self.export_beta_report_button.setEnabled(False)
+        self.cancel_beta_workflow_button = QPushButton("Cancel")
+        self.cancel_beta_workflow_button.setObjectName("SecondaryButton")
+        self.cancel_beta_workflow_button.setEnabled(False)
+        self.cancel_beta_workflow_button.clicked.connect(self.cancel_beta_workflow_requested.emit)
+        self.beta_status_label = QLabel("No beta workflow run yet")
+        self.beta_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.beta_status_label.setWordWrap(True)
+        header.addWidget(title)
+        header.addWidget(self.beta_top_n_spin)
+        header.addWidget(self.beta_backtest_checkbox)
+        header.addWidget(self.run_beta_workflow_button)
+        header.addWidget(self.generate_beta_review_pack_button)
+        header.addWidget(self.export_beta_report_button)
+        header.addWidget(self.cancel_beta_workflow_button)
+        header.addWidget(self.beta_status_label, stretch=1)
+        layout.addLayout(header)
+
+        self.beta_summary_label = QLabel("Beta summary: N/A")
+        self.beta_summary_label.setObjectName("ResearchPreviewFieldValue")
+        self.beta_summary_label.setWordWrap(True)
+        self.beta_warnings_label = QLabel("Warnings/errors: N/A")
+        self.beta_warnings_label.setObjectName("ResearchPreviewFieldValue")
+        self.beta_warnings_label.setWordWrap(True)
+        layout.addWidget(self.beta_summary_label)
+        layout.addWidget(self.beta_warnings_label)
+
+        headers = ["Ticker", "Grade", "Score", "Setup", "Support", "Bounce", "Institutional", "Chart", "Warnings"]
+        self.beta_review_table = QTableWidget(0, len(headers))
+        self.beta_review_table.setHorizontalHeaderLabels(headers)
+        self.beta_review_table.setAlternatingRowColors(True)
+        self.beta_review_table.setSortingEnabled(True)
+        self.beta_review_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.beta_review_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.beta_review_table.verticalHeader().setVisible(False)
+        self.beta_review_table.horizontalHeader().setStretchLastSection(True)
+        self.beta_review_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.beta_review_table.setStyleSheet(DesignSystem.table_style())
+        self.beta_review_table.setMinimumHeight(128)
+        layout.addWidget(self.beta_review_table)
+        self.beta_review_empty_label = QLabel("No beta review candidates available")
+        self.beta_review_empty_label.setObjectName("EmptyStateLabel")
+        self.beta_review_empty_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.beta_review_empty_label)
+        self.set_empty_state(self.beta_review_table, self.beta_review_empty_label, True)
+        self.current_beta_result = None
+        self.current_beta_review_pack = []
+        return section
+
+    def emit_run_beta_workflow(self):
+        self.run_beta_workflow_requested.emit(self.beta_workflow_config_from_ui())
+
+    def beta_workflow_config_from_ui(self):
+        return {
+            "top_n": self.beta_top_n_spin.value(),
+            "run_backtest": self.beta_backtest_checkbox.isChecked(),
+            "export_report": True,
+        }
+
+    def set_beta_workflow_active(self, active, status_text=None):
+        self.run_beta_workflow_button.setEnabled(not active)
+        self.generate_beta_review_pack_button.setEnabled(not active)
+        self.cancel_beta_workflow_button.setEnabled(bool(active))
+        if status_text is not None:
+            self.set_beta_status(status_text)
+
+    def set_beta_status(self, status_text):
+        self.beta_status_label.setText(status_text or "")
+        self.apply_status_property(self.beta_status_label, status_text)
+
+    def set_beta_workflow_result(self, result):
+        self.current_beta_result = result
+        run = self.value(result, "run") or {}
+        self.beta_summary_label.setText(
+            "Beta summary: "
+            f"{self.value(run, 'status') or 'N/A'} | "
+            f"{self.value(run, 'scanned_count') or 0} scanned | "
+            f"{self.value(run, 'candidates_count') or 0} candidates | "
+            f"{self.value(run, 'backtest_count') or 0} backtests"
+        )
+        issues = [*(self.value(run, "warnings") or [])[:3], *(self.value(run, "errors") or [])[:3]]
+        self.beta_warnings_label.setText(
+            "Warnings/errors: " + ("; ".join(str(item) for item in issues) if issues else "None")
+        )
+        self.populate_beta_review_pack(self.value(result, "review_pack") or [])
+        self.export_beta_report_button.setEnabled(bool(result))
+
+    def populate_beta_review_pack(self, review_pack):
+        self.current_beta_review_pack = list(review_pack or [])
+        self.populate_table(
+            self.beta_review_table,
+            [
+                [
+                    self.value(item, "ticker"),
+                    self.value(item, "grade"),
+                    self.value(item, "score"),
+                    self.value(item, "setup_label"),
+                    self.value(item, "support_zone_summary"),
+                    self.value(item, "bounce_history_summary"),
+                    self.value(item, "institutional_summary"),
+                    self.value(item, "chart_data_available"),
+                    len(self.value(item, "warnings") or []),
+                ]
+                for item in self.current_beta_review_pack
+            ],
+            numeric_columns={2, 8},
+            source_rows=self.current_beta_review_pack,
+        )
+        self.set_empty_state(
+            self.beta_review_table,
+            self.beta_review_empty_label,
+            not self.current_beta_review_pack,
+        )
 
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())

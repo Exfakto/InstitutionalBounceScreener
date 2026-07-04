@@ -9,6 +9,7 @@ from database.schema import (
     BACKTEST_INDEXES,
     BACKTEST_RUNS_TABLE,
     BACKTEST_TRADE_RESULTS_TABLE,
+    BETA_TEST_RUNS_TABLE,
     BOUNCE_VALIDATIONS_TABLE,
     EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
@@ -110,6 +111,7 @@ class DatabaseManager:
         self.cursor.execute(VALIDATION_SIGNAL_RESULTS_TABLE)
         self.cursor.execute(WEIGHT_OPTIMIZATION_RESULTS_TABLE)
         self.cursor.execute(SIGNAL_QUALITY_RECOMMENDATION_REPORTS_TABLE)
+        self.cursor.execute(BETA_TEST_RUNS_TABLE)
         for index_statement in VALIDATION_INDEXES:
             self.cursor.execute(index_statement)
 
@@ -2362,6 +2364,97 @@ class DatabaseManager:
             for row in self.cursor.fetchall()
         ]
 
+    # ==========================================================
+    # Beta Test Runs
+    # ==========================================================
+
+    def save_beta_test_run(self, run):
+        run_id = self.record_value(run, "run_id")
+        if run_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO beta_test_runs
+            (
+                run_id,
+                started_at,
+                completed_at,
+                provider,
+                universe_count,
+                scanned_count,
+                candidates_count,
+                backtest_count,
+                status,
+                warnings_json,
+                errors_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(run_id),
+                self.record_value(run, "started_at"),
+                self.record_value(run, "completed_at"),
+                self.record_value(run, "provider"),
+                self._sqlite_int(self.record_value(run, "universe_count")) or 0,
+                self._sqlite_int(self.record_value(run, "scanned_count")) or 0,
+                self._sqlite_int(self.record_value(run, "candidates_count")) or 0,
+                self._sqlite_int(self.record_value(run, "backtest_count")) or 0,
+                self.record_value(run, "status"),
+                self._json_text(self.record_value(run, "warnings") or []),
+                self._json_text(self.record_value(run, "errors") or []),
+            ),
+        )
+        self.connection.commit()
+        return self.fetch_beta_test_run(run_id)
+
+    def fetch_beta_test_run(self, run_id):
+        if run_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM beta_test_runs
+            WHERE run_id = ?
+            """,
+            (str(run_id),),
+        )
+        return self._row_to_beta_test_run(self.cursor.fetchone())
+
+    def fetch_latest_beta_test_run(self):
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM beta_test_runs
+            ORDER BY completed_at DESC, started_at DESC, rowid DESC
+            LIMIT 1
+            """
+        )
+        return self._row_to_beta_test_run(self.cursor.fetchone())
+
+    def fetch_beta_test_run_history(self, limit=25, offset=0):
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
+        self.cursor.execute(
+            f"""
+            SELECT *
+            FROM beta_test_runs
+            ORDER BY completed_at DESC, started_at DESC, rowid DESC
+            {paging_sql}
+            """,
+            tuple(paging_values),
+        )
+        return [self._row_to_beta_test_run(row) for row in self.cursor.fetchall()]
+
+    def clear_beta_test_run(self, run_id):
+        if run_id in (None, ""):
+            return 0
+        self.cursor.execute(
+            "DELETE FROM beta_test_runs WHERE run_id = ?",
+            (str(run_id),),
+        )
+        deleted = self.cursor.rowcount
+        self.connection.commit()
+        return deleted
+
     @staticmethod
     def _limit_offset_clause(limit=None, offset=0):
         if limit is None:
@@ -3187,6 +3280,24 @@ class DatabaseManager:
             "weak_groups": DatabaseManager._json_load(row["weak_groups_json"], []),
             "recommendations": DatabaseManager._json_load(row["recommendations_json"], []),
             "warnings": DatabaseManager._json_list(row["warnings_json"]),
+        }
+
+    @staticmethod
+    def _row_to_beta_test_run(row):
+        if row is None:
+            return None
+        return {
+            "run_id": row["run_id"],
+            "started_at": row["started_at"],
+            "completed_at": row["completed_at"],
+            "provider": row["provider"],
+            "universe_count": row["universe_count"],
+            "scanned_count": row["scanned_count"],
+            "candidates_count": row["candidates_count"],
+            "backtest_count": row["backtest_count"],
+            "status": row["status"],
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "errors": DatabaseManager._json_list(row["errors_json"]),
         }
 
     @staticmethod

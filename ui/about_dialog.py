@@ -75,6 +75,7 @@ class AboutDialog(QDialog):
             ("environment", "Environment"),
             ("checklist", "Checklist"),
             ("beta_validation", "Beta Validation"),
+            ("beta_readiness", "Beta Readiness"),
             ("beta_report", "Beta Report"),
         ]:
             label = QLabel("--")
@@ -129,6 +130,9 @@ class AboutDialog(QDialog):
         )
         self._render_diagnostics(diagnostics)
         self._render_release_readiness()
+        self.release_labels["beta_readiness"].setText(
+            str(diagnostics.get("beta_readiness_status") or "--")
+        )
         self.diagnostics_text.setPlainText(self.full_diagnostics_text())
 
     def full_diagnostics_text(self) -> str:
@@ -187,6 +191,7 @@ class AboutDialog(QDialog):
         )
         self.release_labels["checklist"].setText(checklist.summary)
         self.release_labels["beta_validation"].setText("Not run")
+        self.release_labels["beta_readiness"].setText("--")
         self.release_labels["beta_report"].setText("--")
 
     def backup_database(self):

@@ -669,6 +669,35 @@ CREATE TABLE IF NOT EXISTS signal_quality_recommendation_reports (
 """
 
 
+BETA_TEST_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS beta_test_runs (
+
+    run_id TEXT PRIMARY KEY,
+
+    started_at TEXT,
+
+    completed_at TEXT,
+
+    provider TEXT,
+
+    universe_count INTEGER DEFAULT 0,
+
+    scanned_count INTEGER DEFAULT 0,
+
+    candidates_count INTEGER DEFAULT 0,
+
+    backtest_count INTEGER DEFAULT 0,
+
+    status TEXT,
+
+    warnings_json TEXT,
+
+    errors_json TEXT
+
+);
+"""
+
+
 VALIDATION_INDEXES = [
     """
     CREATE INDEX IF NOT EXISTS idx_validation_runs_completed_at
@@ -693,6 +722,14 @@ VALIDATION_INDEXES = [
     """
     CREATE INDEX IF NOT EXISTS idx_signal_quality_recommendations_created_at
     ON signal_quality_recommendation_reports(created_at);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_beta_test_runs_started_at
+    ON beta_test_runs(started_at);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_beta_test_runs_completed_at
+    ON beta_test_runs(completed_at);
     """,
 ]
 

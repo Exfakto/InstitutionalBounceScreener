@@ -17,6 +17,7 @@ from config.settings import DATABASE_FOLDER, DATABASE_NAME
 from providers.provider_config import ProviderConfig
 from services.health_check_service import HealthCheckService
 from services.startup_diagnostics_service import StartupDiagnosticsService
+from services.beta_testing_service import BetaReadinessDiagnosticsService
 
 
 class DiagnosticsService:
@@ -39,6 +40,7 @@ class DiagnosticsService:
         self.log_path = Path(log_path) if log_path is not None else Path("logs")
         self.startup_diagnostics_service = StartupDiagnosticsService()
         self.health_check_service = HealthCheckService()
+        self.beta_readiness_service = BetaReadinessDiagnosticsService()
 
     def get_diagnostics(self) -> dict[str, Any]:
         """
@@ -46,6 +48,8 @@ class DiagnosticsService:
         """
 
         provider_config = ProviderConfig.load(self.provider_config_path)
+
+        beta_readiness = self.beta_readiness_service.run()
 
         return {
             "app_name": APPLICATION_NAME,
@@ -65,6 +69,8 @@ class DiagnosticsService:
             "log_path": str(self.log_path),
             "test_build_mode": "Unavailable",
             "build_environment": self.build_environment_summary(),
+            "beta_readiness_status": beta_readiness.get("status"),
+            "beta_readiness_items": beta_readiness.get("items", []),
             "warnings": list(provider_config.warnings),
         }
 
@@ -97,6 +103,7 @@ class DiagnosticsService:
             "log_path": "Log Path",
             "test_build_mode": "Test/Build Mode",
             "build_environment": "Build Environment",
+            "beta_readiness_status": "Beta Readiness",
         }
         lines = [
             f"{label}: {diagnostics.get(key) or '--'}"

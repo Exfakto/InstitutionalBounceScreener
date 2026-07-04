@@ -46,6 +46,11 @@ from services.algorithm_validation_service import (
     SignalQualityAnalysisService,
     SignalQualityRecommendationPersistenceService,
 )
+from services.beta_testing_service import (
+    BetaReportExportService,
+    BetaWorkflowService,
+    CandidateReviewPackService,
+)
 from services.data_quality_service import DataQualityService
 from services.market_data_cache_service import MarketDataCacheService
 from services.market_data_refresh_service import MarketDataRefreshService
@@ -83,6 +88,7 @@ from ui.stock_detail_window import StockDetailWindow
 from ui.export_dialog import ExportDialog
 from ui.screening_worker import ScreeningWorker
 from ui.algorithm_validation_worker import AlgorithmValidationWorker
+from ui.beta_testing_worker import BetaTestingWorker
 from ui.settings_dialog import SettingsDialog
 from ui.about_dialog import AboutDialog
 from ui.design_system import DashboardDesignSystem as DesignSystem
@@ -381,6 +387,18 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.cancel_algorithm_validation_requested.connect(
             self.cancel_algorithm_validation
+        )
+        self.screening_results_panel.run_beta_workflow_requested.connect(
+            self.run_beta_workflow
+        )
+        self.screening_results_panel.generate_beta_review_pack_requested.connect(
+            self.generate_beta_review_pack
+        )
+        self.screening_results_panel.export_beta_report_requested.connect(
+            self.export_beta_report
+        )
+        self.screening_results_panel.cancel_beta_workflow_requested.connect(
+            self.cancel_beta_workflow
         )
         self.screening_results_panel.update_full_market_universe_requested.connect(
             self.update_full_market_universe
@@ -2815,6 +2833,154 @@ class MainWindow(QMainWindow):
             result.get("message", "Signal quality recommendations exported")
         )
         return result
+
+    # ----------------------------------------------------------
+
+    def beta_workflow_service(self):
+
+        explicit = getattr(self, "_beta_workflow_service", None)
+        if explicit is not None:
+            return explicit
+        return BetaWorkflowService(
+            repository=self.screening_repository(),
+            scan_runner=self.full_market_scan_runner(),
+            backtest_runner=None,
+            review_pack_service=CandidateReviewPackService(
+                repository=self.screening_repository(),
+                chart_data_service=getattr(self.chart_controller, "chart_data_service", None),
+            ),
+            export_service=BetaReportExportService(
+                app_config_service=getattr(self, "app_config_service", None)
+            ),
+        )
+
+    # ----------------------------------------------------------
+
+    def run_beta_workflow(self, config_values=None):
+
+        if not hasattr(self, "screening_results_panel"):
+            return None
+        if getattr(self, "beta_testing_worker", None) is not None:
+            self.screening_results_panel.set_beta_status("Beta workflow already running")
+            return self.beta_testing_worker
+        worker = BetaTestingWorker(
+            repository=self.screening_repository(),
+            config=config_values or {},
+            service=getattr(self, "_beta_workflow_service", None) or self.beta_workflow_service(),
+            parent=self,
+        )
+        self.beta_testing_worker = worker
+        self.screening_results_panel.set_beta_workflow_active(
+            True,
+            "Starting beta workflow",
+        )
+        worker.started_signal.connect(self.handle_beta_workflow_started)
+        worker.progress_signal.connect(self.handle_beta_workflow_progress)
+        worker.completed_signal.connect(self.handle_beta_workflow_completed)
+        worker.failed_signal.connect(self.handle_beta_workflow_failed)
+        worker.cancelled_signal.connect(self.handle_beta_workflow_cancelled)
+        worker.start()
+        return worker
+
+    # ----------------------------------------------------------
+
+    def handle_beta_workflow_started(self, message):
+
+        self.screening_results_panel.set_beta_workflow_active(True, message)
+
+    # ----------------------------------------------------------
+
+    def handle_beta_workflow_progress(self, message):
+
+        if isinstance(message, dict):
+            text = message.get("status_message") or "Beta workflow running"
+            pct = message.get("progress_percentage")
+            if pct is not None:
+                text = f"{text} ({pct}%)"
+        else:
+            text = str(message)
+        self.screening_results_panel.set_beta_status(text)
+
+    # ----------------------------------------------------------
+
+    def handle_beta_workflow_completed(self, result):
+
+        self.latest_beta_workflow_result = result
+        self.screening_results_panel.set_beta_workflow_result(result)
+        run = getattr(result, "run", None)
+        self.screening_results_panel.set_beta_workflow_active(
+            False,
+            f"Beta workflow complete: {getattr(run, 'status', 'N/A')}",
+        )
+        self.beta_testing_worker = None
+        return result
+
+    # ----------------------------------------------------------
+
+    def handle_beta_workflow_failed(self, message):
+
+        self.screening_results_panel.set_beta_workflow_active(
+            False,
+            f"Beta workflow failed: {message}",
+        )
+        self.beta_testing_worker = None
+
+    # ----------------------------------------------------------
+
+    def handle_beta_workflow_cancelled(self, result):
+
+        self.latest_beta_workflow_result = result
+        self.screening_results_panel.set_beta_workflow_result(result)
+        self.screening_results_panel.set_beta_workflow_active(
+            False,
+            "Beta workflow cancelled",
+        )
+        self.beta_testing_worker = None
+        return result
+
+    # ----------------------------------------------------------
+
+    def cancel_beta_workflow(self):
+
+        worker = getattr(self, "beta_testing_worker", None)
+        if worker is not None and hasattr(worker, "request_cancel"):
+            worker.request_cancel()
+            self.screening_results_panel.set_beta_status("Beta cancellation requested")
+            self.screening_results_panel.cancel_beta_workflow_button.setEnabled(False)
+            return True
+        self.screening_results_panel.set_beta_status("No active beta workflow")
+        return False
+
+    # ----------------------------------------------------------
+
+    def generate_beta_review_pack(self):
+
+        candidates = getattr(self.screening_results_panel, "current_candidates", [])
+        review_pack = CandidateReviewPackService(
+            repository=self.screening_repository(),
+            chart_data_service=getattr(self.chart_controller, "chart_data_service", None),
+        ).generate(
+            candidates,
+            top_n=getattr(self.screening_results_panel, "beta_top_n_spin").value(),
+        )
+        self.screening_results_panel.populate_beta_review_pack(review_pack)
+        self.screening_results_panel.set_beta_status(
+            f"Generated review pack: {len(review_pack)} candidate(s)"
+        )
+        return review_pack
+
+    # ----------------------------------------------------------
+
+    def export_beta_report(self):
+
+        result = getattr(self, "latest_beta_workflow_result", None)
+        if result is None:
+            self.screening_results_panel.set_beta_status("No beta workflow report available")
+            return None
+        output_dir = self.app_preference("default_export_directory", "exports/results")
+        export = BetaReportExportService().export_all(result, output_dir=output_dir)
+        self.screening_results_panel.set_beta_status("Beta report exported")
+        return export
 
     # ----------------------------------------------------------
 
