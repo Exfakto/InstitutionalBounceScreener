@@ -32,3 +32,34 @@ class MarketDataController:
         if self.resilience_service is None:
             return []
         return self.resilience_service.all_health()
+
+    def provider_health_dashboard(self):
+        health = list(self.provider_health() or [])
+        active = self.active_provider_name(health)
+        failover = self.failover_provider_name(health, active)
+        return {
+            "providers": health,
+            "active_provider": active,
+            "failover_provider": failover,
+        }
+
+    @staticmethod
+    def active_provider_name(health):
+        for item in health or []:
+            if getattr(item, "status", None) == "healthy":
+                return getattr(item, "provider_name", None)
+        for item in health or []:
+            if getattr(item, "status", None) == "degraded":
+                return getattr(item, "provider_name", None)
+        return None
+
+    @staticmethod
+    def failover_provider_name(health, active_provider):
+        for item in health or []:
+            name = getattr(item, "provider_name", None)
+            if name != active_provider and getattr(item, "status", None) in {
+                "healthy",
+                "degraded",
+            }:
+                return name
+        return None
