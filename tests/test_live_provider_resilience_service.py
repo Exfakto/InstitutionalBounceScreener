@@ -1,6 +1,15 @@
 import time
 
 from services.live_provider_resilience_service import LiveProviderResilienceService
+from services.provider_failover_event_service import ProviderFailoverEventService
+
+
+class FakeLogger:
+    def __init__(self):
+        self.messages = []
+
+    def warning(self, message, *args):
+        self.messages.append((message, args))
 
 
 class FlakyProvider:
@@ -74,7 +83,13 @@ def test_live_provider_resilience_timeout_handling():
 def test_live_provider_resilience_failover_behavior():
     bad = FlakyProvider(failures=5)
     good = GoodProvider()
-    service = LiveProviderResilienceService([bad, good], max_retries=0, timeout_seconds=1)
+    event_service = ProviderFailoverEventService(logger=FakeLogger())
+    service = LiveProviderResilienceService(
+        [bad, good],
+        max_retries=0,
+        timeout_seconds=1,
+        failover_event_service=event_service,
+    )
 
     result = service.call("fetch_daily_ohlcv", "AAPL")
 
@@ -82,6 +97,11 @@ def test_live_provider_resilience_failover_behavior():
     assert result.provider_name == "good"
     assert service.health_for("flaky").status == "unavailable"
     assert service.health_for("good").status == "healthy"
+    events = service.recent_failover_events()
+    assert len(events) == 1
+    assert events[0].previous_provider == "flaky"
+    assert events[0].new_provider == "good"
+    assert "temporary provider failure" in events[0].reason
 
 
 def test_live_provider_resilience_degraded_provider_state():
@@ -93,3 +113,19 @@ def test_live_provider_resilience_degraded_provider_state():
     health = service.health_for("flaky")
     assert health.status == "degraded"
     assert health.average_latency_seconds >= 0
+
+
+def test_live_provider_resilience_no_failover_event_when_same_provider_recovers():
+    provider = FlakyProvider(failures=1)
+    event_service = ProviderFailoverEventService(logger=FakeLogger())
+    service = LiveProviderResilienceService(
+        [provider],
+        max_retries=2,
+        timeout_seconds=1,
+        failover_event_service=event_service,
+    )
+
+    result = service.call("fetch_daily_ohlcv", "AAPL")
+
+    assert result.success is True
+    assert service.recent_failover_events() == []

@@ -4,6 +4,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 
+from services.provider_failover_event_service import ProviderFailoverEventService
+
 
 @dataclass(frozen=True)
 class ProviderHealthResult:
@@ -28,15 +30,27 @@ class ProviderCallResult:
 class LiveProviderResilienceService:
     """Provider-level retry, timeout, health tracking, and failover."""
 
-    def __init__(self, providers=None, max_retries=2, timeout_seconds=10):
+    def __init__(
+        self,
+        providers=None,
+        max_retries=2,
+        timeout_seconds=10,
+        failover_event_service=None,
+    ):
         self.providers = list(providers or [])
         self.max_retries = max(0, int(max_retries or 0))
         self.timeout_seconds = max(0.01, float(timeout_seconds or 10))
         self.metrics = {}
+        self.failover_event_service = (
+            failover_event_service or ProviderFailoverEventService()
+        )
 
     def call(self, method_name, *args, **kwargs):
         errors = []
         attempts = 0
+        failed_provider_names = []
+        last_failure_reason = None
+        last_failure_latency = None
         for provider in self.providers:
             provider_name = self.provider_name(provider)
             for _attempt in range(self.max_retries + 1):
@@ -46,6 +60,17 @@ class LiveProviderResilienceService:
                     value = self.call_with_timeout(provider, method_name, *args, **kwargs)
                     latency = time.perf_counter() - started
                     self.record_success(provider_name, latency)
+                    if failed_provider_names and provider_name != failed_provider_names[-1]:
+                        previous_provider = failed_provider_names[-1]
+                        self.failover_event_service.record_failover(
+                            previous_provider=previous_provider,
+                            new_provider=provider_name,
+                            reason=last_failure_reason or "Provider failover",
+                            error_count=self.metrics.get(previous_provider, {}).get(
+                                "error_count", 0
+                            ),
+                            latency_seconds=last_failure_latency,
+                        )
                     return ProviderCallResult(
                         success=True,
                         value=value,
@@ -59,6 +84,10 @@ class LiveProviderResilienceService:
                     reason = str(exc) or exc.__class__.__name__
                     errors.append(f"{provider_name}: {reason}")
                     self.record_failure(provider_name, latency, reason)
+                    if provider_name not in failed_provider_names:
+                        failed_provider_names.append(provider_name)
+                    last_failure_reason = reason
+                    last_failure_latency = latency
                     if not self.is_transient(exc):
                         break
         provider_name = self.provider_name(self.providers[-1]) if self.providers else "unconfigured"
@@ -109,6 +138,9 @@ class LiveProviderResilienceService:
         names = [self.provider_name(provider) for provider in self.providers]
         names.extend(name for name in self.metrics if name not in names)
         return [self.health_for(name) for name in names]
+
+    def recent_failover_events(self, limit=25):
+        return self.failover_event_service.recent_events(limit=limit)
 
     def record_success(self, provider_name, latency):
         metrics = self.metrics.setdefault(provider_name, self.empty_metrics())

@@ -36,6 +36,7 @@ def configure_logging(level="INFO", log_dir="logs", log_file="application.log"):
     return root
 
 logger = logging.getLogger("IBS")
+provider_failover_logger = logging.getLogger("IBS.provider_failover")
 
 
 configure_logging()
