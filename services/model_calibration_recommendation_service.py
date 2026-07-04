@@ -86,6 +86,10 @@ class ModelCalibrationRecommendationService:
         timestamp = recommendation.timestamp or ""
         return (severity_rank, reverse_text(timestamp), recommendation.title)
 
+    @staticmethod
+    def to_export_rows(recommendations):
+        return [recommendation_to_dict(item) for item in recommendations or []]
+
 
 def normalize_severity(raw):
     severity = str(raw or "UNKNOWN").upper()
@@ -111,6 +115,17 @@ def format_action(action):
     if isinstance(action, (list, tuple)):
         return ", ".join(str(item) for item in action)
     return str(action)
+
+
+def recommendation_to_dict(recommendation):
+    return {
+        "title": value(recommendation, "title") or "Calibration Recommendation",
+        "severity": value(recommendation, "severity") or "UNKNOWN",
+        "recommended_action": value(recommendation, "recommended_action") or "N/A",
+        "reason": value(recommendation, "reason") or "No rationale provided.",
+        "related_metric": value(recommendation, "related_metric") or "N/A",
+        "timestamp": value(recommendation, "timestamp"),
+    }
 
 
 def value(source, key, default=None):

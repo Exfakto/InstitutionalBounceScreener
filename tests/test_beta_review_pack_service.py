@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
+from services.beta_review_pack_service import BetaReviewPackService
 from services.beta_testing_service import CandidateReviewPackService
+from services.model_calibration_recommendation_service import CalibrationRecommendationView
 
 
 class ReviewRepository:
@@ -47,3 +49,56 @@ def test_candidate_review_pack_missing_data_is_safe():
 
     assert pack[0].support_zone_summary == "N/A"
     assert pack[0].chart_data_available is False
+
+
+def test_beta_review_pack_includes_calibration_recommendations():
+    class RecommendationService:
+        def get_recommendations(self, run_id=None):
+            assert run_id == "cal-1"
+            return [
+                CalibrationRecommendationView(
+                    title="Minimum Final Score",
+                    severity="HIGH",
+                    recommended_action="75",
+                    reason="Lower buckets underperformed",
+                    related_metric="minimum_final_score",
+                    timestamp="2026-01-01T00:00:00Z",
+                )
+            ]
+
+    pack = BetaReviewPackService(
+        repository=ReviewRepository(),
+        calibration_recommendation_service=RecommendationService(),
+    ).generate(
+        [{"ticker": "AAPL", "rank": 1, "final_score": 90, "grade": "A", "setup_label": "Elite"}],
+        top_n=1,
+        calibration_run_id="cal-1",
+    )
+
+    assert pack.candidates[0].ticker == "AAPL"
+    assert pack.calibration_recommendations == [
+        {
+            "title": "Minimum Final Score",
+            "severity": "HIGH",
+            "recommended_action": "75",
+            "reason": "Lower buckets underperformed",
+            "related_metric": "minimum_final_score",
+            "timestamp": "2026-01-01T00:00:00Z",
+        }
+    ]
+
+
+def test_beta_review_pack_empty_calibration_recommendations():
+    class EmptyRecommendationService:
+        def get_recommendations(self, run_id=None):
+            return []
+
+    pack = BetaReviewPackService(
+        repository=None,
+        calibration_recommendation_service=EmptyRecommendationService(),
+    ).generate(
+        [{"ticker": "AAPL", "final_score": 80}],
+        top_n=1,
+    )
+
+    assert pack.calibration_recommendations == []
