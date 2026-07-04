@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from market_data.models import MarketDataResult, OhlcvRow, UniverseSymbolResult
 from market_data.validation import MarketDataValidator
+from services.live_provider_resilience_service import LiveProviderResilienceService
 
 
 class MarketDataService:
@@ -11,10 +12,27 @@ class MarketDataService:
     Safe market data facade for provider-backed historical data and symbols.
     """
 
-    def __init__(self, provider=None, cache_repository=None, stale_days=10):
+    def __init__(
+        self,
+        provider=None,
+        cache_repository=None,
+        stale_days=10,
+        resilience_service=None,
+        providers=None,
+        max_retries=2,
+        timeout_seconds=10,
+    ):
         self.provider = provider
+        self.providers = list(providers or ([provider] if provider is not None else []))
         self.cache_repository = cache_repository
         self.stale_days = stale_days
+        self.resilience_service = resilience_service
+        if self.resilience_service is None and providers:
+            self.resilience_service = LiveProviderResilienceService(
+                providers=self.providers,
+                max_retries=max_retries,
+                timeout_seconds=timeout_seconds,
+            )
 
     def fetch_daily_ohlcv(self, ticker, start_date=None, end_date=None, use_cache=True):
         normalized = self.normalize_ticker(ticker)
@@ -35,13 +53,13 @@ class MarketDataService:
                 warnings.extend(MarketDataValidator.stale_data_warnings(rows, self.stale_days))
                 return MarketDataResult(True, ticker=normalized, rows=rows, warnings=warnings)
 
-        if self.provider is None or not hasattr(self.provider, "fetch_daily_ohlcv"):
+        if not self.has_provider_method("fetch_daily_ohlcv"):
             return MarketDataResult(False, ticker=normalized, errors=["No market data provider configured"])
 
-        try:
-            raw_rows = self.provider.fetch_daily_ohlcv(normalized, start, end) or []
-        except Exception as exc:
-            return MarketDataResult(False, ticker=normalized, errors=[str(exc)])
+        call_result = self.call_provider("fetch_daily_ohlcv", normalized, start, end)
+        if not call_result["success"]:
+            return MarketDataResult(False, ticker=normalized, errors=call_result["errors"])
+        raw_rows = call_result["value"] or []
 
         rows = []
         for raw in raw_rows:
@@ -72,28 +90,28 @@ class MarketDataService:
         normalized = self.normalize_ticker(ticker)
         if not normalized:
             return MarketDataResult(False, ticker=None, errors=["Ticker is required"])
-        if self.provider is None or not hasattr(self.provider, "fetch_fundamentals"):
+        if not self.has_provider_method("fetch_fundamentals"):
             return MarketDataResult(False, ticker=normalized, errors=["No market data provider configured"])
-        try:
-            return MarketDataResult(True, ticker=normalized, data=self.provider.fetch_fundamentals(normalized))
-        except Exception as exc:
-            return MarketDataResult(False, ticker=normalized, errors=[str(exc)])
+        result = self.call_provider("fetch_fundamentals", normalized)
+        if not result["success"]:
+            return MarketDataResult(False, ticker=normalized, errors=result["errors"])
+        return MarketDataResult(True, ticker=normalized, data=result["value"])
 
     def fetch_universe_symbols(self, exchange=None):
-        if self.provider is None or not hasattr(self.provider, "fetch_universe_symbols"):
+        if not self.has_provider_method("fetch_universe_symbols"):
             return UniverseSymbolResult(False, errors=["No market data provider configured"])
-        try:
-            symbols = self.provider.fetch_universe_symbols(exchange=exchange) or []
-            warnings = getattr(self.provider, "last_warnings", []) or []
-            errors = getattr(self.provider, "last_errors", []) or []
-            return UniverseSymbolResult(
-                success=not errors,
-                symbols=list(symbols),
-                warnings=self.unique(warnings),
-                errors=self.unique(errors),
-            )
-        except Exception as exc:
-            return UniverseSymbolResult(False, errors=[str(exc)])
+        result = self.call_provider("fetch_universe_symbols", exchange=exchange)
+        if not result["success"]:
+            return UniverseSymbolResult(False, errors=result["errors"])
+        symbols = result["value"] or []
+        warnings = getattr(self.provider, "last_warnings", []) or []
+        errors = getattr(self.provider, "last_errors", []) or []
+        return UniverseSymbolResult(
+            success=not errors,
+            symbols=list(symbols),
+            warnings=self.unique(warnings),
+            errors=self.unique(errors),
+        )
 
     def get_price_history(self, ticker, start=None, end=None):
         result = self.fetch_daily_ohlcv(ticker, start, end)
@@ -163,6 +181,36 @@ class MarketDataService:
 
     def provider_source(self):
         return getattr(self.provider, "SOURCE", self.provider.__class__.__name__ if self.provider else None)
+
+    def has_provider_method(self, method_name):
+        if self.resilience_service is not None and self.providers:
+            return any(hasattr(provider, method_name) for provider in self.providers)
+        return self.provider is not None and hasattr(self.provider, method_name)
+
+    def call_provider(self, method_name, *args, **kwargs):
+        if self.resilience_service is not None:
+            result = self.resilience_service.call(method_name, *args, **kwargs)
+            if result.success:
+                self.provider = next(
+                    (
+                        provider for provider in self.providers
+                        if self.resilience_service.provider_name(provider) == result.provider_name
+                    ),
+                    self.provider,
+                )
+            return {
+                "success": result.success,
+                "value": result.value,
+                "errors": result.errors,
+            }
+        try:
+            return {
+                "success": True,
+                "value": getattr(self.provider, method_name)(*args, **kwargs),
+                "errors": [],
+            }
+        except Exception as exc:
+            return {"success": False, "value": None, "errors": [str(exc)]}
 
     @staticmethod
     def unique(values):
