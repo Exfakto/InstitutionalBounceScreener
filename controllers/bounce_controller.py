@@ -6,8 +6,8 @@ class BounceController:
     Controller responsible for bounce validation actions.
     """
 
-    def __init__(self):
-        self.bounces = BounceValidationService()
+    def __init__(self, bounce_validation_service=None):
+        self.bounces = bounce_validation_service or BounceValidationService()
 
     def validate_bounces(self):
         """

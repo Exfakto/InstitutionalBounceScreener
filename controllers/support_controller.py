@@ -6,8 +6,8 @@ class SupportController:
     Controller responsible for support detection actions.
     """
 
-    def __init__(self):
-        self.support = SupportDetectionService()
+    def __init__(self, support_service=None):
+        self.support = support_service or SupportDetectionService()
 
     def detect_support(self):
         """

@@ -6,8 +6,8 @@ class MarketController:
     Controller responsible for all market-related actions.
     """
 
-    def __init__(self):
-        self.market = MarketService()
+    def __init__(self, market_service=None):
+        self.market = market_service or MarketService()
 
     # --------------------------------------------------
     # Universe

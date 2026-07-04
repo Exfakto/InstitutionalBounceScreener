@@ -6,8 +6,8 @@ class ChartController:
     Controller responsible for read-only chart data requests.
     """
 
-    def __init__(self):
-        self.chart_data_service = ChartDataService()
+    def __init__(self, chart_data_service=None):
+        self.chart_data_service = chart_data_service or ChartDataService()
 
     def get_chart_data(self, ticker):
         """

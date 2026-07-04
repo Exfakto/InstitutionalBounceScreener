@@ -6,8 +6,8 @@ class IndicatorController:
     Controller responsible for indicator-related actions.
     """
 
-    def __init__(self):
-        self.indicators = IndicatorService()
+    def __init__(self, indicator_service=None):
+        self.indicators = indicator_service or IndicatorService()
 
     # --------------------------------------------------
     # Indicators
