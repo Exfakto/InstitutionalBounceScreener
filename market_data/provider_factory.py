@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 from market_data.live_adapters import (
@@ -38,6 +39,7 @@ class ProviderFactory:
         provider_name = str(
             getattr(preferences, "selected_market_data_provider", "local_csv")
         ).lower()
+        provider_name = self.resolve_provider_name(provider_name, preferences)
 
         if provider_name == "polygon":
             return self.polygon(preferences)
@@ -48,7 +50,7 @@ class ProviderFactory:
         return self.local_csv(provider_name)
 
     def polygon(self, preferences):
-        api_key = getattr(preferences, "polygon_api_key", "")
+        api_key = self.credential(preferences, "polygon_api_key", "POLYGON_API_KEY")
         if not api_key:
             return self.missing("polygon", "polygon_api_key")
         return self.success(
@@ -63,7 +65,7 @@ class ProviderFactory:
         )
 
     def fmp(self, preferences):
-        api_key = getattr(preferences, "fmp_api_key", "")
+        api_key = self.credential(preferences, "fmp_api_key", "FMP_API_KEY")
         if not api_key:
             return self.missing("fmp", "fmp_api_key")
         return self.success(
@@ -78,8 +80,12 @@ class ProviderFactory:
         )
 
     def alpaca(self, preferences):
-        api_key = getattr(preferences, "alpaca_api_key", "")
-        api_secret = getattr(preferences, "alpaca_api_secret", "")
+        api_key = self.credential(preferences, "alpaca_api_key", "ALPACA_API_KEY")
+        api_secret = self.credential(
+            preferences,
+            "alpaca_api_secret",
+            "ALPACA_API_SECRET",
+        )
         if not api_key or not api_secret:
             return self.missing("alpaca", "alpaca_api_key/alpaca_api_secret")
         return self.success(
@@ -117,3 +123,21 @@ class ProviderFactory:
             provider_name=name,
             errors=[f"Missing credentials for {name}: {field}"],
         )
+
+    @classmethod
+    def resolve_provider_name(cls, provider_name, preferences):
+        normalized = str(provider_name or "").strip().lower()
+        if normalized == "local_csv":
+            if cls.credential(preferences, "polygon_api_key", "POLYGON_API_KEY"):
+                return "polygon"
+            if cls.credential(preferences, "fmp_api_key", "FMP_API_KEY"):
+                return "fmp"
+        return normalized
+
+    @staticmethod
+    def credential(preferences, attribute_name, environment_name):
+        value = getattr(preferences, attribute_name, "") if preferences is not None else ""
+        value = str(value or "").strip()
+        if value:
+            return value
+        return str(os.getenv(environment_name) or "").strip()

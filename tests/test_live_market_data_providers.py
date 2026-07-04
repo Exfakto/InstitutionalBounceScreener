@@ -78,7 +78,43 @@ def test_provider_factory_selection_polygon():
     assert isinstance(result.provider, PolygonMarketDataProvider)
 
 
-def test_provider_factory_missing_api_key_behavior():
+def test_provider_factory_defaults_to_polygon_when_local_csv_and_env_key_present(monkeypatch):
+    monkeypatch.setenv("POLYGON_API_KEY", "env-polygon-key")
+    monkeypatch.setenv("FMP_API_KEY", "env-fmp-key")
+
+    result = ProviderFactory(
+        settings_service=FakeSettingsService(
+            preferences(selected_market_data_provider="local_csv")
+        ),
+        http_client=HttpClient(opener=FakeOpener()),
+    ).create()
+
+    assert result.success is True
+    assert result.provider_name == "polygon"
+    assert isinstance(result.provider, PolygonMarketDataProvider)
+    assert result.provider.api_key == "env-polygon-key"
+
+
+def test_provider_factory_defaults_to_fmp_when_only_fmp_env_key_present(monkeypatch):
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    monkeypatch.setenv("FMP_API_KEY", "env-fmp-key")
+
+    result = ProviderFactory(
+        settings_service=FakeSettingsService(
+            preferences(selected_market_data_provider="local_csv")
+        ),
+        http_client=HttpClient(opener=FakeOpener()),
+    ).create()
+
+    assert result.success is True
+    assert result.provider_name == "fmp"
+    assert isinstance(result.provider, FinancialModelingPrepProvider)
+    assert result.provider.api_key == "env-fmp-key"
+
+
+def test_provider_factory_missing_api_key_behavior(monkeypatch):
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+
     result = ProviderFactory(
         settings_service=FakeSettingsService(
             preferences(selected_market_data_provider="fmp")
@@ -90,7 +126,10 @@ def test_provider_factory_missing_api_key_behavior():
     assert "Missing credentials" in result.errors[0]
 
 
-def test_provider_factory_local_csv_fallback(tmp_path):
+def test_provider_factory_local_csv_fallback(tmp_path, monkeypatch):
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+
     result = ProviderFactory(
         settings_service=FakeSettingsService(
             preferences(selected_market_data_provider="unknown")
