@@ -698,6 +698,56 @@ CREATE TABLE IF NOT EXISTS beta_test_runs (
 """
 
 
+CALIBRATION_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS calibration_runs (
+
+    run_id TEXT PRIMARY KEY,
+
+    started_at TEXT,
+
+    completed_at TEXT,
+
+    status TEXT,
+
+    source_validation_run_id TEXT,
+
+    source_signal_quality_run_id TEXT,
+
+    summary TEXT,
+
+    warnings_json TEXT,
+
+    errors_json TEXT
+
+);
+"""
+
+
+CALIBRATION_RECOMMENDATIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS calibration_recommendations (
+
+    recommendation_id TEXT PRIMARY KEY,
+
+    run_id TEXT NOT NULL,
+
+    category TEXT,
+
+    current_value_json TEXT,
+
+    recommended_value_json TEXT,
+
+    rationale TEXT,
+
+    expected_impact TEXT,
+
+    confidence TEXT,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""
+
+
 VALIDATION_INDEXES = [
     """
     CREATE INDEX IF NOT EXISTS idx_validation_runs_completed_at
@@ -730,6 +780,22 @@ VALIDATION_INDEXES = [
     """
     CREATE INDEX IF NOT EXISTS idx_beta_test_runs_completed_at
     ON beta_test_runs(completed_at);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_calibration_runs_completed_at
+    ON calibration_runs(completed_at);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_calibration_runs_source_validation_run_id
+    ON calibration_runs(source_validation_run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_calibration_recommendations_run_id
+    ON calibration_recommendations(run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_calibration_recommendations_category
+    ON calibration_recommendations(category);
     """,
 ]
 

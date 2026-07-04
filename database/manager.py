@@ -11,6 +11,8 @@ from database.schema import (
     BACKTEST_TRADE_RESULTS_TABLE,
     BETA_TEST_RUNS_TABLE,
     BOUNCE_VALIDATIONS_TABLE,
+    CALIBRATION_RECOMMENDATIONS_TABLE,
+    CALIBRATION_RUNS_TABLE,
     EARNINGS_TABLE,
     FUNDAMENTALS_TABLE,
     HISTORICAL_OHLCV_CACHE_INDEXES,
@@ -112,6 +114,8 @@ class DatabaseManager:
         self.cursor.execute(WEIGHT_OPTIMIZATION_RESULTS_TABLE)
         self.cursor.execute(SIGNAL_QUALITY_RECOMMENDATION_REPORTS_TABLE)
         self.cursor.execute(BETA_TEST_RUNS_TABLE)
+        self.cursor.execute(CALIBRATION_RUNS_TABLE)
+        self.cursor.execute(CALIBRATION_RECOMMENDATIONS_TABLE)
         for index_statement in VALIDATION_INDEXES:
             self.cursor.execute(index_statement)
 
@@ -2455,6 +2459,181 @@ class DatabaseManager:
         self.connection.commit()
         return deleted
 
+    # ==========================================================
+    # Model Calibration
+    # ==========================================================
+
+    def save_calibration_run(self, run):
+        run_id = self.record_value(run, "run_id")
+        if run_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO calibration_runs
+            (
+                run_id,
+                started_at,
+                completed_at,
+                status,
+                source_validation_run_id,
+                source_signal_quality_run_id,
+                summary,
+                warnings_json,
+                errors_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(run_id),
+                self.record_value(run, "started_at"),
+                self.record_value(run, "completed_at"),
+                self.record_value(run, "status"),
+                self.record_value(run, "source_validation_run_id"),
+                self.record_value(run, "source_signal_quality_run_id"),
+                self.record_value(run, "summary"),
+                self._json_text(self.record_value(run, "warnings") or []),
+                self._json_text(self.record_value(run, "errors") or []),
+            ),
+        )
+        self.connection.commit()
+        return self.fetch_calibration_run(run_id)
+
+    def save_calibration_recommendations(self, run_id, recommendations):
+        if run_id in (None, ""):
+            return []
+        self.clear_calibration_recommendations(run_id, commit=False)
+        rows = []
+        for recommendation in recommendations or []:
+            recommendation_id = self.record_value(recommendation, "recommendation_id")
+            if recommendation_id in (None, ""):
+                continue
+            rows.append(
+                (
+                    str(recommendation_id),
+                    str(run_id),
+                    self.record_value(recommendation, "category"),
+                    json.dumps(
+                        self._json_safe(
+                            self.record_value(recommendation, "current_value")
+                        )
+                    ),
+                    json.dumps(
+                        self._json_safe(
+                            self.record_value(recommendation, "recommended_value")
+                        )
+                    ),
+                    self.record_value(recommendation, "rationale"),
+                    self.record_value(recommendation, "expected_impact"),
+                    self.record_value(recommendation, "confidence"),
+                )
+            )
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT OR REPLACE INTO calibration_recommendations
+                (
+                    recommendation_id,
+                    run_id,
+                    category,
+                    current_value_json,
+                    recommended_value_json,
+                    rationale,
+                    expected_impact,
+                    confidence
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+        self.connection.commit()
+        return self.fetch_calibration_recommendations(run_id)
+
+    def fetch_calibration_run(self, run_id):
+        if run_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM calibration_runs
+            WHERE run_id = ?
+            """,
+            (str(run_id),),
+        )
+        run = self._row_to_calibration_run(self.cursor.fetchone())
+        if run is not None:
+            run["recommendations"] = self.fetch_calibration_recommendations(run_id)
+        return run
+
+    def fetch_latest_calibration_run(self):
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM calibration_runs
+            ORDER BY completed_at DESC, started_at DESC, rowid DESC
+            LIMIT 1
+            """
+        )
+        run = self._row_to_calibration_run(self.cursor.fetchone())
+        if run is not None:
+            run["recommendations"] = self.fetch_calibration_recommendations(
+                run["run_id"]
+            )
+        return run
+
+    def fetch_calibration_run_history(self, limit=25, offset=0):
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
+        self.cursor.execute(
+            f"""
+            SELECT *
+            FROM calibration_runs
+            ORDER BY completed_at DESC, started_at DESC, rowid DESC
+            {paging_sql}
+            """,
+            tuple(paging_values),
+        )
+        return [self._row_to_calibration_run(row) for row in self.cursor.fetchall()]
+
+    def fetch_calibration_recommendations(self, run_id):
+        if run_id in (None, ""):
+            return []
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM calibration_recommendations
+            WHERE run_id = ?
+            ORDER BY created_at ASC, rowid ASC
+            """,
+            (str(run_id),),
+        )
+        return [
+            self._row_to_calibration_recommendation(row)
+            for row in self.cursor.fetchall()
+        ]
+
+    def clear_calibration_recommendations(self, run_id, commit=True):
+        if run_id in (None, ""):
+            return 0
+        self.cursor.execute(
+            "DELETE FROM calibration_recommendations WHERE run_id = ?",
+            (str(run_id),),
+        )
+        deleted = self.cursor.rowcount
+        if commit:
+            self.connection.commit()
+        return deleted
+
+    def clear_calibration_run(self, run_id):
+        if run_id in (None, ""):
+            return 0
+        self.clear_calibration_recommendations(run_id, commit=False)
+        self.cursor.execute(
+            "DELETE FROM calibration_runs WHERE run_id = ?",
+            (str(run_id),),
+        )
+        deleted = self.cursor.rowcount
+        self.connection.commit()
+        return deleted
+
     @staticmethod
     def _limit_offset_clause(limit=None, offset=0):
         if limit is None:
@@ -3298,6 +3477,42 @@ class DatabaseManager:
             "status": row["status"],
             "warnings": DatabaseManager._json_list(row["warnings_json"]),
             "errors": DatabaseManager._json_list(row["errors_json"]),
+        }
+
+    @staticmethod
+    def _row_to_calibration_run(row):
+        if row is None:
+            return None
+        return {
+            "run_id": row["run_id"],
+            "started_at": row["started_at"],
+            "completed_at": row["completed_at"],
+            "status": row["status"],
+            "source_validation_run_id": row["source_validation_run_id"],
+            "source_signal_quality_run_id": row["source_signal_quality_run_id"],
+            "summary": row["summary"],
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "errors": DatabaseManager._json_list(row["errors_json"]),
+        }
+
+    @staticmethod
+    def _row_to_calibration_recommendation(row):
+        if row is None:
+            return None
+        return {
+            "recommendation_id": row["recommendation_id"],
+            "run_id": row["run_id"],
+            "category": row["category"],
+            "current_value": DatabaseManager._json_load(
+                row["current_value_json"], None
+            ),
+            "recommended_value": DatabaseManager._json_load(
+                row["recommended_value_json"], None
+            ),
+            "rationale": row["rationale"],
+            "expected_impact": row["expected_impact"],
+            "confidence": row["confidence"],
+            "created_at": row["created_at"],
         }
 
     @staticmethod
