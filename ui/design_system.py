@@ -88,35 +88,40 @@ class DashboardDesignSystem:
     def table_style(cls):
         return f"""
         QTableWidget {{
-            background-color: #111922;
-            alternate-background-color: #16212B;
-            border: 1px solid {cls.Table.BORDER};
+            background-color: #0F171F;
+            alternate-background-color: #141E28;
+            border: 1px solid #334252;
             border-radius: {cls.Table.RADIUS}px;
             color: {cls.Colors.TEXT_PRIMARY};
             gridline-color: transparent;
             outline: none;
-            selection-background-color: #1E4970;
+            selection-background-color: #24537B;
             selection-color: {cls.Colors.TEXT_PRIMARY};
         }}
         QTableWidget::item {{
-            padding: 7px 10px;
-            border-bottom: 1px solid {cls.Colors.BORDER_MUTED};
+            padding: 9px 12px;
+            border-bottom: 1px solid #22303D;
         }}
         QTableWidget::item:hover {{
-            background-color: #1D2A36;
+            background-color: #1B2A37;
         }}
         QTableWidget::item:selected {{
-            background-color: #1E4970;
+            background-color: #24537B;
             color: {cls.Colors.TEXT_PRIMARY};
         }}
         QHeaderView::section {{
-            background-color: #0E151D;
-            color: {cls.Colors.TEXT_SECONDARY};
+            background-color: #0A1118;
+            color: #AEBCCC;
             border: none;
-            border-right: 1px solid {cls.Colors.BORDER_MUTED};
-            border-bottom: 1px solid {cls.Colors.BORDER};
-            padding: 8px 10px;
+            border-right: 1px solid #22303D;
+            border-bottom: 1px solid #3C4D5E;
+            padding: 10px 12px;
             font-weight: 800;
+        }}
+        QTableCornerButton::section {{
+            background-color: #0A1118;
+            border: none;
+            border-bottom: 1px solid #3C4D5E;
         }}
         """
 

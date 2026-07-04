@@ -496,34 +496,39 @@ class CandidateTable(QTableWidget):
     def grid_style():
         return """
         QTableWidget#CandidateTable {
-            border: 1px solid #3A4654;
+            border: 1px solid #334252;
             border-radius: 8px;
-            background-color: #111922;
-            alternate-background-color: #16212B;
-            selection-background-color: #1E4970;
+            background-color: #0F171F;
+            alternate-background-color: #141E28;
+            selection-background-color: #24537B;
             selection-color: #F3F7FA;
             gridline-color: transparent;
             outline: none;
             color: #F3F7FA;
         }
         QTableWidget#CandidateTable::item {
-            padding: 8px 12px;
-            border-bottom: 1px solid #243140;
+            padding: 9px 12px;
+            border-bottom: 1px solid #22303D;
         }
         QTableWidget#CandidateTable::item:hover {
-            background-color: #1D2A36;
+            background-color: #1B2A37;
         }
         QTableWidget#CandidateTable::item:selected {
-            background-color: #1E4970;
+            background-color: #24537B;
             color: #F3F7FA;
         }
         QHeaderView::section {
-            background-color: #0E151D;
-            color: #D7E0EA;
+            background-color: #0A1118;
+            color: #AEBCCC;
             border: none;
-            border-right: 1px solid #243140;
-            border-bottom: 1px solid #3A4654;
-            padding: 9px 12px;
+            border-right: 1px solid #22303D;
+            border-bottom: 1px solid #3C4D5E;
+            padding: 10px 12px;
             font-weight: 800;
+        }
+        QTableCornerButton::section {
+            background-color: #0A1118;
+            border: none;
+            border-bottom: 1px solid #3C4D5E;
         }
         """

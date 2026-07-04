@@ -1,4 +1,5 @@
 from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -1061,20 +1062,23 @@ class ScreeningResultsPanel(QWidget):
         table.setWordWrap(False)
         table.verticalHeader().setVisible(False)
         table.verticalHeader().setDefaultSectionSize(
-            46 if title == "Ranked Candidates" else 32
+            48 if title == "Ranked Candidates" else 34
         )
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         table.horizontalHeader().setMinimumSectionSize(56)
+        table.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         if title == "Ranked Candidates":
             table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
-            table.setColumnWidth(0, 64)
-            table.setColumnWidth(1, 120)
-            table.setColumnWidth(2, 180)
-            table.setColumnWidth(3, 104)
-            table.setColumnWidth(4, 72)
-            table.setColumnWidth(5, 112)
+            table.setColumnWidth(0, 72)
+            table.setColumnWidth(1, 132)
+            table.setColumnWidth(2, 220)
+            table.setColumnWidth(3, 116)
+            table.setColumnWidth(4, 84)
+            table.setColumnWidth(5, 124)
+            table.setColumnWidth(7, 92)
+            table.setColumnWidth(8, 104)
         else:
             table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         table.setStyleSheet(DesignSystem.table_style())
@@ -1369,6 +1373,7 @@ class ScreeningResultsPanel(QWidget):
     def populate_table(table, rows, numeric_columns=None, source_rows=None):
         numeric_columns = numeric_columns or set()
         source_rows = source_rows or []
+        is_ranked_table = table.objectName() == "RankedCandidatesTable"
         table.setSortingEnabled(False)
         table.setRowCount(0)
         for row_index, row in enumerate(rows):
@@ -1381,7 +1386,9 @@ class ScreeningResultsPanel(QWidget):
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 else:
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                if table.objectName() == "RankedCandidatesTable" and column == 1:
+                if is_ranked_table:
+                    ScreeningResultsPanel.apply_ranked_item_style(item, column, value)
+                if is_ranked_table and column == 1:
                     item.setIcon(TickerLogoProvider.icon_for(value, size=32))
                     font = item.font()
                     font.setBold(True)
@@ -1394,7 +1401,122 @@ class ScreeningResultsPanel(QWidget):
                     item.setData(ScreeningResultsPanel.SOURCE_ROLE, source_rows[row_index])
                 table.setItem(row_index, column, item)
         table.resizeColumnsToContents()
+        if is_ranked_table:
+            ScreeningResultsPanel.apply_ranked_column_widths(table)
         table.setSortingEnabled(True)
+
+    @staticmethod
+    def apply_ranked_column_widths(table):
+        widths = {
+            0: 72,
+            1: 132,
+            2: 220,
+            3: 116,
+            4: 84,
+            5: 124,
+            7: 92,
+            8: 104,
+        }
+        for column, width in widths.items():
+            if table.columnWidth(column) < width:
+                table.setColumnWidth(column, width)
+
+    @staticmethod
+    def apply_ranked_item_style(item, column, value):
+        text = str(value or "").strip()
+        font = item.font()
+        font.setPointSize(10)
+        item.setFont(font)
+
+        if column == 0:
+            item.setTextAlignment(Qt.AlignCenter)
+            item.setForeground(QBrush(QColor("#91A0AF")))
+            return
+
+        if column == 1:
+            item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            item.setForeground(QBrush(QColor("#F8FAFC")))
+            return
+
+        if column == 2:
+            item.setForeground(QBrush(QColor("#C5D0DC")))
+            return
+
+        if column == 3:
+            font.setBold(True)
+            item.setFont(font)
+            item.setForeground(QBrush(QColor("#E5EEF7")))
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            return
+
+        if column == 4:
+            item.setTextAlignment(Qt.AlignCenter)
+            ScreeningResultsPanel.apply_badge_style(
+                item,
+                ScreeningResultsPanel.grade_role(text),
+            )
+            return
+
+        if column == 5:
+            item.setTextAlignment(Qt.AlignCenter)
+            ScreeningResultsPanel.apply_badge_style(
+                item,
+                ScreeningResultsPanel.confidence_role(text),
+            )
+            return
+
+        if column == 6:
+            item.setForeground(QBrush(QColor("#D4DEE8")))
+            return
+
+        if column in {7, 8}:
+            number = ScreeningResultsPanel.number_value(value)
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            if number > 0:
+                role = "error" if column == 8 else "warning"
+                ScreeningResultsPanel.apply_badge_style(item, role)
+            else:
+                item.setForeground(QBrush(QColor("#7F8D9A")))
+
+    @staticmethod
+    def apply_badge_style(item, role):
+        palette = {
+            "success": ("#48D17D", "#10271D"),
+            "warning": ("#F2C94C", "#2A2312"),
+            "error": ("#FF7A8A", "#2A1519"),
+            "info": ("#67B7DC", "#102433"),
+            "neutral": ("#AAB7C4", "#202A34"),
+        }
+        foreground, background = palette.get(role, palette["neutral"])
+        font = item.font()
+        font.setBold(True)
+        item.setFont(font)
+        item.setForeground(QBrush(QColor(foreground)))
+        item.setBackground(QBrush(QColor(background)))
+
+    @staticmethod
+    def grade_role(text):
+        normalized = str(text or "").upper()
+        if normalized in {"A+", "A", "A-"}:
+            return "success"
+        if normalized in {"B+", "B", "B-", "C+", "C"}:
+            return "warning"
+        if normalized in {"D", "F", "REJECT"}:
+            return "error"
+        return "neutral"
+
+    @staticmethod
+    def confidence_role(text):
+        normalized = str(text or "").lower()
+        if normalized in {"very high", "high"}:
+            return "success"
+        if normalized in {"medium", "moderate", "watch"}:
+            return "warning"
+        if normalized in {"low", "reject"}:
+            return "error"
+        if normalized in {"n/a", "--", ""}:
+            return "neutral"
+        return "info"
 
     @classmethod
     def company_name_for_candidate(cls, candidate):
