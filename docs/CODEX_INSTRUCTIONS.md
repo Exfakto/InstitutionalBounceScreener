@@ -54,6 +54,7 @@ Rules:
 
 - Implement one feature or issue at a time.
 - Modify only files required for the approved scope.
+- During v2.0 RC1 freeze, follow `docs/rc1_release_freeze_checklist.md`: no new features, no scoring changes, no schema changes, and no UI redesigns unless explicitly approved as release-blocking fixes.
 - Do not change scoring formulas unless explicitly requested.
 - Do not change database schema unless explicitly requested.
 - Do not redesign UI outside the approved UI scope.

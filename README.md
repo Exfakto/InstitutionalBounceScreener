@@ -63,7 +63,7 @@ Release-candidate capabilities:
 
 Current focus:
 
-- v2.0 Release Candidate Validation, repository architecture audit, and final release-readiness checks
+- v2.0 RC1 Release Freeze, Release Candidate Validation, repository architecture audit, and final release-readiness checks
 
 Planned:
 
@@ -76,6 +76,7 @@ Provider setup, PowerShell environment variables, and safe smoke-test commands a
 Repository architecture readiness is documented in `docs/repository_architecture_audit.md`.
 End-to-end workflow validation is documented in `docs/end_to_end_validation.md`.
 Release Candidate Validation is documented in `docs/release_candidate_validation.md`.
+RC1 release freeze criteria are documented in `docs/rc1_release_freeze_checklist.md`.
 
 ## Testing
 

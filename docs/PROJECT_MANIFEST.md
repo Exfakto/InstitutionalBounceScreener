@@ -12,6 +12,8 @@ Release-critical subsystems now include Provider resilience, full-market screeni
 
 The repository architecture audit is documented in `docs/repository_architecture_audit.md` and enforced by `tests/test_repository_architecture_audit.py`.
 
+The v2.0 RC1 feature freeze gate is documented in `docs/rc1_release_freeze_checklist.md`.
+
 ## Purpose
 
 Institutional Bounce Screener is a local desktop research workstation for identifying, evaluating, planning, and tracking institutional bounce opportunities in U.S. stocks.
@@ -90,7 +92,7 @@ v2.0 Release-Candidate Finalization:
 - Keep architecture boundaries stable.
 - Validate provider-backed workflows without changing scoring or persistence schemas.
 - Keep configuration, cache, live data, market status, diagnostics, calibration, and export workflows production-ready.
-- Maintain release checklist, repository architecture audit, end-to-end validation, known limitations, documentation, and tests.
+- Maintain the v2.0 RC1 release freeze checklist, release checklist, repository architecture audit, end-to-end validation, known limitations, documentation, and tests.
 
 ## Planned
 
