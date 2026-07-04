@@ -40,6 +40,12 @@ class UniverseDownloaderService:
     def update_universe(self, exchanges=("NYSE", "NASDAQ"), deactivate_stale=True):
         warnings = []
         errors = []
+        if self.provider_factory is None or not hasattr(self.provider_factory, "create"):
+            return PipelineResult(
+                False,
+                warnings=["Market data provider factory is not configured"],
+                errors=["provider factory unavailable"],
+            )
         provider_result = self.provider_factory.create()
         if not provider_result.success:
             return PipelineResult(False, warnings=provider_result.warnings, errors=provider_result.errors)
@@ -80,7 +86,11 @@ class UniverseDownloaderService:
             "sector": cls.value(record, "sector"),
             "industry": cls.value(record, "industry"),
             "market_cap": cls.value(record, "market_cap"),
-            "active": cls.value(record, "active") if cls.value(record, "active") is not None else cls.value(record, "is_active", default=1),
+            "active": cls.active_flag(
+                cls.value(record, "active")
+                if cls.value(record, "active") is not None
+                else cls.value(record, "is_active", default=1)
+            ),
             "source": source or cls.value(record, "source"),
         }
 
@@ -103,6 +113,14 @@ class UniverseDownloaderService:
             return source.get(key, default)
         return getattr(source, key, default)
 
+    @staticmethod
+    def active_flag(value):
+        if value in (False, 0, "0"):
+            return 0
+        if str(value).strip().lower() in {"false", "inactive", "no", "n"}:
+            return 0
+        return 1
+
 
 class HistoricalDataUpdateService:
     def __init__(self, repository=None, refresh_service=None):
@@ -124,15 +142,18 @@ class HistoricalDataUpdateService:
                 incremental_start = self.next_start_date(ticker)
             if progress_callback:
                 progress_callback({"stage": "ohlcv", "current_ticker": ticker, "processed": index - 1, "total": total})
-            result = self.refresh_service.refresh_ticker(
-                ticker,
-                start_date=incremental_start,
-                end_date=end_date,
-                force_refresh=force_refresh,
-            )
-            persisted += len(result.rows or []) if result.refreshed else 0
-            warnings.extend(f"{ticker}: {warning}" for warning in result.warnings)
-            errors.extend(f"{ticker}: {error}" for error in result.errors)
+            try:
+                result = self.refresh_service.refresh_ticker(
+                    ticker,
+                    start_date=incremental_start,
+                    end_date=end_date,
+                    force_refresh=force_refresh,
+                )
+                persisted += len(result.rows or []) if result.refreshed else 0
+                warnings.extend(f"{ticker}: {warning}" for warning in result.warnings)
+                errors.extend(f"{ticker}: {error}" for error in result.errors)
+            except Exception as exc:
+                errors.append(f"{ticker}: {exc}")
         return PipelineResult(not errors, processed=total, persisted=persisted, warnings=self.unique(warnings), errors=self.unique(errors))
 
     def next_start_date(self, ticker):
@@ -173,6 +194,12 @@ class FundamentalDownloaderService:
         self.provider_factory = provider_factory
 
     def update_fundamentals(self, tickers, progress_callback=None, cancellation_callback=None):
+        if self.provider_factory is None or not hasattr(self.provider_factory, "create"):
+            return PipelineResult(
+                False,
+                warnings=["Market data provider factory is not configured"],
+                errors=["provider factory unavailable"],
+            )
         provider_result = self.provider_factory.create()
         if not provider_result.success:
             return PipelineResult(False, warnings=provider_result.warnings, errors=provider_result.errors)
@@ -227,6 +254,12 @@ class InstitutionalDataRefreshService:
         self.provider_factory = provider_factory
 
     def update_institutional_data(self, tickers, progress_callback=None, cancellation_callback=None):
+        if self.provider_factory is None or not hasattr(self.provider_factory, "create"):
+            return PipelineResult(
+                False,
+                warnings=["Market data provider factory is not configured"],
+                errors=["provider factory unavailable"],
+            )
         provider_result = self.provider_factory.create()
         if not provider_result.success:
             return PipelineResult(False, warnings=provider_result.warnings, errors=provider_result.errors)
@@ -282,7 +315,14 @@ class FullMarketRefreshOrchestrator:
         warnings = []
         errors = []
         details = {}
-        universe_result = self.universe_service.update_universe()
+        if self.universe_service is None:
+            universe_result = PipelineResult(
+                False,
+                warnings=["universe service not configured"],
+                errors=["universe service unavailable"],
+            )
+        else:
+            universe_result = self.universe_service.update_universe()
         details["universe"] = universe_result
         warnings.extend(universe_result.warnings)
         errors.extend(universe_result.errors)
