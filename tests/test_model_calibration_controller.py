@@ -1,5 +1,6 @@
 from controllers.model_calibration_controller import ModelCalibrationController
 from services.model_calibration_apply_service import CalibrationApplyResult
+from services.model_calibration_validation_service import CalibrationValidationResult
 from services.model_calibration_recommendation_service import (
     CalibrationRecommendationView,
     ModelCalibrationRecommendationService,
@@ -156,3 +157,27 @@ def test_model_calibration_controller_apply_delegates_to_service():
     assert service.recommendations == [recommendation]
     assert service.confirmed is True
     assert result.status == "applied"
+
+
+def test_model_calibration_controller_validate_delegates_to_service():
+    class ValidationService:
+        def __init__(self):
+            self.current_settings = None
+            self.proposed_settings = None
+
+        def validate_changes(self, current_settings=None, proposed_settings=None):
+            self.current_settings = current_settings
+            self.proposed_settings = proposed_settings
+            return CalibrationValidationResult(status="passed", message="ok")
+
+    service = ValidationService()
+    controller = ModelCalibrationController(validation_service=service)
+
+    result = controller.validate_calibration_changes(
+        current_settings={"a": 1},
+        proposed_settings={"b": 2},
+    )
+
+    assert service.current_settings == {"a": 1}
+    assert service.proposed_settings == {"b": 2}
+    assert result.status == "passed"

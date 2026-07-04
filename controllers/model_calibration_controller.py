@@ -9,6 +9,9 @@ from services.model_calibration_recommendation_service import (
     ModelCalibrationRecommendationService,
 )
 from services.model_calibration_trend_service import ModelCalibrationTrendService
+from services.model_calibration_validation_service import (
+    ModelCalibrationValidationService,
+)
 
 
 class ModelCalibrationController:
@@ -20,6 +23,7 @@ class ModelCalibrationController:
         trend_service=None,
         comparison_service=None,
         apply_service=None,
+        validation_service=None,
     ):
         self.repository = repository
         self.recommendation_service = (
@@ -38,6 +42,10 @@ class ModelCalibrationController:
         )
         self.apply_service = apply_service or ModelCalibrationApplyService(
             settings_repository=repository
+        )
+        self.validation_service = (
+            validation_service
+            or ModelCalibrationValidationService(history_service=self.history_service)
         )
 
     def get_calibration_recommendations(self, run_id=None):
@@ -59,4 +67,10 @@ class ModelCalibrationController:
         return self.apply_service.apply_recommendations(
             recommendations,
             confirmed=confirmed,
+        )
+
+    def validate_calibration_changes(self, current_settings=None, proposed_settings=None):
+        return self.validation_service.validate_changes(
+            current_settings=current_settings,
+            proposed_settings=proposed_settings,
         )

@@ -64,8 +64,12 @@ class ModelCalibrationPanel(QWidget):
         self.apply_button = QPushButton("Apply Recommendations")
         self.apply_button.setObjectName("SecondaryButton")
         self.apply_button.clicked.connect(self.apply_current_recommendations)
+        self.validate_button = QPushButton("Validate Changes")
+        self.validate_button.setObjectName("SecondaryButton")
+        self.validate_button.clicked.connect(self.validate_current_changes)
         header_layout.addWidget(self.title_label)
         header_layout.addStretch(1)
+        header_layout.addWidget(self.validate_button)
         header_layout.addWidget(self.apply_button)
         section_layout.addLayout(header_layout)
 
@@ -73,6 +77,10 @@ class ModelCalibrationPanel(QWidget):
         self.apply_result_label.setObjectName("ResearchPreviewFieldValue")
         self.apply_result_label.setWordWrap(True)
         section_layout.addWidget(self.apply_result_label)
+        self.validation_result_label = QLabel("")
+        self.validation_result_label.setObjectName("ResearchPreviewFieldValue")
+        self.validation_result_label.setWordWrap(True)
+        section_layout.addWidget(self.validation_result_label)
 
         self.message_label = QLabel("")
         self.message_label.setObjectName("EmptyStateLabel")
@@ -114,6 +122,7 @@ class ModelCalibrationPanel(QWidget):
         self.recommendations_table.setRowCount(0)
         self.message_label.setProperty("state", "empty")
         self.apply_button.setEnabled(bool(recommendations))
+        self.validate_button.setEnabled(bool(recommendations))
 
         if not recommendations:
             self.message_label.setText("No calibration recommendations available")
@@ -161,11 +170,41 @@ class ModelCalibrationPanel(QWidget):
     def set_apply_result(self, message):
         self.apply_result_label.setText(message or "")
 
+    def validate_current_changes(self, current_settings=None, proposed_settings=None):
+        if self.controller is None:
+            self.set_validation_result("Unable to validate calibration changes")
+            return None
+        try:
+            result = self.controller.validate_calibration_changes(
+                current_settings=current_settings or {},
+                proposed_settings=proposed_settings or self.proposed_settings_from_recommendations(),
+            )
+        except Exception:
+            self.set_validation_result("Unable to validate calibration changes")
+            return None
+        self.set_validation_result(
+            self.value(result, "message") or self.value(result, "status")
+        )
+        return result
+
+    def proposed_settings_from_recommendations(self):
+        proposed = {}
+        for recommendation in self.current_recommendations:
+            metric = str(self.value(recommendation, "related_metric") or "")
+            action = self.value(recommendation, "recommended_action")
+            if metric:
+                proposed[metric] = action
+        return proposed
+
+    def set_validation_result(self, message):
+        self.validation_result_label.setText(message or "")
+
     def set_error(self, message):
         self.current_recommendations = []
         self.recommendations_table.setRowCount(0)
         self.recommendations_table.hide()
         self.apply_button.setEnabled(False)
+        self.validate_button.setEnabled(False)
         self.message_label.setText(message or "Unable to load calibration recommendations")
         self.message_label.setProperty("state", "error")
         self.message_label.show()
