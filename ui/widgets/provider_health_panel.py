@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.design_system import DashboardDesignSystem as DesignSystem
+from ui.widgets.provider_failover_history_panel import ProviderFailoverHistoryPanel
 
 
 class ProviderHealthPanel(QWidget):
@@ -95,6 +96,11 @@ class ProviderHealthPanel(QWidget):
         header.setSectionResizeMode(5, QHeaderView.Stretch)
         section_layout.addWidget(self.health_table)
 
+        self.failover_history_panel = ProviderFailoverHistoryPanel(
+            controller=self.controller
+        )
+        section_layout.addWidget(self.failover_history_panel)
+
     def refresh_health(self):
         if self.controller is None:
             self.set_dashboard(None)
@@ -117,6 +123,9 @@ class ProviderHealthPanel(QWidget):
             self.message_label.setText("No providers configured")
             self.message_label.show()
             self.health_table.hide()
+            self.failover_history_panel.set_events(
+                self.value(dashboard, "failover_events") or []
+            )
             return
 
         self.summary_label.setText(
@@ -126,6 +135,9 @@ class ProviderHealthPanel(QWidget):
         self.message_label.clear()
         self.message_label.hide()
         self.health_table.show()
+        self.failover_history_panel.set_events(
+            self.value(dashboard, "failover_events") or []
+        )
         self.health_table.setRowCount(len(providers))
         for row, provider in enumerate(providers):
             values = [

@@ -33,6 +33,14 @@ class MarketDataController:
             return []
         return self.resilience_service.all_health()
 
+    def provider_failover_history(self, limit=25):
+        if self.resilience_service is None:
+            return []
+        recent_events = getattr(self.resilience_service, "recent_failover_events", None)
+        if recent_events is None:
+            return []
+        return list(recent_events(limit=limit) or [])
+
     def provider_health_dashboard(self):
         health = list(self.provider_health() or [])
         active = self.active_provider_name(health)
@@ -41,6 +49,7 @@ class MarketDataController:
             "providers": health,
             "active_provider": active,
             "failover_provider": failover,
+            "failover_events": self.provider_failover_history(),
         }
 
     @staticmethod
