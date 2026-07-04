@@ -4,7 +4,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QHeaderView,
+    QHBoxLayout,
     QLabel,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -27,6 +29,7 @@ class ModelCalibrationPanel(QWidget):
     def __init__(self, controller=None, parent=None):
         super().__init__(parent)
         self.controller = controller
+        self.current_recommendations = []
         self.setObjectName("ModelCalibrationPanel")
         self._build_ui()
         self.set_recommendations([])
@@ -55,9 +58,21 @@ class ModelCalibrationPanel(QWidget):
         )
         section_layout.setSpacing(DesignSystem.Spacing.SM)
 
+        header_layout = QHBoxLayout()
         self.title_label = QLabel("Calibration Recommendations")
         self.title_label.setObjectName("ResearchPreviewSectionTitle")
-        section_layout.addWidget(self.title_label)
+        self.apply_button = QPushButton("Apply Recommendations")
+        self.apply_button.setObjectName("SecondaryButton")
+        self.apply_button.clicked.connect(self.apply_current_recommendations)
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch(1)
+        header_layout.addWidget(self.apply_button)
+        section_layout.addLayout(header_layout)
+
+        self.apply_result_label = QLabel("")
+        self.apply_result_label.setObjectName("ResearchPreviewFieldValue")
+        self.apply_result_label.setWordWrap(True)
+        section_layout.addWidget(self.apply_result_label)
 
         self.message_label = QLabel("")
         self.message_label.setObjectName("EmptyStateLabel")
@@ -95,8 +110,10 @@ class ModelCalibrationPanel(QWidget):
 
     def set_recommendations(self, recommendations):
         recommendations = list(recommendations or [])
+        self.current_recommendations = recommendations
         self.recommendations_table.setRowCount(0)
         self.message_label.setProperty("state", "empty")
+        self.apply_button.setEnabled(bool(recommendations))
 
         if not recommendations:
             self.message_label.setText("No calibration recommendations available")
@@ -126,9 +143,29 @@ class ModelCalibrationPanel(QWidget):
                 self.recommendations_table.setItem(row, column, item)
         self.recommendations_table.resizeRowsToContents()
 
+    def apply_current_recommendations(self, confirmed=True):
+        if self.controller is None:
+            self.set_apply_result("Unable to apply calibration recommendations")
+            return None
+        try:
+            result = self.controller.apply_calibration_recommendations(
+                self.current_recommendations,
+                confirmed=confirmed,
+            )
+        except Exception:
+            self.set_apply_result("Unable to apply calibration recommendations")
+            return None
+        self.set_apply_result(self.value(result, "message") or self.value(result, "status"))
+        return result
+
+    def set_apply_result(self, message):
+        self.apply_result_label.setText(message or "")
+
     def set_error(self, message):
+        self.current_recommendations = []
         self.recommendations_table.setRowCount(0)
         self.recommendations_table.hide()
+        self.apply_button.setEnabled(False)
         self.message_label.setText(message or "Unable to load calibration recommendations")
         self.message_label.setProperty("state", "error")
         self.message_label.show()

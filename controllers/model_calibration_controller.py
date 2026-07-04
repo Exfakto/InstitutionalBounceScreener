@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from services.model_calibration_apply_service import ModelCalibrationApplyService
 from services.model_calibration_comparison_service import (
     ModelCalibrationComparisonService,
 )
@@ -18,6 +19,7 @@ class ModelCalibrationController:
         history_service=None,
         trend_service=None,
         comparison_service=None,
+        apply_service=None,
     ):
         self.repository = repository
         self.recommendation_service = (
@@ -34,6 +36,9 @@ class ModelCalibrationController:
             comparison_service
             or ModelCalibrationComparisonService(history_service=self.history_service)
         )
+        self.apply_service = apply_service or ModelCalibrationApplyService(
+            settings_repository=repository
+        )
 
     def get_calibration_recommendations(self, run_id=None):
         return self.recommendation_service.get_recommendations(run_id=run_id)
@@ -49,3 +54,9 @@ class ModelCalibrationController:
 
     def compare_calibration_runs(self, base_run_id, comparison_run_id):
         return self.comparison_service.compare_runs(base_run_id, comparison_run_id)
+
+    def apply_calibration_recommendations(self, recommendations, confirmed=False):
+        return self.apply_service.apply_recommendations(
+            recommendations,
+            confirmed=confirmed,
+        )

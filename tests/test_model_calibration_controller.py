@@ -1,4 +1,5 @@
 from controllers.model_calibration_controller import ModelCalibrationController
+from services.model_calibration_apply_service import CalibrationApplyResult
 from services.model_calibration_recommendation_service import (
     CalibrationRecommendationView,
     ModelCalibrationRecommendationService,
@@ -124,3 +125,34 @@ def test_model_calibration_recommendation_service_propagates_repository_errors()
         assert "database unavailable" in str(exc)
     else:
         raise AssertionError("Expected repository error to propagate")
+
+
+def test_model_calibration_controller_apply_delegates_to_service():
+    class ApplyService:
+        def __init__(self):
+            self.recommendations = None
+            self.confirmed = None
+
+        def apply_recommendations(self, recommendations, confirmed=False):
+            self.recommendations = recommendations
+            self.confirmed = confirmed
+            return CalibrationApplyResult(status="applied", message="Applied 1")
+
+    recommendation = CalibrationRecommendationView(
+        title="Minimum Final Score",
+        severity="HIGH",
+        recommended_action="75",
+        reason="Weak buckets",
+        related_metric="minimum_final_score",
+    )
+    service = ApplyService()
+    controller = ModelCalibrationController(apply_service=service)
+
+    result = controller.apply_calibration_recommendations(
+        [recommendation],
+        confirmed=True,
+    )
+
+    assert service.recommendations == [recommendation]
+    assert service.confirmed is True
+    assert result.status == "applied"
