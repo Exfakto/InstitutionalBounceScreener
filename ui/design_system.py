@@ -7,20 +7,20 @@ class DashboardDesignSystem:
     """
 
     class Colors:
-        BACKGROUND = "#0B1117"
-        PANEL = "#141B23"
-        SURFACE = "#1A232D"
-        ELEVATED = "#202B36"
-        HEADER = "#111922"
-        CARD = "#18212A"
-        BORDER = "#3A4654"
-        BORDER_MUTED = "#273340"
-        BORDER_STRONG = "#4A5868"
+        BACKGROUND = "#070D13"
+        PANEL = "#0F171F"
+        SURFACE = "#141E28"
+        ELEVATED = "#1B2A37"
+        HEADER = "#0A1118"
+        CARD = "#101923"
+        BORDER = "#334252"
+        BORDER_MUTED = "#22303D"
+        BORDER_STRONG = "#3C4D5E"
         TEXT_PRIMARY = "#F3F7FA"
         TEXT_SECONDARY = "#B9C5D1"
         TEXT_MUTED = "#82909F"
         ACCENT = "#5B9DF2"
-        ACCENT_SOFT = "#1D3A58"
+        ACCENT_SOFT = "#10263A"
         SUCCESS = "#35B779"
         WARNING = "#D6A23A"
         DANGER = "#E05A5A"
@@ -52,16 +52,16 @@ class DashboardDesignSystem:
         XL = 12
 
     class Card:
-        BACKGROUND = "#18212A"
-        BORDER = "#3A4654"
-        RADIUS = 9
+        BACKGROUND = "#101923"
+        BORDER = "#2F3E4D"
+        RADIUS = 8
         PADDING = 12
 
     class Table:
-        BACKGROUND = "#141B23"
-        ALTERNATE_BACKGROUND = "#1A232D"
-        HEADER_BACKGROUND = "#111922"
-        BORDER = "#3A4654"
+        BACKGROUND = "#0F171F"
+        ALTERNATE_BACKGROUND = "#141E28"
+        HEADER_BACKGROUND = "#0A1118"
+        BORDER = "#334252"
         RADIUS = 8
         CELL_PADDING_VERTICAL = 8
         CELL_PADDING_HORIZONTAL = 10

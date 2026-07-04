@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QHBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 
 from ui.design_system import DashboardDesignSystem as DesignSystem
 from ui.widgets.statistics_card import StatisticsCard
@@ -57,12 +58,13 @@ class KpiStrip(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("KpiStrip")
+        self.setStyleSheet(self.strip_style())
 
         self.cards = {}
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(DesignSystem.Spacing.MD)
+        layout.setSpacing(DesignSystem.Spacing.SM)
 
         for definition in self.CARD_DEFINITIONS:
             key = definition["key"]
@@ -73,11 +75,14 @@ class KpiStrip(QWidget):
                 accent_color=definition["accent"],
             )
             card.setObjectName("KpiCard")
-            card.setMaximumHeight(126)
-            card.setMinimumHeight(84)
-            card.setMinimumWidth(150)
+            card.setMaximumHeight(118)
+            card.setMinimumHeight(88)
+            card.setMinimumWidth(146)
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             card.title.setObjectName("KpiTitle")
             card.value.setObjectName("KpiValue")
+            card.icon.setAlignment(Qt.AlignCenter)
+            card.icon.setFixedSize(34, 24)
 
             title_font = card.title.font()
             title_font.setPointSize(DesignSystem.Typography.SMALL_PT)
@@ -90,9 +95,7 @@ class KpiStrip(QWidget):
             card.value.setFont(value_font)
 
             self.cards[key] = card
-            layout.addWidget(card)
-
-        layout.addStretch()
+            layout.addWidget(card, stretch=1)
 
     def update_statistics(self, stats):
         """
@@ -128,3 +131,44 @@ class KpiStrip(QWidget):
             return f"{int(value):,}"
         except (TypeError, ValueError):
             return str(value)
+
+    @staticmethod
+    def strip_style():
+        return """
+        QFrame#KpiCard {
+            background-color: #101923;
+            border: 1px solid #2F3E4D;
+            border-radius: 8px;
+        }
+        QFrame#KpiCard:hover {
+            background-color: #14202B;
+            border-color: #3E5367;
+        }
+        QFrame#KpiAccentBar {
+            border: none;
+            border-radius: 1px;
+        }
+        QLabel#KpiIcon {
+            background-color: #0B1117;
+            border: 1px solid #2B3A49;
+            border-radius: 5px;
+            padding: 1px 4px;
+            font-size: 8pt;
+            font-weight: 900;
+        }
+        QLabel#KpiTitle {
+            color: #9EACBA;
+            font-size: 8pt;
+            font-weight: 900;
+        }
+        QLabel#KpiValue {
+            color: #F8FAFC;
+            font-size: 18pt;
+            font-weight: 900;
+        }
+        QLabel#KpiSubtitle {
+            color: #7F8D9A;
+            font-size: 8pt;
+            font-weight: 700;
+        }
+        """

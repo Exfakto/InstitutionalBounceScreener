@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
 
 from ui.design_system import DashboardDesignSystem as DesignSystem
 
@@ -22,21 +22,28 @@ class HeaderBar(QFrame):
         super().__init__(parent)
 
         self.setObjectName("HeaderBar")
-        self.setMaximumHeight(140)
-        self.setMinimumHeight(84)
+        self.setMaximumHeight(112)
+        self.setMinimumHeight(82)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setStyleSheet(self.header_style())
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(
-            DesignSystem.Spacing.XL,
-            DesignSystem.Spacing.MD,
-            DesignSystem.Spacing.XL,
-            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.SM,
+            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.SM,
         )
-        layout.setSpacing(DesignSystem.Spacing.XXL)
+        layout.setSpacing(DesignSystem.Spacing.LG)
+
+        self.logo_label = QLabel("IB")
+        self.logo_label.setObjectName("HeaderLogo")
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        self.logo_label.setFixedSize(42, 42)
 
         title_layout = QVBoxLayout()
         title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(DesignSystem.Spacing.XS)
+        title_layout.setSpacing(DesignSystem.Spacing.XXS)
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("HeaderTitle")
@@ -53,8 +60,8 @@ class HeaderBar(QFrame):
 
         self.version_label = QLabel(version)
         self.version_label.setObjectName("HeaderVersion")
-        self.version_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.version_label.setMinimumWidth(168)
+        self.version_label.setAlignment(Qt.AlignCenter)
+        self.version_label.setMinimumWidth(64)
         version_font = self.version_label.font()
         version_font.setBold(True)
         self.version_label.setFont(version_font)
@@ -62,34 +69,34 @@ class HeaderBar(QFrame):
         self.status_label = QLabel(status)
         self.status_label.setObjectName("HeaderStatus")
         self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.status_label.setMinimumWidth(168)
+        self.status_label.setMinimumWidth(128)
 
         self.market_status_label = QLabel("Market: --")
         self.market_status_label.setObjectName("HeaderMarketStatus")
-        self.market_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.market_status_label.setMinimumWidth(168)
+        self.market_status_label.setAlignment(Qt.AlignCenter)
+        self.market_status_label.setMinimumWidth(128)
 
         self.auto_refresh_label = QLabel("Auto-refresh: --")
         self.auto_refresh_label.setObjectName("HeaderRefreshStatus")
-        self.auto_refresh_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.auto_refresh_label.setMinimumWidth(168)
+        self.auto_refresh_label.setAlignment(Qt.AlignCenter)
+        self.auto_refresh_label.setMinimumWidth(118)
 
         self.refresh_interval_label = QLabel("Interval: --")
         self.refresh_interval_label.setObjectName("HeaderRefreshStatus")
-        self.refresh_interval_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.refresh_interval_label.setMinimumWidth(168)
+        self.refresh_interval_label.setAlignment(Qt.AlignCenter)
+        self.refresh_interval_label.setMinimumWidth(96)
 
         self.last_refresh_label = QLabel("Last refresh: --")
         self.last_refresh_label.setObjectName("HeaderRefreshStatus")
-        self.last_refresh_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.last_refresh_label.setMinimumWidth(168)
+        self.last_refresh_label.setAlignment(Qt.AlignCenter)
+        self.last_refresh_label.setMinimumWidth(116)
 
         self.next_refresh_label = QLabel("Next refresh: --")
         self.next_refresh_label.setObjectName("HeaderRefreshStatus")
-        self.next_refresh_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.next_refresh_label.setMinimumWidth(168)
+        self.next_refresh_label.setAlignment(Qt.AlignCenter)
+        self.next_refresh_label.setMinimumWidth(116)
 
-        status_layout = QVBoxLayout()
+        status_layout = QHBoxLayout()
         status_layout.setContentsMargins(0, 0, 0, 0)
         status_layout.setSpacing(DesignSystem.Spacing.XS)
         status_layout.addWidget(self.version_label)
@@ -100,8 +107,9 @@ class HeaderBar(QFrame):
         status_layout.addWidget(self.last_refresh_label)
         status_layout.addWidget(self.next_refresh_label)
 
+        layout.addWidget(self.logo_label)
         layout.addLayout(title_layout, stretch=1)
-        layout.addLayout(status_layout)
+        layout.addLayout(status_layout, stretch=0)
 
     def set_status(self, text):
         """
@@ -214,6 +222,63 @@ class HeaderBar(QFrame):
         """
 
         return self.subtitle_label.text()
+
+    @staticmethod
+    def header_style():
+        return """
+        QFrame#HeaderBar {
+            background-color: #0A1118;
+            border: 1px solid #334252;
+            border-radius: 10px;
+        }
+        QLabel#HeaderLogo {
+            color: #F3F7FA;
+            background-color: #10263A;
+            border: 1px solid #4C91D9;
+            border-radius: 8px;
+            font-size: 12pt;
+            font-weight: 900;
+        }
+        QLabel#HeaderTitle {
+            color: #F8FAFC;
+            font-size: 20pt;
+            font-weight: 900;
+        }
+        QLabel#HeaderSubtitle {
+            color: #8FA0B2;
+            font-size: 9pt;
+            font-weight: 700;
+        }
+        QLabel#HeaderVersion,
+        QLabel#HeaderStatus,
+        QLabel#HeaderMarketStatus,
+        QLabel#HeaderRefreshStatus {
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 8pt;
+            font-weight: 800;
+        }
+        QLabel#HeaderVersion {
+            color: #67B7DC;
+            background-color: #102433;
+            border: 1px solid #28516B;
+        }
+        QLabel#HeaderStatus {
+            color: #B9C5D1;
+            background-color: #111B24;
+            border: 1px solid #273746;
+        }
+        QLabel#HeaderMarketStatus {
+            color: #48D17D;
+            background-color: #10271D;
+            border: 1px solid #2E6D4A;
+        }
+        QLabel#HeaderRefreshStatus {
+            color: #AAB7C4;
+            background-color: #111B24;
+            border: 1px solid #273746;
+        }
+        """
 
     @staticmethod
     def safe_text(value):

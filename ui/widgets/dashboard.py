@@ -21,6 +21,7 @@ class InstitutionalDashboard(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("InstitutionalDashboard")
+        self.setStyleSheet(self.dashboard_style())
         self.section_frames = {}
         self.market_labels = {}
         self.opportunity_labels = {}
@@ -50,8 +51,8 @@ class InstitutionalDashboard(QWidget):
 
         layout = QGridLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setHorizontalSpacing(12)
-        layout.setVerticalSpacing(12)
+        layout.setHorizontalSpacing(14)
+        layout.setVerticalSpacing(14)
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
 
@@ -154,8 +155,10 @@ class InstitutionalDashboard(QWidget):
         layout = frame.layout()
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(8)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(10)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
         for row, (key, label_text) in enumerate(fields):
@@ -165,6 +168,7 @@ class InstitutionalDashboard(QWidget):
             value.setObjectName("ResearchPreviewFieldValue")
             value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            value.setMinimumWidth(96)
             grid.addWidget(label, row, 0)
             grid.addWidget(value, row, 1)
             target[key] = value
@@ -219,7 +223,7 @@ class InstitutionalDashboard(QWidget):
         frame.setObjectName("ResearchPreviewSection")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(14, 12, 14, 14)
-        layout.setSpacing(10)
+        layout.setSpacing(9)
 
         label = QLabel(title)
         label.setObjectName("ResearchPreviewSectionTitle")
@@ -233,7 +237,10 @@ class InstitutionalDashboard(QWidget):
         table.setAlternatingRowColors(True)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         table.setSelectionMode(QTableWidget.NoSelection)
+        table.setShowGrid(False)
+        table.setWordWrap(False)
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(34)
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         table.setMinimumHeight(88)
@@ -488,3 +495,68 @@ class InstitutionalDashboard(QWidget):
         if abs(number) <= 1:
             number *= 100
         return f"{number:.1f}%"
+
+    @staticmethod
+    def dashboard_style():
+        return """
+        QWidget#InstitutionalDashboard {
+            background-color: transparent;
+        }
+        QWidget#InstitutionalDashboardContent {
+            background-color: transparent;
+        }
+        QFrame#ResearchPreviewSection {
+            background-color: #101923;
+            border: 1px solid #2F3E4D;
+            border-radius: 8px;
+        }
+        QLabel#ResearchPreviewSectionTitle {
+            color: #D7E0EA;
+            font-size: 10pt;
+            font-weight: 900;
+        }
+        QLabel#ResearchPreviewFieldLabel {
+            color: #8392A1;
+            font-size: 9pt;
+            font-weight: 700;
+        }
+        QLabel#ResearchPreviewFieldValue {
+            color: #F3F7FA;
+            background-color: #0D151D;
+            border: 1px solid #22303D;
+            border-radius: 5px;
+            padding: 4px 8px;
+            font-size: 9pt;
+            font-weight: 800;
+        }
+        QTableWidget {
+            background-color: #0F171F;
+            alternate-background-color: #141E28;
+            border: 1px solid #263645;
+            border-radius: 7px;
+            color: #E5EEF7;
+            gridline-color: transparent;
+            selection-background-color: #24537B;
+        }
+        QTableWidget::item {
+            padding: 7px 9px;
+            border-bottom: 1px solid #22303D;
+        }
+        QHeaderView::section {
+            background-color: #0A1118;
+            color: #AEBCCC;
+            border: none;
+            border-right: 1px solid #22303D;
+            border-bottom: 1px solid #334252;
+            padding: 8px 9px;
+            font-weight: 900;
+        }
+        QLabel#EmptyStateLabel {
+            color: #9EACBA;
+            background-color: #0F171F;
+            border: 1px solid #263645;
+            border-radius: 8px;
+            padding: 14px;
+            font-weight: 700;
+        }
+        """
