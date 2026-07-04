@@ -24,6 +24,7 @@ The application remains local-first, SQLite-backed, and PySide6-based. Business 
 - Model calibration has service, controller, UI panel, history, trend, comparison, apply, validation, audit, and export coverage.
 - End-to-end validation tests cover startup, screening, ranking, result display, export generation, calibration, and provider failover.
 - Documentation now reflects the v2.0 release-candidate architecture and validation workflow.
+- Release-critical filenames are aligned with the actual repository structure, including `ui/widgets/dashboard.py` rather than a non-existent `dashboard_panel.py`.
 
 ## Documented Exceptions
 
@@ -50,7 +51,15 @@ Recommended guardrail: keep feature workflows out of this controller.
 - Several legacy services still instantiate `DatabaseManager` directly. This is compatible with the current architecture but should gradually move toward repository injection where practical.
 - `ui/main_window.py` remains a large orchestration file. It is stable, but future UI additions should prefer smaller widgets and controller/service delegation.
 - Runtime folders such as `logs/`, `exports/`, `.pytest_cache/`, and `__pycache__/` may exist in working trees. These should stay out of release bundles.
-- Historical v3/v4/v5/v6/v7/v8/v9/v10 implementation names exist in docs and tests because the project evolved through multiple internal tracks. The release-facing documentation now treats the current state as v2.0 release-candidate readiness.
+
+## Compatibility and Legacy Modules
+
+- `main.py` remains a compatibility entry point for launching the application.
+- `app.py` and `app_entry.py` are application entry-point helpers for development and packaging workflows.
+- `providers/provider_manager.py`, `providers/provider_config.py`, and `providers/cache_manager.py` remain legacy-compatible provider infrastructure while newer market-data workflows also use `market_data/` and provider resilience services.
+- `services/exception_handler.py` and `services/diagnostics_service.py` are documented PySide6 service-layer exceptions.
+- `controllers/application_controller.py` is the documented application-shell boundary that constructs `ui.main_window.MainWindow`.
+- No `ui/widgets/dashboard_panel.py` file exists; the dashboard widget is `ui/widgets/dashboard.py`.
 
 ## Failures
 

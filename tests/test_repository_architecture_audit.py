@@ -33,7 +33,8 @@ MAJOR_CONTROLLERS = {
     "market_data_controller": "test_market_data_controller.py",
     "diagnostics_controller": "test_diagnostics_controller.py",
     "model_calibration_controller": "test_model_calibration_controller.py",
-    "results_export_controller": "test_export_controller.py",
+    "results_export_controller": "test_end_to_end_export_workflow.py",
+    "export_controller": "test_export_controller.py",
     "screening_controller": "test_full_universe_validation_service.py",
     "chart_controller": "test_chart_controller.py",
     "dashboard_controller": "test_dashboard_controller.py",
@@ -139,6 +140,46 @@ def test_repository_has_no_duplicate_service_module_names():
     assert duplicates == []
 
 
+def test_release_critical_filenames_match_repository_manifest():
+    required_files = [
+        "ui/widgets/dashboard.py",
+        "ui/widgets/screening_results_panel.py",
+        "ui/widgets/provider_health_panel.py",
+        "ui/widgets/provider_configuration_panel.py",
+        "ui/widgets/provider_failover_history_panel.py",
+        "ui/widgets/production_readiness_panel.py",
+        "controllers/market_data_controller.py",
+        "controllers/diagnostics_controller.py",
+        "controllers/model_calibration_controller.py",
+        "controllers/results_export_controller.py",
+        "services/live_provider_resilience_service.py",
+        "services/provider_configuration_validation_service.py",
+        "services/provider_failover_event_service.py",
+        "services/production_readiness_dashboard_service.py",
+        "services/release_candidate_validation_service.py",
+        "docs/repository_architecture_audit.md",
+        "docs/end_to_end_validation.md",
+        "docs/release_candidate_validation.md",
+    ]
+    missing = [path for path in required_files if not (ROOT / path).exists()]
+
+    assert missing == []
+
+
+def test_deprecated_or_compatibility_modules_are_documented():
+    documented = (ROOT / "docs" / "repository_architecture_audit.md").read_text(
+        encoding="utf-8"
+    )
+    for phrase in [
+        "Compatibility and Legacy Modules",
+        "`main.py`",
+        "`services/exception_handler.py`",
+        "`services/diagnostics_service.py`",
+        "`controllers/application_controller.py`",
+    ]:
+        assert phrase in documented
+
+
 def test_architecture_documentation_mentions_current_release_layers():
     required_docs = [
         ROOT / "docs" / "repository_architecture_audit.md",
@@ -156,5 +197,6 @@ def test_architecture_documentation_mentions_current_release_layers():
         "Model calibration",
         "Release Candidate Validation",
         "v2.0",
+        "dashboard.py",
     ]:
         assert phrase in combined

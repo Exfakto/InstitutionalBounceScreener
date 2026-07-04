@@ -30,7 +30,7 @@ The app combines market data, technical indicators, support-zone detection, boun
 - `app.py` - primary application entry point.
 - `main.py` - compatibility entry point.
 - `ui/` - PySide6 user interface.
-- `ui/widgets/` - reusable dashboard, decision, trade, watchlist, journal, and performance widgets.
+- `ui/widgets/` - reusable dashboard (`dashboard.py`), screening results, diagnostics, provider health, calibration, decision, trade, watchlist, journal, and performance widgets.
 - `controllers/` - GUI-to-service coordination.
 - `services/` - business workflows and persistence orchestration.
 - `providers/` - provider interfaces, local and optional live providers, provider manager, configuration, and cache.
@@ -56,7 +56,7 @@ The app combines market data, technical indicators, support-zone detection, boun
 
 ### Controllers
 
-Controllers expose GUI-safe workflows and delegate to services. Implemented controller areas include market, indicators, support, bounce, scoring, chart data, watchlist, and trade journal.
+Controllers expose GUI-safe workflows and delegate to services. Implemented controller areas include market data, diagnostics, model calibration, results export, screening validation, market, indicators, support, bounce, scoring, chart data, watchlist, and trade journal.
 
 ### Services
 
@@ -68,25 +68,20 @@ Providers expose a consistent read-only data access boundary through provider in
 
 ### Database
 
-SQLite is the local source of truth. `DatabaseManager` owns all SQL. Current tables include stocks, price history, technical indicators, support levels, bounce validations, fundamentals, institutional metrics, earnings, watchlist, and paper trades.
+SQLite is the local source of truth. `DatabaseManager` owns schema initialization and SQL. Current persistence areas include stocks, market universe symbols, OHLCV cache, technical indicators, support levels, bounce validations, fundamentals, institutional metrics, earnings, ranked candidates, screening runs, validation/calibration runs, beta runs, app settings, watchlist, and paper trades.
 
 ### Analysis
 
 The analysis layer includes score providers, composite scoring, composite intelligence, opportunity rating, institutional checklist, trade thesis, trade planning engines, portfolio statistics, and strategy analytics. These engines are pure and must not depend on UI, services, or database access.
 
-## Completed Milestones
+## Completed Release-Candidate Capabilities
 
-- v2.0 Professional Dashboard.
-- v2.1 Intelligence Layer.
-- v2.2 Chart Workspace.
-- v2.3 Decision Engine.
-- v2.4 Trade Planning Suite.
-- v2.5 Trade Card.
-- v2.6 Watchlist.
-- v2.7 Portfolio Intelligence.
-- v2.8 Stabilization / Performance / Validation.
-- v2.9 Data Provider Abstraction.
-- v3.0 Beta Infrastructure.
+- Professional dashboard and responsive PySide6 workstation shell.
+- Full-market universe, market-data cache, provider abstraction, provider resilience, provider health, failover event logging, and provider configuration validation.
+- Technical indicator, support-zone, bounce-detection, institutional intelligence, composite scoring, candidate ranking, and screening orchestration engines.
+- Ranked results UI, run history, candidate detail inspection, chart summaries, export workflows, and end-to-end validation.
+- Model calibration recommendations, history, trend, comparison, apply, automated validation, and integration audit.
+- Production readiness dashboard, Release Candidate Validation suite, release diagnostics, packaging documentation, backup/restore support, and repository architecture audit.
 
 ## Current Focus
 
@@ -99,9 +94,9 @@ v2.0 Release-Candidate Finalization:
 
 ## Planned
 
-- Post-beta packaging and release validation.
-- Additional provider endpoints where explicitly implemented.
-- Alerts, richer automation, provider normalization hardening, and packaging remain deferred.
+- Final release-candidate validation and packaging smoke checks.
+- Additional provider endpoint expansion where explicitly implemented.
+- Alerts, richer automation, and provider normalization hardening remain deferred.
 
 ## Dependencies
 

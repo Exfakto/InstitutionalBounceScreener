@@ -29,6 +29,7 @@ Institutional Bounce Screener is in v2.0 release-candidate readiness. Completed 
 - Full-market screening orchestration, screening diagnostics, ranked results, export workflows, and end-to-end validation.
 - Model calibration recommendations, history, trend, comparison, apply, validation, and integration audit tooling.
 - Production readiness dashboard and Release Candidate Validation suite.
+- Current dashboard widget implementation: `ui/widgets/dashboard.py`.
 
 ## Architecture
 
@@ -51,19 +52,14 @@ Pure calculation modules live in `analysis/`, `support/`, `bounce/`, `indicators
 
 ## Milestone Status
 
-Completed:
+Release-candidate capabilities:
 
-- v2.0 Professional Dashboard
-- v2.1 Intelligence Layer
-- v2.2 Chart Workspace
-- v2.3 Decision Engine
-- v2.4 Trade Planning Suite
-- v2.5 Trade Card
-- v2.6 Watchlist
-- v2.7 Portfolio Intelligence
-- v2.8 Stabilization / Performance / Validation
-- v2.9 Data Provider Abstraction
-- v3.0 Beta Infrastructure
+- Professional dashboard and responsive workstation shell
+- Provider abstraction, cache-first data access, provider resilience, provider health, failover logging, and provider configuration validation
+- Full-market screening, technical/support/bounce/institutional analysis, composite scoring, ranking, and results workflows
+- Export generation for ranked candidates, run packages, reports, validation artifacts, and beta/release workflows
+- Model calibration recommendations, history, trend, comparison, apply, validation, and integration audit
+- Production readiness dashboard, Release Candidate Validation, repository architecture audit, and end-to-end workflow validation
 
 Current focus:
 
@@ -71,9 +67,9 @@ Current focus:
 
 Planned:
 
-- Post-beta packaging, validation, operational hardening, and deferred feature work
+- RC packaging checks, validation, operational hardening, and deferred feature work
 
-Premium provider foundations exist for Polygon.io, Financial Modeling Prep, SEC EDGAR, and Finnhub where implemented in source. Paid provider calls require API keys and tests use mocked responses.
+Premium provider foundations exist for Polygon.io, Financial Modeling Prep, Alpaca, SEC EDGAR, and Finnhub where implemented in source. Paid provider calls require API keys and tests use mocked responses.
 
 Provider setup, PowerShell environment variables, and safe smoke-test commands are documented in `docs/PROVIDER_SETUP.md`.
 

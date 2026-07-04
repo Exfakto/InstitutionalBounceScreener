@@ -47,6 +47,8 @@ Rules:
 - Do not introduce UI imports in services or repositories except documented infrastructure boundaries such as the global exception handler.
 - Do not introduce direct database imports in UI files.
 - Update `docs/repository_architecture_audit.md` when architecture exceptions are added or retired.
+- Treat `main.py`, `app.py`, and `app_entry.py` as entry-point compatibility files, not feature modules.
+- The dashboard widget is `ui/widgets/dashboard.py`; do not refer to a `dashboard_panel.py` unless that file is explicitly created in a future scoped task.
 
 ## Change Discipline
 
