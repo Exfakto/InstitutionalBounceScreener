@@ -455,6 +455,40 @@ class BenchmarkComparisonService:
         )
 
 
+class ValidationPersistenceService:
+    def __init__(self, repository):
+        self.repository = repository
+
+    def save_report(self, report):
+        if self.repository is None or not hasattr(self.repository, "save_validation_run"):
+            return None
+        self.repository.save_validation_run(report)
+        self.repository.save_validation_signal_results(
+            value(report, "run_id"),
+            value(report, "outcomes") or [],
+        )
+        self.repository.save_weight_optimization_results(
+            value(report, "run_id"),
+            value(report, "best_weight_configs") or [],
+        )
+        return self.repository.fetch_validation_run(value(report, "run_id"))
+
+    def fetch_latest(self):
+        if self.repository is None or not hasattr(self.repository, "fetch_latest_validation_run"):
+            return None
+        return self.repository.fetch_latest_validation_run()
+
+    def fetch_history(self, limit=25, offset=0):
+        if self.repository is None or not hasattr(self.repository, "fetch_validation_run_history"):
+            return []
+        return self.repository.fetch_validation_run_history(limit=limit, offset=offset)
+
+    def clear(self, run_id):
+        if self.repository is None or not hasattr(self.repository, "clear_validation_run"):
+            return 0
+        return self.repository.clear_validation_run(run_id)
+
+
 class AlgorithmValidationService:
     def __init__(self, repository):
         self.repository = repository
@@ -535,9 +569,7 @@ class AlgorithmValidationService:
             outcomes=outcomes,
         )
         if hasattr(self.repository, "save_validation_run"):
-            self.repository.save_validation_run(report)
-            self.repository.save_validation_signal_results(report.run_id, outcomes)
-            self.repository.save_weight_optimization_results(report.run_id, best_weights)
+            ValidationPersistenceService(self.repository).save_report(report)
         return report
 
 
@@ -548,6 +580,28 @@ class AlgorithmValidationReportService:
         with destination.open("w", encoding="utf-8") as handle:
             json.dump(to_plain(report), handle, indent=2, sort_keys=True)
         return {"success": True, "path": str(destination), "message": "Algorithm validation report exported."}
+
+    def export_summary_csv(self, report, output_dir, filename="algorithm_validation_summary.csv"):
+        destination = destination_path(output_dir, filename, "csv")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        metrics = value(report, "summary_metrics") or {}
+        row = {
+            "run_id": value(report, "run_id"),
+            "start_date": value(report, "start_date"),
+            "end_date": value(report, "end_date"),
+            "signal_count": value(report, "signal_count") or 0,
+            "outcome_count": value(report, "outcome_count") or 0,
+            "win_rate": value(metrics, "win_rate") or 0,
+            "average_return": value(metrics, "average_return") or 0,
+            "expectancy": value(metrics, "expectancy") or 0,
+            "profit_factor": value(metrics, "profit_factor") or 0,
+            "max_drawdown": value(metrics, "max_drawdown") or 0,
+        }
+        with destination.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(row.keys()))
+            writer.writeheader()
+            writer.writerow(row)
+        return {"success": True, "path": str(destination), "message": "Algorithm validation summary exported."}
 
     def export_issue_csv(self, report, output_dir, filename="algorithm_validation_issues.csv"):
         destination = destination_path(output_dir, filename, "csv")
