@@ -1748,18 +1748,52 @@ class MainWindow(QMainWindow):
         return self.start_background_task(
             "universe_worker",
             "universe",
-            self.controller.update_universe,
+            self.run_full_market_universe_update,
             "Universe update already running",
-            "Importing universe...",
+            "Updating full market universe...",
             20,
             self.on_universe_update_completed,
             "Universe update failed",
         )
 
+    def run_full_market_universe_update(self):
+
+        return self.universe_downloader_service().update_universe()
+
     def on_universe_update_completed(self, result):
 
-        imported, total = result
+        if hasattr(result, "persisted"):
+            imported = int(getattr(result, "persisted", 0) or 0)
+            processed = int(getattr(result, "processed", 0) or 0)
+            eligible = int(
+                (getattr(result, "details", {}) or {}).get("eligible_count", imported)
+                or 0
+            )
+            warnings = list(getattr(result, "warnings", []) or [])
+            errors = list(getattr(result, "errors", []) or [])
+            success = bool(getattr(result, "success", not errors))
 
+            self.log(f"Persisted {imported} universe symbols")
+            for warning in warnings:
+                self.log(f"Universe warning: {warning}")
+            for error in errors:
+                self.log(f"Universe error: {error}")
+            self.activity_panel.set_progress(100)
+            self.activity_panel.set_status("Ready" if success else "Universe update completed with errors")
+            self.refresh_statistics()
+            self.refresh_full_market_coverage_report()
+            self.mark_pipeline_complete("universe")
+            self.add_activity(
+                (
+                    "Universe update complete: "
+                    f"{imported:,} persisted from {processed:,} fetched "
+                    f"({eligible:,} eligible)"
+                ),
+                status="success" if success else "warning",
+            )
+            return
+
+        imported, total = result
         self.log(f"Imported {imported} stocks")
         self.activity_panel.set_progress(100)
         self.activity_panel.set_status("Ready")
@@ -2385,7 +2419,7 @@ class MainWindow(QMainWindow):
         self.full_market_cancel_requested = False
         self.screening_results_panel.set_full_market_active(True, "Updating universe")
         try:
-            result = self.universe_downloader_service().update_universe()
+            result = self.run_full_market_universe_update()
             self.screening_results_panel.set_full_market_status(
                 f"Universe updated: {result.persisted} symbol(s)"
             )

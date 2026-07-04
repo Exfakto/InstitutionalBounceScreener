@@ -656,6 +656,81 @@ def test_main_window_toolbar_wiring(patched_window):
     assert "refresh_results" in window.operations_toolbar.buttons
 
 
+def test_main_window_update_universe_uses_full_market_downloader(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    captured = {}
+
+    class FakeUniverseDownloader:
+        def __init__(self):
+            self.calls = 0
+
+        def update_universe(self):
+            self.calls += 1
+            return SimpleNamespace(
+                success=True,
+                processed=1200,
+                persisted=1100,
+                warnings=[],
+                errors=[],
+                details={"eligible_count": 1100},
+            )
+
+    downloader = FakeUniverseDownloader()
+    window._universe_downloader_service = downloader
+    monkeypatch.setattr(
+        window.controller,
+        "update_universe",
+        lambda: (_ for _ in ()).throw(AssertionError("legacy path called")),
+    )
+
+    def fake_start_background_task(*args):
+        captured["task_callable"] = args[2]
+        captured["status_message"] = args[4]
+        return "worker"
+
+    monkeypatch.setattr(window, "start_background_task", fake_start_background_task)
+
+    worker = window.update_universe()
+    result = captured["task_callable"]()
+
+    assert worker == "worker"
+    assert captured["task_callable"] == window.run_full_market_universe_update
+    assert captured["status_message"] == "Updating full market universe..."
+    assert result.persisted == 1100
+    assert downloader.calls == 1
+
+
+def test_main_window_universe_completion_handles_pipeline_result(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    refreshed = []
+    monkeypatch.setattr(
+        window,
+        "refresh_full_market_coverage_report",
+        lambda: refreshed.append(True),
+    )
+
+    window.on_universe_update_completed(
+        SimpleNamespace(
+            success=True,
+            processed=1200,
+            persisted=1100,
+            warnings=["partial metadata"],
+            errors=[],
+            details={"eligible_count": 1100},
+        )
+    )
+
+    assert refreshed == [True]
+    assert window.activity_panel.status_text() == "Ready"
+    assert "1,100 persisted" in window.dashboard.activity_entries[-1]["message"]
+
+
 def test_main_window_dashboard_results_table_sorting_enabled(patched_window):
     window = patched_window
 
