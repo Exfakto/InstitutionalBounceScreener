@@ -1683,22 +1683,74 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
-    def update_universe(self):
+    def start_background_task(
+        self,
+        worker_attr,
+        task_name,
+        task_callable,
+        running_message,
+        status_message,
+        progress,
+        completed_callback,
+        failed_status,
+    ):
 
-        self.mark_pipeline_running("universe")
-        self.activity_panel.set_status("Importing universe...")
-        self.activity_panel.set_progress(20)
+        if getattr(self, worker_attr, None) is not None:
+            self.log(running_message)
+            return getattr(self, worker_attr)
 
+        self.mark_pipeline_running(task_name)
+        self.activity_panel.set_status(status_message)
+        self.activity_panel.set_progress(progress)
         self.activity_panel.clear_log()
 
-        imported, total = self.controller.update_universe()
+        worker = TaskWorker(task_name, task_callable, parent=self)
+        setattr(self, worker_attr, worker)
+        worker.completed_signal.connect(completed_callback)
+        worker.failed_signal.connect(
+            lambda error_message: self.on_background_task_failed(
+                task_name,
+                failed_status,
+                error_message,
+            )
+        )
+        worker.finished.connect(lambda: setattr(self, worker_attr, None))
+        worker.start()
 
-        self.log(f"✅ Imported {imported} stocks")
+        return worker
 
+    def on_background_task_failed(self, task_name, failed_status, error_message):
+
+        self.activity_panel.set_status(failed_status)
+        self.mark_pipeline_complete(task_name)
+        self.add_activity(
+            f"{failed_status}: {error_message}",
+            status="danger",
+        )
+        self.log(f"{failed_status}: {error_message}")
+
+    # ----------------------------------------------------------
+
+    def update_universe(self):
+
+        return self.start_background_task(
+            "universe_worker",
+            "universe",
+            self.controller.update_universe,
+            "Universe update already running",
+            "Importing universe...",
+            20,
+            self.on_universe_update_completed,
+            "Universe update failed",
+        )
+
+    def on_universe_update_completed(self, result):
+
+        imported, total = result
+
+        self.log(f"Imported {imported} stocks")
         self.activity_panel.set_progress(100)
-
         self.activity_panel.set_status("Ready")
-
         self.refresh_statistics()
         self.mark_pipeline_complete("universe")
         self.add_activity(
@@ -1710,31 +1762,33 @@ class MainWindow(QMainWindow):
 
     def download_prices(self):
 
-        self.mark_pipeline_running("prices")
-        self.activity_panel.set_status("Downloading prices...")
-        self.activity_panel.set_progress(10)
+        return self.start_background_task(
+            "prices_worker",
+            "prices",
+            self.controller.download_prices,
+            "Price download already running",
+            "Downloading prices...",
+            10,
+            self.on_download_prices_completed,
+            "Price download failed",
+        )
 
-        self.activity_panel.clear_log()
+    def on_download_prices_completed(self, result):
 
-        results, total = self.controller.download_prices()
+        results, total = result
 
         for ticker, rows in results.items():
-
-            self.log(f"✓ {ticker}: {rows} rows")
+            self.log(f"{ticker}: {rows} rows")
 
         self.activity_panel.set_progress(100)
-
         self.activity_panel.set_status("Ready")
-
         self.refresh_statistics()
-
         self.mark_refresh_completed()
         self.mark_pipeline_complete("prices")
         self.add_activity(
             f"Price download complete: {total:,} database rows",
             status="success",
         )
-
         self.log("")
         self.log(f"Database Rows: {total:,}")
 
@@ -1742,18 +1796,21 @@ class MainWindow(QMainWindow):
 
     def calculate_indicators(self):
 
-        self.mark_pipeline_running("indicators")
-        self.activity_panel.set_status("Calculating indicators...")
-        self.activity_panel.set_progress(20)
+        return self.start_background_task(
+            "indicators_worker",
+            "indicators",
+            self.indicator_controller.calculate_indicators,
+            "Indicator calculation already running",
+            "Calculating indicators...",
+            20,
+            self.on_calculate_indicators_completed,
+            "Indicator calculation failed",
+        )
 
-        self.activity_panel.clear_log()
-
-        results = self.indicator_controller.calculate_indicators()
+    def on_calculate_indicators_completed(self, results):
 
         self.activity_panel.set_progress(100)
-
         self.activity_panel.set_status("Ready")
-
         self.refresh_statistics()
         self.mark_pipeline_complete("indicators")
         self.add_activity(
@@ -1787,18 +1844,21 @@ class MainWindow(QMainWindow):
 
     def detect_support(self):
 
-        self.mark_pipeline_running("support")
-        self.activity_panel.set_status("Detecting support...")
-        self.activity_panel.set_progress(20)
+        return self.start_background_task(
+            "support_worker",
+            "support",
+            self.support_controller.detect_support,
+            "Support detection already running",
+            "Detecting support...",
+            20,
+            self.on_detect_support_completed,
+            "Support detection failed",
+        )
 
-        self.activity_panel.clear_log()
-
-        results = self.support_controller.detect_support()
+    def on_detect_support_completed(self, results):
 
         self.activity_panel.set_progress(100)
-
         self.activity_panel.set_status("Ready")
-
         self.refresh_statistics()
         self.mark_pipeline_complete("support")
         self.add_activity(
@@ -1823,18 +1883,21 @@ class MainWindow(QMainWindow):
 
     def validate_bounces(self):
 
-        self.mark_pipeline_running("bounce_validation")
-        self.activity_panel.set_status("Validating bounces...")
-        self.activity_panel.set_progress(20)
+        return self.start_background_task(
+            "bounce_validation_worker",
+            "bounce_validation",
+            self.bounce_controller.validate_bounces,
+            "Bounce validation already running",
+            "Validating bounces...",
+            20,
+            self.on_validate_bounces_completed,
+            "Bounce validation failed",
+        )
 
-        self.activity_panel.clear_log()
-
-        results = self.bounce_controller.validate_bounces()
+    def on_validate_bounces_completed(self, results):
 
         self.activity_panel.set_progress(100)
-
         self.activity_panel.set_status("Ready")
-
         self.refresh_statistics()
         self.mark_pipeline_complete("bounce_validation")
         self.add_activity(
