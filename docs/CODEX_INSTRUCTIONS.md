@@ -18,11 +18,16 @@ Read `docs/DECISIONS.md` when a task touches architecture, persistence, scoring,
 Preserve the layered architecture:
 
 ```text
-GUI
-Controllers
+Repository -> Services -> Controllers -> UI
+```
+
+Operationally this means:
+
+```text
+SQLite / repositories
 Services
-DatabaseManager
-SQLite
+Controllers
+UI widgets / MainWindow
 ```
 
 Rules:
@@ -38,6 +43,10 @@ Rules:
 - Keep `MainWindow` thin.
 - Prefer reusable widgets in `ui/widgets/`.
 - Preserve existing behavior unless the task explicitly changes it.
+- Provider resilience, Model calibration, Production readiness, Release Candidate Validation, and end-to-end workflow validation are release-critical v2.0 subsystems.
+- Do not introduce UI imports in services or repositories except documented infrastructure boundaries such as the global exception handler.
+- Do not introduce direct database imports in UI files.
+- Update `docs/repository_architecture_audit.md` when architecture exceptions are added or retired.
 
 ## Change Discipline
 

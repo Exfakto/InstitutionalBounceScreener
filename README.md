@@ -8,9 +8,9 @@ Institutional Bounce Screener combines market data, technical indicators, suppor
 
 The project is designed as a professional research tool, not an execution platform. It uses SQLite as the local persistent store and keeps analytics engines testable outside the GUI.
 
-## v3.0 Beta Platform
+## v2.0 Release-Candidate Platform
 
-Institutional Bounce Screener is ready for a local-first desktop beta. Completed platform areas include:
+Institutional Bounce Screener is in v2.0 release-candidate readiness. Completed platform areas include:
 
 - Professional dashboard shell with dark institutional styling.
 - Candidate ranking using Gen 2 Institutional Bounce Intelligence with legacy score fallback.
@@ -24,23 +24,21 @@ Institutional Bounce Screener is ready for a local-first desktop beta. Completed
 - Portfolio statistics and strategy analytics engines.
 - Read-only performance dashboard widget for precomputed analytics.
 - Provider abstraction with local and optional premium-provider foundations.
-- Configurable provider manager, failover, in-memory provider caching, live data service, and refresh scheduler.
+- Configurable provider resilience, failover event logging, provider health, provider configuration validation, in-memory provider caching, live data service, and refresh scheduler.
 - Market-status-aware live refresh infrastructure and watchlist quote updates.
+- Full-market screening orchestration, screening diagnostics, ranked results, export workflows, and end-to-end validation.
+- Model calibration recommendations, history, trend, comparison, apply, validation, and integration audit tooling.
+- Production readiness dashboard and Release Candidate Validation suite.
 
 ## Architecture
 
 The application follows a layered local architecture:
 
 ```text
-UI widgets
-Controllers
-Services
-Providers
-DatabaseManager
-SQLite
+Repository -> Services -> Controllers -> UI
 ```
 
-Pure calculation modules live in `analysis/`, `support/`, `bounce/`, and `indicators/`. Provider infrastructure lives in `providers/` and feeds service workflows without changing analysis engines or UI code. Widgets display supplied data and emit user actions; they do not perform database reads, service calls, or analytics calculations.
+Pure calculation modules live in `analysis/`, `support/`, `bounce/`, `indicators/`, and deterministic service engines. Provider infrastructure lives in `providers/` and `market_data/` and feeds service workflows without changing analysis engines or UI code. Widgets display supplied data and emit user actions; they do not perform database reads, provider calls, or analytics calculations.
 
 ## Technology
 
@@ -69,7 +67,7 @@ Completed:
 
 Current focus:
 
-- v3.0 Beta finalization and release readiness
+- v2.0 Release Candidate Validation, repository architecture audit, and final release-readiness checks
 
 Planned:
 
@@ -78,6 +76,10 @@ Planned:
 Premium provider foundations exist for Polygon.io, Financial Modeling Prep, SEC EDGAR, and Finnhub where implemented in source. Paid provider calls require API keys and tests use mocked responses.
 
 Provider setup, PowerShell environment variables, and safe smoke-test commands are documented in `docs/PROVIDER_SETUP.md`.
+
+Repository architecture readiness is documented in `docs/repository_architecture_audit.md`.
+End-to-end workflow validation is documented in `docs/end_to_end_validation.md`.
+Release Candidate Validation is documented in `docs/release_candidate_validation.md`.
 
 ## Testing
 
