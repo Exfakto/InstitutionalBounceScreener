@@ -23,7 +23,7 @@ class HeaderBar(QFrame):
 
         self.setObjectName("HeaderBar")
         self.setMaximumHeight(140)
-        self.setMinimumHeight(108)
+        self.setMinimumHeight(84)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(

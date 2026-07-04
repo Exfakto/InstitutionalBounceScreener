@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
         ##########################################################
 
         self.dashboard = InstitutionalDashboard()
-        self.dashboard.setMinimumHeight(72)
+        self.dashboard.setMinimumHeight(48)
         self.dashboard.setMaximumHeight(150)
         self.dashboard.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 

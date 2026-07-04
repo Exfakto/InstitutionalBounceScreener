@@ -73,9 +73,9 @@ class KpiStrip(QWidget):
                 accent_color=definition["accent"],
             )
             card.setObjectName("KpiCard")
-            card.setMaximumHeight(126)
-            card.setMinimumHeight(106)
-            card.setMinimumWidth(180)
+            card.setMaximumHeight(112)
+            card.setMinimumHeight(84)
+            card.setMinimumWidth(150)
             card.title.setObjectName("KpiTitle")
             card.value.setObjectName("KpiValue")
 
