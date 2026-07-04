@@ -1,5 +1,13 @@
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtCore import QSize, Signal
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QStyle,
+    QWidget,
+)
 
 from ui.design_system import DashboardDesignSystem as DesignSystem
 
@@ -25,8 +33,18 @@ class OperationsToolbar(QWidget):
         (
             "Market Data",
             [
-                ("update_universe", "Update Universe", "update_universe_requested"),
-                ("download_prices", "Download Prices", "download_prices_requested"),
+                (
+                    "update_universe",
+                    "Update Universe",
+                    "update_universe_requested",
+                    QStyle.SP_DirIcon,
+                ),
+                (
+                    "download_prices",
+                    "Download Prices",
+                    "download_prices_requested",
+                    QStyle.SP_ArrowDown,
+                ),
             ],
         ),
         (
@@ -36,20 +54,61 @@ class OperationsToolbar(QWidget):
                     "calculate_indicators",
                     "Calculate Indicators",
                     "calculate_indicators_requested",
+                    QStyle.SP_FileDialogDetailedView,
                 ),
-                ("detect_support", "Detect Support", "detect_support_requested"),
-                ("validate_bounces", "Validate Bounces", "validate_bounces_requested"),
+                (
+                    "detect_support",
+                    "Detect Support",
+                    "detect_support_requested",
+                    QStyle.SP_FileDialogContentsView,
+                ),
+                (
+                    "validate_bounces",
+                    "Validate Bounces",
+                    "validate_bounces_requested",
+                    QStyle.SP_DialogApplyButton,
+                ),
             ],
         ),
         (
             "Research",
             [
-                ("run_screener", "Run Screener", "run_screener_requested"),
-                ("save_preset", "Save Preset", "save_preset_requested"),
-                ("load_preset", "Load Preset", "load_preset_requested"),
-                ("reset_filters", "Reset Filters", "reset_filters_requested"),
-                ("refresh_results", "Refresh Results", "refresh_results_requested"),
-                ("open_detail", "Open Detail", "open_detail_requested"),
+                (
+                    "run_screener",
+                    "Run Screener",
+                    "run_screener_requested",
+                    QStyle.SP_MediaPlay,
+                ),
+                (
+                    "save_preset",
+                    "Save Preset",
+                    "save_preset_requested",
+                    QStyle.SP_DialogSaveButton,
+                ),
+                (
+                    "load_preset",
+                    "Load Preset",
+                    "load_preset_requested",
+                    QStyle.SP_DialogOpenButton,
+                ),
+                (
+                    "reset_filters",
+                    "Reset Filters",
+                    "reset_filters_requested",
+                    QStyle.SP_BrowserStop,
+                ),
+                (
+                    "refresh_results",
+                    "Refresh Results",
+                    "refresh_results_requested",
+                    QStyle.SP_BrowserReload,
+                ),
+                (
+                    "open_detail",
+                    "Open Detail",
+                    "open_detail_requested",
+                    QStyle.SP_FileDialogInfoView,
+                ),
             ],
         ),
     ]
@@ -73,14 +132,20 @@ class OperationsToolbar(QWidget):
             label.setMinimumHeight(36)
             layout.addWidget(label)
 
-            for key, text, signal_name in actions:
+            for key, text, signal_name, icon in actions:
                 button = QPushButton(text)
+                button.setObjectName("ToolbarActionButton")
                 button.setProperty(
                     "variant",
                     "primary" if key in {"run_screener", "refresh_results"} else "secondary",
                 )
+                button.setIcon(self.style().standardIcon(icon))
+                button.setIconSize(QSize(15, 15))
+                button.setToolTip(text)
                 button.setMinimumHeight(36)
-                button.setMinimumWidth(118)
+                button.setMinimumWidth(112)
+                button.setMaximumWidth(156)
+                button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
                 button.clicked.connect(getattr(self, signal_name).emit)
 
                 self.buttons[key] = button

@@ -342,9 +342,36 @@ class Theme:
         }}
 
         QWidget#OperationsToolbar {{
-            background-color: transparent;
-            padding-top: {DesignSystem.Spacing.XS}px;
-            padding-bottom: {DesignSystem.Spacing.XS}px;
+            background-color: {cls.HEADER_BACKGROUND};
+            border: 1px solid {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.MD}px;
+            padding: {DesignSystem.Spacing.XS}px {DesignSystem.Spacing.SM}px;
+        }}
+
+        QPushButton#ToolbarActionButton {{
+            background-color: {cls.PANEL_BACKGROUND};
+            border-color: {cls.MUTED_BORDER};
+            border-radius: {DesignSystem.Radius.SM}px;
+            padding: 6px 10px;
+            font-size: {DesignSystem.Typography.SMALL_PT}pt;
+            font-weight: 800;
+        }}
+
+        QPushButton#ToolbarActionButton:hover {{
+            background-color: {cls.ELEVATED_PANEL};
+            border-color: {cls.PRIMARY};
+        }}
+
+        QPushButton#ToolbarActionButton[variant="primary"] {{
+            background-color: {cls.PRIMARY_SOFT};
+            border-color: {cls.PRIMARY};
+            color: {cls.PRIMARY_TEXT};
+        }}
+
+        QPushButton#ToolbarActionButton:disabled {{
+            background-color: {cls.SECONDARY};
+            color: {cls.SUBTLE_TEXT};
+            border-color: {cls.SOFT_BORDER};
         }}
 
         QFrame#PipelineProgressPanel {{
