@@ -14,6 +14,8 @@ The repository architecture audit is documented in `docs/repository_architecture
 
 The v2.0 RC1 feature freeze gate is documented in `docs/rc1_release_freeze_checklist.md`.
 
+RC1 packaging verification is documented in `docs/rc1_packaging_verification.md` and implemented by `scripts/verify_packaging.py`. Release build output is expected in `dist/`.
+
 ## Purpose
 
 Institutional Bounce Screener is a local desktop research workstation for identifying, evaluating, planning, and tracking institutional bounce opportunities in U.S. stocks.
@@ -96,7 +98,7 @@ v2.0 Release-Candidate Finalization:
 
 ## Planned
 
-- Final release-candidate validation and packaging smoke checks.
+- Final release-candidate validation and RC1 packaging verification.
 - Additional provider endpoint expansion where explicitly implemented.
 - Alerts, richer automation, and provider normalization hardening remain deferred.
 

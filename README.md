@@ -60,6 +60,7 @@ Release-candidate capabilities:
 - Export generation for ranked candidates, run packages, reports, validation artifacts, and beta/release workflows
 - Model calibration recommendations, history, trend, comparison, apply, validation, and integration audit
 - Production readiness dashboard, Release Candidate Validation, repository architecture audit, and end-to-end workflow validation
+- RC1 packaging verification using `scripts/verify_packaging.py`
 
 Current focus:
 
@@ -67,7 +68,7 @@ Current focus:
 
 Planned:
 
-- RC packaging checks, validation, operational hardening, and deferred feature work
+- RC1 packaging verification, validation, operational hardening, and deferred feature work
 
 Premium provider foundations exist for Polygon.io, Financial Modeling Prep, Alpaca, SEC EDGAR, and Finnhub where implemented in source. Paid provider calls require API keys and tests use mocked responses.
 
@@ -77,6 +78,13 @@ Repository architecture readiness is documented in `docs/repository_architecture
 End-to-end workflow validation is documented in `docs/end_to_end_validation.md`.
 Release Candidate Validation is documented in `docs/release_candidate_validation.md`.
 RC1 release freeze criteria are documented in `docs/rc1_release_freeze_checklist.md`.
+RC1 packaging verification is documented in `docs/rc1_packaging_verification.md`.
+
+Packaging verification command:
+
+```powershell
+.venv\Scripts\python.exe scripts\verify_packaging.py
+```
 
 ## Testing
 
