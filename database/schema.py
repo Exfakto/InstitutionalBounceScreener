@@ -541,6 +541,135 @@ SCREENING_RUNS_INDEXES = [
 ]
 
 
+VALIDATION_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS validation_runs (
+
+    run_id TEXT PRIMARY KEY,
+
+    started_at TEXT,
+
+    completed_at TEXT,
+
+    start_date TEXT,
+
+    end_date TEXT,
+
+    replay_frequency TEXT,
+
+    signal_count INTEGER DEFAULT 0,
+
+    outcome_count INTEGER DEFAULT 0,
+
+    summary_metrics_json TEXT,
+
+    factor_bucket_results_json TEXT,
+
+    walk_forward_results_json TEXT,
+
+    benchmark_comparison_json TEXT,
+
+    warnings_json TEXT,
+
+    errors_json TEXT
+
+);
+"""
+
+
+VALIDATION_SIGNAL_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS validation_signal_results (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    run_id TEXT NOT NULL,
+
+    ticker TEXT NOT NULL,
+
+    signal_date TEXT,
+
+    entry_price REAL,
+
+    forward_returns_json TEXT,
+
+    max_gain_pct REAL,
+
+    max_drawdown_pct REAL,
+
+    hit_profit_target INTEGER DEFAULT 0,
+
+    hit_stop_loss INTEGER DEFAULT 0,
+
+    support_score REAL,
+
+    bounce_score REAL,
+
+    technical_score REAL,
+
+    institutional_score REAL,
+
+    final_score REAL,
+
+    grade TEXT,
+
+    warnings_json TEXT,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""
+
+
+WEIGHT_OPTIMIZATION_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS weight_optimization_results (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    run_id TEXT NOT NULL,
+
+    rank INTEGER DEFAULT 0,
+
+    weights_json TEXT,
+
+    score REAL,
+
+    expectancy REAL,
+
+    win_rate REAL,
+
+    average_return REAL,
+
+    max_drawdown REAL,
+
+    profit_factor REAL,
+
+    warnings_json TEXT,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+
+);
+"""
+
+
+VALIDATION_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_validation_runs_completed_at
+    ON validation_runs(completed_at);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_validation_signal_results_run_id
+    ON validation_signal_results(run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_validation_signal_results_ticker
+    ON validation_signal_results(ticker);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_weight_optimization_results_run_id
+    ON weight_optimization_results(run_id);
+    """,
+]
+
+
 APP_SETTINGS_TABLE = """
 CREATE TABLE IF NOT EXISTS app_settings (
 

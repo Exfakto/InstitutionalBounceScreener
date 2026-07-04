@@ -28,7 +28,11 @@ from database.schema import (
     TECHNICAL_INDICATORS_TABLE,
     UNIVERSE_SYMBOLS_INDEXES,
     UNIVERSE_SYMBOLS_TABLE,
+    VALIDATION_INDEXES,
+    VALIDATION_RUNS_TABLE,
+    VALIDATION_SIGNAL_RESULTS_TABLE,
     WATCHLIST_TABLE,
+    WEIGHT_OPTIMIZATION_RESULTS_TABLE,
 )
 from services.candidate_ranking_engine import RankedCandidate
 
@@ -100,6 +104,11 @@ class DatabaseManager:
         self.cursor.execute(BACKTEST_RUNS_TABLE)
         self.cursor.execute(BACKTEST_TRADE_RESULTS_TABLE)
         for index_statement in BACKTEST_INDEXES:
+            self.cursor.execute(index_statement)
+        self.cursor.execute(VALIDATION_RUNS_TABLE)
+        self.cursor.execute(VALIDATION_SIGNAL_RESULTS_TABLE)
+        self.cursor.execute(WEIGHT_OPTIMIZATION_RESULTS_TABLE)
+        for index_statement in VALIDATION_INDEXES:
             self.cursor.execute(index_statement)
 
         self.connection.commit()
@@ -2045,6 +2054,236 @@ class DatabaseManager:
             self.connection.commit()
         return deleted
 
+    # ==========================================================
+    # Algorithm Validation
+    # ==========================================================
+
+    def save_validation_run(self, report):
+        run_id = self.record_value(report, "run_id")
+        if run_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO validation_runs
+            (
+                run_id,
+                started_at,
+                completed_at,
+                start_date,
+                end_date,
+                replay_frequency,
+                signal_count,
+                outcome_count,
+                summary_metrics_json,
+                factor_bucket_results_json,
+                walk_forward_results_json,
+                benchmark_comparison_json,
+                warnings_json,
+                errors_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(run_id),
+                self.record_value(report, "started_at"),
+                self.record_value(report, "completed_at"),
+                self.record_value(report, "start_date"),
+                self.record_value(report, "end_date"),
+                self.record_value(report, "replay_frequency"),
+                self._sqlite_int(self.record_value(report, "signal_count")) or 0,
+                self._sqlite_int(self.record_value(report, "outcome_count")) or 0,
+                json.dumps(self._json_safe(self.record_value(report, "summary_metrics") or {})),
+                json.dumps(self._json_safe(self.record_value(report, "factor_bucket_results") or [])),
+                json.dumps(self._json_safe(self.record_value(report, "walk_forward_results") or [])),
+                json.dumps(self._json_safe(self.record_value(report, "benchmark_comparison") or {})),
+                self._json_text(self.record_value(report, "warnings") or []),
+                self._json_text(self.record_value(report, "errors") or []),
+            ),
+        )
+        self.connection.commit()
+        return self.fetch_validation_run(run_id)
+
+    def save_validation_signal_results(self, run_id, outcomes):
+        if run_id in (None, ""):
+            return 0
+        self.clear_validation_signal_results(run_id, commit=False)
+        payload = []
+        for outcome in outcomes or []:
+            ticker = self._normalize_ticker(self.record_value(outcome, "ticker"))
+            if ticker is None:
+                continue
+            payload.append(
+                (
+                    str(run_id),
+                    ticker,
+                    self.record_value(outcome, "signal_date"),
+                    self._sqlite_float(self.record_value(outcome, "entry_price")),
+                    json.dumps(self._json_safe(self.record_value(outcome, "forward_returns") or {})),
+                    self._sqlite_float(self.record_value(outcome, "max_gain_pct")),
+                    self._sqlite_float(self.record_value(outcome, "max_drawdown_pct")),
+                    self._sqlite_int(bool(self.record_value(outcome, "hit_profit_target"))),
+                    self._sqlite_int(bool(self.record_value(outcome, "hit_stop_loss"))),
+                    self._sqlite_float(self.record_value(outcome, "support_score")),
+                    self._sqlite_float(self.record_value(outcome, "bounce_score")),
+                    self._sqlite_float(self.record_value(outcome, "technical_score")),
+                    self._sqlite_float(self.record_value(outcome, "institutional_score")),
+                    self._sqlite_float(self.record_value(outcome, "final_score")),
+                    self.record_value(outcome, "grade"),
+                    self._json_text(self.record_value(outcome, "warnings") or []),
+                )
+            )
+        if payload:
+            self.cursor.executemany(
+                """
+                INSERT INTO validation_signal_results
+                (
+                    run_id, ticker, signal_date, entry_price, forward_returns_json,
+                    max_gain_pct, max_drawdown_pct, hit_profit_target, hit_stop_loss,
+                    support_score, bounce_score, technical_score, institutional_score,
+                    final_score, grade, warnings_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                payload,
+            )
+        self.connection.commit()
+        return len(payload)
+
+    def save_weight_optimization_results(self, run_id, results):
+        if run_id in (None, ""):
+            return 0
+        self.clear_weight_optimization_results(run_id, commit=False)
+        payload = []
+        for result in results or []:
+            payload.append(
+                (
+                    str(run_id),
+                    self._sqlite_int(self.record_value(result, "rank")) or 0,
+                    json.dumps(self._json_safe(self.record_value(result, "weights") or {})),
+                    self._sqlite_float(self.record_value(result, "score")),
+                    self._sqlite_float(self.record_value(result, "expectancy")),
+                    self._sqlite_float(self.record_value(result, "win_rate")),
+                    self._sqlite_float(self.record_value(result, "average_return")),
+                    self._sqlite_float(self.record_value(result, "max_drawdown")),
+                    self._sqlite_float(self.record_value(result, "profit_factor")),
+                    self._json_text(self.record_value(result, "warnings") or []),
+                )
+            )
+        if payload:
+            self.cursor.executemany(
+                """
+                INSERT INTO weight_optimization_results
+                (
+                    run_id, rank, weights_json, score, expectancy, win_rate,
+                    average_return, max_drawdown, profit_factor, warnings_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                payload,
+            )
+        self.connection.commit()
+        return len(payload)
+
+    def fetch_validation_run(self, run_id):
+        if run_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM validation_runs
+            WHERE run_id = ?
+            """,
+            (str(run_id),),
+        )
+        run = self._row_to_validation_run(self.cursor.fetchone())
+        if run is not None:
+            run["outcomes"] = self.fetch_validation_signal_results(run_id)
+            run["best_weight_configs"] = self.fetch_weight_optimization_results(run_id)
+        return run
+
+    def fetch_latest_validation_run(self):
+        self.cursor.execute(
+            """
+            SELECT run_id
+            FROM validation_runs
+            ORDER BY completed_at DESC, rowid DESC
+            LIMIT 1
+            """
+        )
+        row = self.cursor.fetchone()
+        return self.fetch_validation_run(row["run_id"]) if row is not None else None
+
+    def fetch_validation_run_history(self, limit=25, offset=0):
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
+        self.cursor.execute(
+            f"""
+            SELECT *
+            FROM validation_runs
+            ORDER BY completed_at DESC, rowid DESC
+            {paging_sql}
+            """,
+            tuple(paging_values),
+        )
+        return [self._row_to_validation_run(row) for row in self.cursor.fetchall()]
+
+    def fetch_validation_signal_results(self, run_id):
+        if run_id in (None, ""):
+            return []
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM validation_signal_results
+            WHERE run_id = ?
+            ORDER BY signal_date ASC, ticker ASC
+            """,
+            (str(run_id),),
+        )
+        return [self._row_to_validation_signal_result(row) for row in self.cursor.fetchall()]
+
+    def fetch_weight_optimization_results(self, run_id):
+        if run_id in (None, ""):
+            return []
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM weight_optimization_results
+            WHERE run_id = ?
+            ORDER BY rank ASC, score DESC
+            """,
+            (str(run_id),),
+        )
+        return [self._row_to_weight_optimization_result(row) for row in self.cursor.fetchall()]
+
+    def clear_validation_run(self, run_id):
+        if run_id in (None, ""):
+            return 0
+        deleted_signals = self.clear_validation_signal_results(run_id, commit=False)
+        deleted_weights = self.clear_weight_optimization_results(run_id, commit=False)
+        self.cursor.execute("DELETE FROM validation_runs WHERE run_id = ?", (str(run_id),))
+        deleted_runs = self.cursor.rowcount
+        self.connection.commit()
+        return deleted_runs + deleted_signals + deleted_weights
+
+    def clear_validation_signal_results(self, run_id, commit=True):
+        self.cursor.execute(
+            "DELETE FROM validation_signal_results WHERE run_id = ?",
+            (str(run_id),),
+        )
+        deleted = self.cursor.rowcount
+        if commit:
+            self.connection.commit()
+        return deleted
+
+    def clear_weight_optimization_results(self, run_id, commit=True):
+        self.cursor.execute(
+            "DELETE FROM weight_optimization_results WHERE run_id = ?",
+            (str(run_id),),
+        )
+        deleted = self.cursor.rowcount
+        if commit:
+            self.connection.commit()
+        return deleted
+
     @staticmethod
     def _limit_offset_clause(limit=None, offset=0):
         if limit is None:
@@ -2799,6 +3038,67 @@ class DatabaseManager:
         }
 
     @staticmethod
+    def _row_to_validation_run(row):
+        if row is None:
+            return None
+        return {
+            "run_id": row["run_id"],
+            "started_at": row["started_at"],
+            "completed_at": row["completed_at"],
+            "start_date": row["start_date"],
+            "end_date": row["end_date"],
+            "replay_frequency": row["replay_frequency"],
+            "signal_count": row["signal_count"],
+            "outcome_count": row["outcome_count"],
+            "summary_metrics": DatabaseManager._json_dict(row["summary_metrics_json"]),
+            "factor_bucket_results": DatabaseManager._json_load(row["factor_bucket_results_json"], []),
+            "walk_forward_results": DatabaseManager._json_load(row["walk_forward_results_json"], []),
+            "benchmark_comparison": DatabaseManager._json_dict(row["benchmark_comparison_json"]),
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "errors": DatabaseManager._json_list(row["errors_json"]),
+        }
+
+    @staticmethod
+    def _row_to_validation_signal_result(row):
+        if row is None:
+            return None
+        return {
+            "ticker": row["ticker"],
+            "signal_date": row["signal_date"],
+            "entry_price": row["entry_price"],
+            "forward_returns": DatabaseManager._json_dict(row["forward_returns_json"]),
+            "max_gain_pct": row["max_gain_pct"],
+            "max_drawdown_pct": row["max_drawdown_pct"],
+            "hit_profit_target": bool(row["hit_profit_target"]),
+            "hit_stop_loss": bool(row["hit_stop_loss"]),
+            "support_score": row["support_score"],
+            "bounce_score": row["bounce_score"],
+            "technical_score": row["technical_score"],
+            "institutional_score": row["institutional_score"],
+            "final_score": row["final_score"],
+            "grade": row["grade"],
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "created_at": row["created_at"],
+        }
+
+    @staticmethod
+    def _row_to_weight_optimization_result(row):
+        if row is None:
+            return None
+        return {
+            "rank": row["rank"],
+            "weights": DatabaseManager._json_dict(row["weights_json"]),
+            "score": row["score"],
+            "expectancy": row["expectancy"],
+            "win_rate": row["win_rate"],
+            "average_return": row["average_return"],
+            "max_drawdown": row["max_drawdown"],
+            "profit_factor": row["profit_factor"],
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
+            "created_at": row["created_at"],
+        }
+
+    @staticmethod
     def _json_text(value):
         if value in (None, ""):
             payload = []
@@ -2831,6 +3131,15 @@ class DatabaseManager:
         except (TypeError, ValueError, json.JSONDecodeError):
             return {}
         return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _json_load(value, default=None):
+        if value in (None, ""):
+            return default
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return default
 
     @staticmethod
     def _json_safe(value):

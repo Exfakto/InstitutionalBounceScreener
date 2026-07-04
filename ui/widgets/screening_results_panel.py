@@ -49,6 +49,10 @@ class ScreeningResultsPanel(QWidget):
     data_quality_report_requested = Signal(str)
     run_backtest_requested = Signal(dict)
     cancel_backtest_requested = Signal()
+    run_algorithm_validation_requested = Signal(dict)
+    run_weight_optimization_requested = Signal(dict)
+    export_algorithm_validation_report_requested = Signal()
+    cancel_algorithm_validation_requested = Signal()
     update_full_market_universe_requested = Signal()
     refresh_full_market_data_requested = Signal()
     run_full_market_scan_requested = Signal()
@@ -142,6 +146,7 @@ class ScreeningResultsPanel(QWidget):
         content_layout.addWidget(self.build_run_detail_section(), stretch=1)
         content_layout.addWidget(self.build_candidate_detail_section(), stretch=2)
         content_layout.addWidget(self.build_backtest_section(), stretch=2)
+        content_layout.addWidget(self.build_algorithm_validation_section(), stretch=2)
         self.backtest_analytics_panel = BacktestAnalyticsPanel()
         content_layout.addWidget(self.backtest_analytics_panel, stretch=2)
         self.candidate_chart_panel = CandidateChartPanel()
@@ -615,6 +620,153 @@ class ScreeningResultsPanel(QWidget):
 
     def set_backtest_analytics_model(self, model):
         self.backtest_analytics_panel.set_analytics_model(model)
+
+    def build_algorithm_validation_section(self):
+        section = QFrame()
+        section.setObjectName("ResearchPreviewSection")
+        section.setStyleSheet(DesignSystem.card_style())
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.MD,
+        )
+        layout.setSpacing(DesignSystem.Spacing.SM)
+
+        header = QHBoxLayout()
+        title = QLabel("Algorithm Validation")
+        title.setObjectName("ResearchPreviewSectionTitle")
+        self.validation_start_input = QLineEdit()
+        self.validation_start_input.setObjectName("ValidationStartInput")
+        self.validation_start_input.setPlaceholderText("Start YYYY-MM-DD")
+        self.validation_start_input.setText("2024-01-01")
+        self.validation_end_input = QLineEdit()
+        self.validation_end_input.setObjectName("ValidationEndInput")
+        self.validation_end_input.setPlaceholderText("End YYYY-MM-DD")
+        self.validation_end_input.setText("2026-01-01")
+        self.validation_frequency_combo = QComboBox()
+        self.validation_frequency_combo.setObjectName("ValidationFrequencyCombo")
+        self.validation_frequency_combo.addItems(["monthly", "weekly", "daily"])
+        self.validation_windows_input = QLineEdit()
+        self.validation_windows_input.setObjectName("ValidationWindowsInput")
+        self.validation_windows_input.setText("5,10,20,60")
+        self.validation_weight_combo_spin = QSpinBox()
+        self.validation_weight_combo_spin.setRange(1, 100)
+        self.validation_weight_combo_spin.setValue(5)
+        self.validation_benchmark_input = QLineEdit()
+        self.validation_benchmark_input.setObjectName("ValidationBenchmarkInput")
+        self.validation_benchmark_input.setText("SPY")
+        self.run_algorithm_validation_button = QPushButton("Run Validation")
+        self.run_algorithm_validation_button.setObjectName("PrimaryButton")
+        self.run_algorithm_validation_button.clicked.connect(self.emit_run_algorithm_validation)
+        self.run_weight_optimization_button = QPushButton("Run Weight Optimization")
+        self.run_weight_optimization_button.setObjectName("SecondaryButton")
+        self.run_weight_optimization_button.clicked.connect(self.emit_run_weight_optimization)
+        self.export_algorithm_validation_button = QPushButton("Export Report")
+        self.export_algorithm_validation_button.setObjectName("SecondaryButton")
+        self.export_algorithm_validation_button.clicked.connect(
+            self.export_algorithm_validation_report_requested.emit
+        )
+        self.export_algorithm_validation_button.setEnabled(False)
+        self.cancel_algorithm_validation_button = QPushButton("Cancel")
+        self.cancel_algorithm_validation_button.setObjectName("SecondaryButton")
+        self.cancel_algorithm_validation_button.setEnabled(False)
+        self.cancel_algorithm_validation_button.clicked.connect(
+            self.cancel_algorithm_validation_requested.emit
+        )
+        self.algorithm_validation_status_label = QLabel("No validation run yet")
+        self.algorithm_validation_status_label.setObjectName("ResearchPreviewFieldValue")
+        self.algorithm_validation_status_label.setWordWrap(True)
+
+        header.addWidget(title)
+        header.addWidget(self.validation_start_input)
+        header.addWidget(self.validation_end_input)
+        header.addWidget(self.validation_frequency_combo)
+        header.addWidget(self.validation_windows_input)
+        header.addWidget(self.validation_weight_combo_spin)
+        header.addWidget(self.validation_benchmark_input)
+        header.addWidget(self.run_algorithm_validation_button)
+        header.addWidget(self.run_weight_optimization_button)
+        header.addWidget(self.export_algorithm_validation_button)
+        header.addWidget(self.cancel_algorithm_validation_button)
+        layout.addLayout(header)
+        layout.addWidget(self.algorithm_validation_status_label)
+
+        self.algorithm_validation_summary_label = QLabel("Summary: N/A")
+        self.algorithm_validation_summary_label.setObjectName("ResearchPreviewFieldValue")
+        self.algorithm_validation_summary_label.setWordWrap(True)
+        self.algorithm_validation_weights_label = QLabel("Best weights: N/A")
+        self.algorithm_validation_weights_label.setObjectName("ResearchPreviewFieldValue")
+        self.algorithm_validation_weights_label.setWordWrap(True)
+        self.algorithm_validation_issues_label = QLabel("Warnings/errors: N/A")
+        self.algorithm_validation_issues_label.setObjectName("ResearchPreviewFieldValue")
+        self.algorithm_validation_issues_label.setWordWrap(True)
+        layout.addWidget(self.algorithm_validation_summary_label)
+        layout.addWidget(self.algorithm_validation_weights_label)
+        layout.addWidget(self.algorithm_validation_issues_label)
+        self.current_algorithm_validation_report = None
+        return section
+
+    def emit_run_algorithm_validation(self):
+        self.run_algorithm_validation_requested.emit(self.algorithm_validation_config_from_ui())
+
+    def emit_run_weight_optimization(self):
+        self.run_weight_optimization_requested.emit(self.algorithm_validation_config_from_ui())
+
+    def algorithm_validation_config_from_ui(self):
+        windows = []
+        for item in self.validation_windows_input.text().split(","):
+            try:
+                windows.append(int(item.strip()))
+            except ValueError:
+                continue
+        return {
+            "start_date": self.validation_start_input.text().strip(),
+            "end_date": self.validation_end_input.text().strip(),
+            "replay_frequency": self.validation_frequency_combo.currentText(),
+            "forward_windows": windows or [5, 10, 20, 60],
+            "max_weight_combinations": self.validation_weight_combo_spin.value(),
+            "benchmark_ticker": self.validation_benchmark_input.text().strip() or "SPY",
+        }
+
+    def set_algorithm_validation_active(self, active, status_text=None):
+        self.run_algorithm_validation_button.setEnabled(not active)
+        self.run_weight_optimization_button.setEnabled(not active)
+        self.cancel_algorithm_validation_button.setEnabled(bool(active))
+        if status_text is not None:
+            self.set_algorithm_validation_status(status_text)
+
+    def set_algorithm_validation_status(self, status_text):
+        self.algorithm_validation_status_label.setText(status_text or "")
+        self.apply_status_property(self.algorithm_validation_status_label, status_text)
+
+    def set_algorithm_validation_report(self, report):
+        self.current_algorithm_validation_report = report
+        metrics = self.value(report, "summary_metrics") or {}
+        self.algorithm_validation_summary_label.setText(
+            "Summary: "
+            f"{self.value(report, 'signal_count') or 0} signals, "
+            f"{self.value(report, 'outcome_count') or 0} labeled, "
+            f"{(self.value(metrics, 'win_rate') or 0) * 100:.1f}% win rate, "
+            f"{self.value(metrics, 'expectancy') or 0:.2f}% expectancy"
+        )
+        best = (self.value(report, "best_weight_configs") or [])[:1]
+        if best:
+            weights = self.value(best[0], "weights") or {}
+            weight_text = ", ".join(f"{key} {value:.2f}" for key, value in weights.items())
+            self.algorithm_validation_weights_label.setText(
+                f"Best weights: {weight_text} | score {self.value(best[0], 'score') or 0:.2f}"
+            )
+        else:
+            self.algorithm_validation_weights_label.setText("Best weights: N/A")
+        warnings = self.value(report, "warnings") or []
+        errors = self.value(report, "errors") or []
+        issues = [*warnings[:3], *errors[:3]]
+        self.algorithm_validation_issues_label.setText(
+            "Warnings/errors: " + ("; ".join(str(item) for item in issues) if issues else "None")
+        )
+        self.export_algorithm_validation_button.setEnabled(bool(report))
 
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())

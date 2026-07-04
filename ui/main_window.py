@@ -40,6 +40,10 @@ from services.refresh_scheduler import RefreshScheduler
 from services.settings_service import SettingsService
 from services.app_settings_service import AppSettingsService
 from services.chart_analytics_service import ChartAnalyticsService
+from services.algorithm_validation_service import (
+    AlgorithmValidationReportService,
+    AlgorithmValidationService,
+)
 from services.data_quality_service import DataQualityService
 from services.market_data_cache_service import MarketDataCacheService
 from services.market_data_refresh_service import MarketDataRefreshService
@@ -76,6 +80,7 @@ from ui.candidate_detail_window import CandidateDetailWindow
 from ui.stock_detail_window import StockDetailWindow
 from ui.export_dialog import ExportDialog
 from ui.screening_worker import ScreeningWorker
+from ui.algorithm_validation_worker import AlgorithmValidationWorker
 from ui.settings_dialog import SettingsDialog
 from ui.about_dialog import AboutDialog
 from ui.design_system import DashboardDesignSystem as DesignSystem
@@ -359,6 +364,18 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.cancel_backtest_requested.connect(
             self.cancel_backtest
+        )
+        self.screening_results_panel.run_algorithm_validation_requested.connect(
+            self.run_algorithm_validation
+        )
+        self.screening_results_panel.run_weight_optimization_requested.connect(
+            self.run_weight_optimization
+        )
+        self.screening_results_panel.export_algorithm_validation_report_requested.connect(
+            self.export_algorithm_validation_report
+        )
+        self.screening_results_panel.cancel_algorithm_validation_requested.connect(
+            self.cancel_algorithm_validation
         )
         self.screening_results_panel.update_full_market_universe_requested.connect(
             self.update_full_market_universe
@@ -2569,6 +2586,174 @@ class MainWindow(QMainWindow):
 
         self.screening_results_panel.set_backtest_active(False, "Backtest cancelled")
         return True
+
+    # ----------------------------------------------------------
+
+    def algorithm_validation_service(self):
+
+        explicit = getattr(self, "_algorithm_validation_service", None)
+        if explicit is not None:
+            return explicit
+        return AlgorithmValidationService(self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def algorithm_validation_report_service(self):
+
+        explicit = getattr(self, "_algorithm_validation_report_service", None)
+        if explicit is not None:
+            return explicit
+        return AlgorithmValidationReportService()
+
+    # ----------------------------------------------------------
+
+    def run_algorithm_validation(self, config_values=None):
+
+        return self.start_algorithm_validation_worker(config_values or {})
+
+    # ----------------------------------------------------------
+
+    def run_weight_optimization(self, config_values=None):
+
+        config = dict(config_values or {})
+        config.setdefault("max_weight_combinations", 10)
+        return self.start_algorithm_validation_worker(config)
+
+    # ----------------------------------------------------------
+
+    def start_algorithm_validation_worker(self, config):
+
+        if not hasattr(self, "screening_results_panel"):
+            return None
+        if getattr(self, "algorithm_validation_worker", None) is not None:
+            self.screening_results_panel.set_algorithm_validation_status(
+                "Algorithm validation already running"
+            )
+            return self.algorithm_validation_worker
+
+        config = dict(config or {})
+        selected_tickers = [
+            self.ticker_for_candidate(candidate)
+            for candidate in getattr(self.screening_results_panel, "current_candidates", [])
+        ]
+        config.setdefault("tickers", [ticker for ticker in selected_tickers if ticker])
+        worker = AlgorithmValidationWorker(
+            repository=self.screening_repository(),
+            config=config,
+            service=getattr(self, "_algorithm_validation_service", None),
+            parent=self,
+        )
+        self.algorithm_validation_worker = worker
+        self.screening_results_panel.set_algorithm_validation_active(
+            True,
+            "Starting algorithm validation",
+        )
+        worker.started_signal.connect(self.handle_algorithm_validation_started)
+        worker.progress_signal.connect(self.handle_algorithm_validation_progress)
+        worker.completed_signal.connect(self.handle_algorithm_validation_completed)
+        worker.failed_signal.connect(self.handle_algorithm_validation_failed)
+        worker.cancelled_signal.connect(self.handle_algorithm_validation_cancelled)
+        worker.start()
+        return worker
+
+    # ----------------------------------------------------------
+
+    def handle_algorithm_validation_started(self, message):
+
+        self.screening_results_panel.set_algorithm_validation_active(True, message)
+
+    # ----------------------------------------------------------
+
+    def handle_algorithm_validation_progress(self, message):
+
+        if isinstance(message, dict):
+            status = message.get("status_message") or "Algorithm validation running"
+            pct = message.get("progress_percentage")
+            if pct is not None:
+                status = f"{status} ({pct}%)"
+        else:
+            status = str(message)
+        self.screening_results_panel.set_algorithm_validation_status(status)
+
+    # ----------------------------------------------------------
+
+    def handle_algorithm_validation_completed(self, report):
+
+        self.latest_algorithm_validation_report = report
+        self.screening_results_panel.set_algorithm_validation_report(report)
+        self.screening_results_panel.set_algorithm_validation_active(
+            False,
+            f"Validation complete: {getattr(report, 'signal_count', 0)} signal(s)",
+        )
+        self.algorithm_validation_worker = None
+        return report
+
+    # ----------------------------------------------------------
+
+    def handle_algorithm_validation_failed(self, message):
+
+        self.screening_results_panel.set_algorithm_validation_active(
+            False,
+            f"Validation failed: {message}",
+        )
+        self.algorithm_validation_worker = None
+
+    # ----------------------------------------------------------
+
+    def handle_algorithm_validation_cancelled(self, report):
+
+        self.latest_algorithm_validation_report = report
+        self.screening_results_panel.set_algorithm_validation_report(report)
+        self.screening_results_panel.set_algorithm_validation_active(
+            False,
+            "Validation cancelled",
+        )
+        self.algorithm_validation_worker = None
+        return report
+
+    # ----------------------------------------------------------
+
+    def cancel_algorithm_validation(self):
+
+        worker = getattr(self, "algorithm_validation_worker", None)
+        if worker is not None and hasattr(worker, "request_cancel"):
+            worker.request_cancel()
+            self.screening_results_panel.set_algorithm_validation_status(
+                "Validation cancellation requested"
+            )
+            self.screening_results_panel.cancel_algorithm_validation_button.setEnabled(False)
+            return True
+        self.screening_results_panel.set_algorithm_validation_status(
+            "No active validation run"
+        )
+        return False
+
+    # ----------------------------------------------------------
+
+    def export_algorithm_validation_report(self):
+
+        report = getattr(self, "latest_algorithm_validation_report", None)
+        repository = self.screening_repository()
+        if report is None and repository is not None and hasattr(repository, "fetch_latest_validation_run"):
+            report = repository.fetch_latest_validation_run()
+        if report is None:
+            self.screening_results_panel.set_algorithm_validation_status(
+                "No algorithm validation report available"
+            )
+            return None
+        output_dir = self.app_preference("default_export_directory", "exports/validation")
+        run_id = getattr(report, "run_id", None) or (
+            report.get("run_id") if isinstance(report, dict) else "validation"
+        )
+        result = self.algorithm_validation_report_service().export_json(
+            report,
+            output_dir,
+            f"{run_id}_algorithm_validation.json",
+        )
+        self.screening_results_panel.set_algorithm_validation_status(
+            result.get("message", "Validation report exported")
+        )
+        return result
 
     # ----------------------------------------------------------
 
