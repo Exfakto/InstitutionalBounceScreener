@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QScrollArea,
     QSizePolicy,
     QSplitter,
     QStatusBar,
@@ -182,8 +183,8 @@ class MainWindow(QMainWindow):
         self.data_refresh_cancel_requested = False
 
         self.setWindowTitle("Institutional Bounce Screener")
-        self.resize(1280, 760)
-        self.setMinimumSize(900, 620)
+        self.resize(1180, 720)
+        self.setMinimumSize(760, 520)
 
         self.build_ui()
         self.restore_workspace_state()
@@ -265,9 +266,9 @@ class MainWindow(QMainWindow):
         ##########################################################
 
         self.dashboard = InstitutionalDashboard()
-        self.dashboard.setMinimumHeight(120)
-        self.dashboard.setMaximumHeight(190)
-        self.dashboard.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.dashboard.setMinimumHeight(72)
+        self.dashboard.setMaximumHeight(150)
+        self.dashboard.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         ##########################################################
         # Main Workspace
@@ -427,12 +428,12 @@ class MainWindow(QMainWindow):
         self.workspace_splitter = self.screener_workspace_splitter
         self.center_splitter = self.screener_workspace_splitter
 
-        self.price_chart.setMinimumSize(360, 180)
-        self.candidates_table.setMinimumSize(420, 220)
-        self.screener_filters_panel.setMinimumWidth(150)
-        self.screener_filters_panel.setMaximumWidth(230)
-        self.research_preview.setMinimumWidth(240)
-        self.trade_card.setMinimumWidth(240)
+        self.price_chart.setMinimumSize(300, 140)
+        self.candidates_table.setMinimumSize(320, 160)
+        self.screener_filters_panel.setMinimumWidth(130)
+        self.screener_filters_panel.setMaximumWidth(220)
+        self.research_preview.setMinimumWidth(180)
+        self.trade_card.setMinimumWidth(180)
 
         self.screener_workspace_splitter.addWidget(self.screener_filters_panel)
         self.screener_workspace_splitter.addWidget(self.candidates_table)
@@ -463,12 +464,12 @@ class MainWindow(QMainWindow):
         panel.setObjectName("ResearchPreviewSection")
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(
-            DesignSystem.Spacing.LG,
             DesignSystem.Spacing.MD,
-            DesignSystem.Spacing.LG,
+            DesignSystem.Spacing.SM,
             DesignSystem.Spacing.MD,
+            DesignSystem.Spacing.SM,
         )
-        layout.setSpacing(DesignSystem.Spacing.XL)
+        layout.setSpacing(DesignSystem.Spacing.MD)
 
         self.dashboard_summary_labels = {}
 
@@ -491,7 +492,7 @@ class MainWindow(QMainWindow):
 
             item_layout.addWidget(label)
             item_layout.addWidget(value)
-            layout.addWidget(container)
+            layout.addWidget(container, stretch=1)
             self.dashboard_summary_labels[key] = value
 
         layout.addStretch()
@@ -499,18 +500,26 @@ class MainWindow(QMainWindow):
         self.dashboard_status_label = QLabel("No results available")
         self.dashboard_status_label.setObjectName("EmptyStateLabel")
         self.dashboard_status_label.setAlignment(Qt.AlignCenter)
-        self.dashboard_status_label.setMinimumWidth(220)
-        layout.addWidget(self.dashboard_status_label)
+        self.dashboard_status_label.setWordWrap(True)
+        self.dashboard_status_label.setMinimumWidth(120)
+        layout.addWidget(self.dashboard_status_label, stretch=1)
         return panel
 
     # ----------------------------------------------------------
 
     def build_screener_filters_panel(self):
 
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        panel = QScrollArea()
+        panel.setObjectName("ScreenerFiltersScrollArea")
+        panel.setWidgetResizable(True)
+        panel.setFrameShape(QFrame.NoFrame)
+        panel.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        content = QWidget()
+        content.setObjectName("ScreenerFiltersContent")
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(DesignSystem.Spacing.SM)
 
         self.filter_sections = {}
         for title, fields in [
@@ -535,6 +544,7 @@ class MainWindow(QMainWindow):
             layout.addWidget(section)
 
         layout.addStretch()
+        panel.setWidget(content)
         return panel
 
     # ----------------------------------------------------------

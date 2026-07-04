@@ -117,6 +117,7 @@ class ScreeningResultsPanel(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -554,7 +555,7 @@ class ScreeningResultsPanel(QWidget):
             QHeaderView.Interactive
         )
         self.backtest_trades_table.setStyleSheet(DesignSystem.table_style())
-        self.backtest_trades_table.setMinimumHeight(128)
+        self.backtest_trades_table.setMinimumHeight(96)
         layout.addWidget(self.backtest_trades_table)
 
         self.backtest_empty_label = QLabel("No backtest trades available")
@@ -881,7 +882,7 @@ class ScreeningResultsPanel(QWidget):
         self.beta_review_table.horizontalHeader().setStretchLastSection(True)
         self.beta_review_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.beta_review_table.setStyleSheet(DesignSystem.table_style())
-        self.beta_review_table.setMinimumHeight(128)
+        self.beta_review_table.setMinimumHeight(96)
         layout.addWidget(self.beta_review_table)
         self.beta_review_empty_label = QLabel("No beta review candidates available")
         self.beta_review_empty_label.setObjectName("EmptyStateLabel")
@@ -1057,13 +1058,13 @@ class ScreeningResultsPanel(QWidget):
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        table.horizontalHeader().setMinimumSectionSize(72)
+        table.horizontalHeader().setMinimumSectionSize(56)
         if title == "Ranked Candidates":
             table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         else:
             table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         table.setStyleSheet(DesignSystem.table_style())
-        table.setMinimumHeight(128)
+        table.setMinimumHeight(96)
         layout.addWidget(table)
 
         empty_label = QLabel(empty_text)

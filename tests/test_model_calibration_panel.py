@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QApplication
 from services.model_calibration_recommendation_service import (
     CalibrationRecommendationView,
 )
+from services.model_calibration_validation_service import CalibrationValidationResult
 from ui.widgets.model_calibration_panel import ModelCalibrationPanel
 
 
@@ -111,3 +112,41 @@ def test_model_calibration_panel_refresh_error_state():
 
     assert panel.refresh_recommendations() == []
     assert panel.message_label.text() == "Unable to load calibration recommendations"
+
+
+def test_model_calibration_panel_validate_changes_uses_controller():
+    app()
+
+    class Controller:
+        def __init__(self):
+            self.current_settings = None
+            self.proposed_settings = None
+
+        def validate_calibration_changes(self, current_settings=None, proposed_settings=None):
+            self.current_settings = current_settings
+            self.proposed_settings = proposed_settings
+            return CalibrationValidationResult(
+                status="passed",
+                message="Calibration validation passed.",
+            )
+
+    controller = Controller()
+    panel = ModelCalibrationPanel(controller=controller)
+    panel.set_recommendations(
+        [
+            CalibrationRecommendationView(
+                title="Minimum Final Score",
+                severity="HIGH",
+                recommended_action="75",
+                reason="Low score buckets underperformed",
+                related_metric="minimum_final_score",
+            )
+        ]
+    )
+
+    result = panel.validate_current_changes(current_settings={"current": 1})
+
+    assert result.status == "passed"
+    assert controller.current_settings == {"current": 1}
+    assert controller.proposed_settings == {"minimum_final_score": "75"}
+    assert panel.validation_result_label.text() == "Calibration validation passed."

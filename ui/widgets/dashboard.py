@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -38,10 +39,13 @@ class InstitutionalDashboard(QWidget):
         scroll_area.setObjectName("InstitutionalDashboardScroll")
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         root_layout.addWidget(scroll_area)
+        self.scroll_area = scroll_area
 
         content = QWidget()
         content.setObjectName("InstitutionalDashboardContent")
+        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         scroll_area.setWidget(content)
 
         layout = QGridLayout(content)
@@ -192,7 +196,7 @@ class InstitutionalDashboard(QWidget):
             ["Time", "Status", "Message"]
         )
         self.activity_feed_table.setObjectName("ActivityFeedTable")
-        self.activity_feed_table.setMinimumHeight(150)
+        self.activity_feed_table.setMinimumHeight(96)
         self.activity_feed_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.Interactive
         )
@@ -232,14 +236,16 @@ class InstitutionalDashboard(QWidget):
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        table.setMinimumHeight(132)
+        table.setMinimumHeight(88)
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         return table
 
     def _create_empty_label(self, text):
         label = QLabel(text)
         label.setObjectName("EmptyStateLabel")
         label.setAlignment(Qt.AlignCenter)
-        label.setMinimumHeight(88)
+        label.setMinimumHeight(56)
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         return label
 
     def set_dashboard_data(self, data):

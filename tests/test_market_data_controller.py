@@ -34,6 +34,15 @@ class MarketDataService:
         return "universe"
 
 
+class ProviderConfigurationValidationService:
+    def __init__(self):
+        self.called = False
+
+    def validate(self):
+        self.called = True
+        return "validation"
+
+
 def health(name, status):
     return ProviderHealthResult(provider_name=name, status=status)
 
@@ -120,3 +129,16 @@ def test_market_data_controller_market_data_delegation():
         ("fundamentals", "AAPL"),
         ("universe", "NYSE"),
     ]
+
+
+def test_market_data_controller_provider_configuration_validation_delegates():
+    validation_service = ProviderConfigurationValidationService()
+    controller = MarketDataController(
+        market_data_service=MarketDataService(),
+        provider_configuration_validation_service=validation_service,
+    )
+
+    result = controller.validate_provider_configuration()
+
+    assert result == "validation"
+    assert validation_service.called is True
