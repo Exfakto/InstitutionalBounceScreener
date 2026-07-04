@@ -26,7 +26,8 @@ Run and confirm:
 9. Screening diagnostics review.
 10. Export validation.
 11. Packaging validation.
-12. Documentation review.
+12. Clean Windows install validation.
+13. Documentation review.
 
 ## RC1 Smoke Tests
 
@@ -91,6 +92,17 @@ Confirm:
 - Packaged resource paths are validated.
 - Database backup/restore health is reviewed.
 - Release checklist documentation is current.
+- Clean Windows install readiness is verified with `scripts/verify_clean_install_readiness.py`.
+
+## Clean Windows Install Validation
+
+Confirm:
+
+- Packaged app dependencies are documented.
+- Expected runtime folders are documented.
+- First-launch behavior is documented.
+- Logs, config, database, backup, and export paths are documented.
+- Validation does not require live market data access or API keys.
 
 ## Documentation Updated for v2.0 RC1
 
@@ -104,6 +116,8 @@ Confirm these documents are current:
 - `docs/end_to_end_validation.md`
 - `docs/rc1_smoke_test_checklist.md`
 - `docs/rc1_release_freeze_checklist.md`
+- `docs/rc1_packaging_verification.md`
+- `docs/rc1_clean_windows_install_validation.md`
 
 ## Critical Blockers
 

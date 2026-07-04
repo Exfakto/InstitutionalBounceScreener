@@ -51,6 +51,16 @@ Build output: dist/
 
 The verifier only inspects local files. It does not import live provider modules, does not perform HTTP requests, and does not require API keys.
 
+## Clean Windows Install Readiness
+
+After packaging verification passes, run the clean-install readiness check:
+
+```powershell
+.venv\Scripts\python.exe scripts\verify_clean_install_readiness.py
+```
+
+See `docs/rc1_clean_windows_install_validation.md` for the full clean Windows validation workflow, including packaged dependencies, runtime folders, first-launch behavior, and logs/config/database/export paths.
+
 ## Build Output
 
 Release artifacts are expected in:
