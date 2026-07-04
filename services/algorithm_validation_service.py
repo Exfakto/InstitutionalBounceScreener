@@ -123,6 +123,40 @@ class AlgorithmValidationReport:
     outcomes: list[SignalOutcome] = field(default_factory=list)
 
 
+@dataclass
+class SignalQualityGroupResult:
+    dimension: str
+    group: str
+    signal_count: int
+    win_rate: float
+    expectancy: float
+    average_return: float
+    max_drawdown: float
+    weak: bool
+    reasons: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SignalQualityRecommendation:
+    recommendation_type: str
+    field: str
+    current_value: float | str | None
+    recommended_value: float | str
+    reason: str
+    severity: str = "MEDIUM"
+    affected_groups: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SignalQualityRecommendationReport:
+    report_id: str
+    validation_run_id: str | None
+    created_at: str
+    weak_groups: list[SignalQualityGroupResult] = field(default_factory=list)
+    recommendations: list[SignalQualityRecommendation] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
 class HistoricalSignalReplayService:
     def __init__(self, repository):
         self.repository = repository
@@ -310,7 +344,7 @@ class FactorPerformanceAnalyzer:
     @staticmethod
     def bucket_result(factor, bucket_name, outcomes, return_window):
         returns = [
-            safe_float((outcome.forward_returns or {}).get(str(return_window)))
+            safe_float((value(outcome, "forward_returns") or {}).get(str(return_window)))
             for outcome in outcomes
         ]
         returns = [item for item in returns if item is not None]
@@ -323,7 +357,7 @@ class FactorPerformanceAnalyzer:
             win_rate=(len(wins) / len(returns)) if returns else 0.0,
             average_return=statistics.mean(returns) if returns else 0.0,
             median_return=statistics.median(returns) if returns else 0.0,
-            max_drawdown=min((safe_float(outcome.max_drawdown_pct) or 0.0 for outcome in outcomes), default=0.0),
+            max_drawdown=min((safe_float(value(outcome, "max_drawdown_pct")) or 0.0 for outcome in outcomes), default=0.0),
             expectancy=expectancy(wins, losses),
         )
 
@@ -339,8 +373,8 @@ class WeightOptimizationEngine:
             rescored = []
             for outcome in outcomes or []:
                 score = weighted_score(outcome, normalized)
-                return_value = safe_float((outcome.forward_returns or {}).get(str(return_window)))
-                rescored.append((score, return_value, safe_float(outcome.max_drawdown_pct) or 0.0))
+                return_value = safe_float((value(outcome, "forward_returns") or {}).get(str(return_window)))
+                rescored.append((score, return_value, safe_float(value(outcome, "max_drawdown_pct")) or 0.0))
             selected = [item for item in rescored if item[0] >= 60 and item[1] is not None]
             returns = [item[1] for item in selected]
             wins = [item for item in returns if item > 0]
@@ -432,7 +466,7 @@ class BenchmarkComparisonService:
             entry = safe_float(value(future_rows[0], "open")) or safe_float(value(future_rows[0], "close"))
             exit_price = safe_float(value(future_rows[-1], "close"))
             benchmark_return = pct_return(entry, exit_price)
-            signal_return = safe_float((outcome.forward_returns or {}).get(str(return_window)))
+            signal_return = safe_float((value(outcome, "forward_returns") or {}).get(str(return_window)))
             if signal_return is not None and benchmark_return is not None:
                 comparisons.append((signal_return, benchmark_return))
         if not comparisons:
@@ -487,6 +521,225 @@ class ValidationPersistenceService:
         if self.repository is None or not hasattr(self.repository, "clear_validation_run"):
             return 0
         return self.repository.clear_validation_run(run_id)
+
+
+class SignalQualityRecommendationPersistenceService:
+    def __init__(self, repository):
+        self.repository = repository
+
+    def save_report(self, report):
+        if self.repository is None or not hasattr(self.repository, "save_signal_quality_recommendation_report"):
+            return None
+        return self.repository.save_signal_quality_recommendation_report(report)
+
+    def fetch_latest(self, validation_run_id=None):
+        if self.repository is None or not hasattr(self.repository, "fetch_latest_signal_quality_recommendation_report"):
+            return None
+        return self.repository.fetch_latest_signal_quality_recommendation_report(validation_run_id)
+
+    def fetch_history(self, limit=25, offset=0):
+        if self.repository is None or not hasattr(self.repository, "fetch_signal_quality_recommendation_history"):
+            return []
+        return self.repository.fetch_signal_quality_recommendation_history(limit=limit, offset=offset)
+
+
+class SignalQualityAnalysisService:
+    SCORE_FIELDS = (
+        "final_score",
+        "support_score",
+        "bounce_score",
+        "technical_score",
+        "institutional_score",
+    )
+
+    def __init__(
+        self,
+        min_win_rate=0.45,
+        min_expectancy=0.0,
+        max_drawdown_limit=-12.0,
+        return_window=20,
+    ):
+        self.min_win_rate = min_win_rate
+        self.min_expectancy = min_expectancy
+        self.max_drawdown_limit = max_drawdown_limit
+        self.return_window = return_window
+
+    def analyze_report(self, report):
+        outcomes = value(report, "outcomes") or []
+        run_id = value(report, "run_id")
+        return self.analyze(outcomes, validation_run_id=run_id)
+
+    def analyze(self, outcomes, validation_run_id=None):
+        outcomes = list(outcomes or [])
+        warnings = []
+        if not outcomes:
+            warnings.append("No validation outcomes available for signal quality analysis.")
+        groups = self.group_results(outcomes)
+        weak_groups = [group for group in groups if group.weak]
+        recommendations = self.recommendations_from_weak_groups(weak_groups)
+        return SignalQualityRecommendationReport(
+            report_id=f"quality-{uuid.uuid4().hex[:12]}",
+            validation_run_id=validation_run_id,
+            created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            weak_groups=weak_groups,
+            recommendations=recommendations,
+            warnings=warnings,
+        )
+
+    def group_results(self, outcomes):
+        results = []
+        for dimension, grouped in self.group_outcomes(outcomes).items():
+            for group_name, group_outcomes in sorted(grouped.items()):
+                result = self.group_result(dimension, group_name, group_outcomes)
+                results.append(result)
+        return results
+
+    def group_outcomes(self, outcomes):
+        grouped = {
+            "grade": {},
+            "confidence_level": {},
+            "setup_label": {},
+            "final_score_bucket": {},
+            "support_score_bucket": {},
+            "bounce_score_bucket": {},
+            "technical_score_bucket": {},
+            "institutional_score_bucket": {},
+        }
+        for outcome in outcomes or []:
+            self.add_group(grouped["grade"], self.text_value(outcome, "grade", "Unknown"), outcome)
+            self.add_group(
+                grouped["confidence_level"],
+                self.text_value(outcome, "confidence_level", "Unknown"),
+                outcome,
+            )
+            self.add_group(
+                grouped["setup_label"],
+                self.text_value(outcome, "setup_label", "Unknown"),
+                outcome,
+            )
+            for field in self.SCORE_FIELDS:
+                score = safe_float(value(outcome, field))
+                self.add_group(
+                    grouped[f"{field}_bucket"],
+                    bucket_for_score(score if score is not None else 0),
+                    outcome,
+                )
+        return grouped
+
+    @staticmethod
+    def add_group(grouped, key, outcome):
+        grouped.setdefault(str(key or "Unknown"), []).append(outcome)
+
+    @staticmethod
+    def text_value(outcome, field, default):
+        raw = value(outcome, field)
+        if raw in (None, ""):
+            return default
+        return str(raw)
+
+    def group_result(self, dimension, group_name, outcomes):
+        metrics = metrics_for_outcomes(outcomes, return_window=self.return_window)
+        max_drawdown = metrics.get("max_drawdown") or 0.0
+        reasons = []
+        if metrics["win_rate"] < self.min_win_rate:
+            reasons.append(f"Win rate below {self.min_win_rate:.0%}")
+        if metrics["expectancy"] < self.min_expectancy:
+            reasons.append("Expectancy below target")
+        if max_drawdown <= self.max_drawdown_limit:
+            reasons.append(f"Drawdown worse than {abs(self.max_drawdown_limit):.1f}%")
+        return SignalQualityGroupResult(
+            dimension=dimension,
+            group=group_name,
+            signal_count=int(metrics["total_signals"]),
+            win_rate=float(metrics["win_rate"]),
+            expectancy=float(metrics["expectancy"]),
+            average_return=float(metrics["average_return"]),
+            max_drawdown=float(max_drawdown),
+            weak=bool(reasons),
+            reasons=reasons,
+        )
+
+    def recommendations_from_weak_groups(self, weak_groups):
+        recommendations = []
+        weak_groups = list(weak_groups or [])
+        final_score_groups = [
+            group for group in weak_groups if group.dimension == "final_score_bucket"
+        ]
+        if any(group.group in {"0-59", "60-69"} for group in final_score_groups):
+            recommendations.append(
+                SignalQualityRecommendation(
+                    recommendation_type="threshold",
+                    field="minimum_final_score",
+                    current_value=None,
+                    recommended_value=70,
+                    reason="Lower final-score buckets showed weak validation performance.",
+                    severity="HIGH",
+                    affected_groups=[group.group for group in final_score_groups],
+                )
+            )
+        for component in ("support", "bounce", "technical", "institutional"):
+            dimension = f"{component}_score_bucket"
+            component_groups = [
+                group for group in weak_groups
+                if group.dimension == dimension and group.group in {"0-59", "60-69"}
+            ]
+            if component_groups:
+                recommendations.append(
+                    SignalQualityRecommendation(
+                        recommendation_type="threshold",
+                        field=f"minimum_{component}_score",
+                        current_value=None,
+                        recommended_value=70,
+                        reason=f"Weak {component} score buckets underperformed validation targets.",
+                        severity="MEDIUM",
+                        affected_groups=[group.group for group in component_groups],
+                    )
+                )
+        low_confidence_groups = [
+            group for group in weak_groups
+            if group.dimension == "confidence_level" and group.group.upper() in {"LOW", "UNKNOWN"}
+        ]
+        if low_confidence_groups:
+            recommendations.append(
+                SignalQualityRecommendation(
+                    recommendation_type="confidence",
+                    field="confidence_requirement",
+                    current_value="Allow LOW/UNKNOWN",
+                    recommended_value="Require MEDIUM or HIGH",
+                    reason="Low or unknown confidence groups showed poor validation performance.",
+                    severity="HIGH",
+                    affected_groups=[group.group for group in low_confidence_groups],
+                )
+            )
+        weak_setup_groups = [
+            group for group in weak_groups
+            if group.dimension == "setup_label" and group.group not in {"Unknown", "Elite Institutional Bounce", "High-Quality Bounce"}
+        ]
+        if weak_setup_groups:
+            recommendations.append(
+                SignalQualityRecommendation(
+                    recommendation_type="rejection_rule",
+                    field="setup_label_filter",
+                    current_value="Allow all setup labels",
+                    recommended_value="Reject weak setup labels or route to watchlist only",
+                    reason="Certain setup labels underperformed validation targets.",
+                    severity="MEDIUM",
+                    affected_groups=[group.group for group in weak_setup_groups],
+                )
+            )
+        if not recommendations and weak_groups:
+            recommendations.append(
+                SignalQualityRecommendation(
+                    recommendation_type="review",
+                    field="manual_review",
+                    current_value=None,
+                    recommended_value="Review weak validation groups before changing thresholds",
+                    reason="Weak groups were detected but did not map to a standard threshold rule.",
+                    severity="LOW",
+                    affected_groups=[f"{group.dimension}:{group.group}" for group in weak_groups],
+                )
+            )
+        return recommendations
 
 
 class AlgorithmValidationService:
@@ -617,10 +870,48 @@ class AlgorithmValidationReportService:
             writer.writerows(rows)
         return {"success": True, "path": str(destination), "message": "Algorithm validation issues exported."}
 
+    def export_recommendations_json(self, report, output_dir, filename="signal_quality_recommendations.json"):
+        destination = destination_path(output_dir, filename, "json")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("w", encoding="utf-8") as handle:
+            json.dump(to_plain(report), handle, indent=2, sort_keys=True)
+        return {"success": True, "path": str(destination), "message": "Signal quality recommendations exported."}
+
+    def export_recommendations_csv(self, report, output_dir, filename="signal_quality_recommendations.csv"):
+        destination = destination_path(output_dir, filename, "csv")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for recommendation in value(report, "recommendations") or []:
+            rows.append(
+                {
+                    "recommendation_type": value(recommendation, "recommendation_type"),
+                    "field": value(recommendation, "field"),
+                    "current_value": value(recommendation, "current_value"),
+                    "recommended_value": value(recommendation, "recommended_value"),
+                    "severity": value(recommendation, "severity"),
+                    "reason": value(recommendation, "reason"),
+                    "affected_groups": "; ".join(str(item) for item in (value(recommendation, "affected_groups") or [])),
+                }
+            )
+        fieldnames = [
+            "recommendation_type",
+            "field",
+            "current_value",
+            "recommended_value",
+            "severity",
+            "reason",
+            "affected_groups",
+        ]
+        with destination.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        return {"success": True, "path": str(destination), "message": "Signal quality recommendations exported.", "count": len(rows)}
+
 
 def metrics_for_outcomes(outcomes, return_window=20):
     returns = [
-        safe_float((outcome.forward_returns or {}).get(str(return_window)))
+        safe_float((value(outcome, "forward_returns") or {}).get(str(return_window)))
         for outcome in (outcomes or [])
     ]
     returns = [item for item in returns if item is not None]
@@ -634,16 +925,16 @@ def metrics_for_outcomes(outcomes, return_window=20):
         "median_return": round(statistics.median(returns), 4) if returns else 0.0,
         "expectancy": round(expectancy(wins, losses), 4),
         "profit_factor": round(profit_factor(returns), 4),
-        "max_drawdown": round(min((safe_float(outcome.max_drawdown_pct) or 0.0 for outcome in (outcomes or [])), default=0.0), 4),
+        "max_drawdown": round(min((safe_float(value(outcome, "max_drawdown_pct")) or 0.0 for outcome in (outcomes or [])), default=0.0), 4),
     }
 
 
 def weighted_score(outcome, weights):
     return clamp(
-        (safe_float(outcome.support_score) or 0.0) * weights.get("support", 0.0)
-        + (safe_float(outcome.bounce_score) or 0.0) * weights.get("bounce", 0.0)
-        + (safe_float(outcome.technical_score) or 0.0) * weights.get("technical", 0.0)
-        + (safe_float(outcome.institutional_score) or 0.0) * weights.get("institutional", 0.0)
+        (safe_float(value(outcome, "support_score")) or 0.0) * weights.get("support", 0.0)
+        + (safe_float(value(outcome, "bounce_score")) or 0.0) * weights.get("bounce", 0.0)
+        + (safe_float(value(outcome, "technical_score")) or 0.0) * weights.get("technical", 0.0)
+        + (safe_float(value(outcome, "institutional_score")) or 0.0) * weights.get("institutional", 0.0)
     )
 
 

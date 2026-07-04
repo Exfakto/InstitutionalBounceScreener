@@ -23,6 +23,7 @@ from database.schema import (
     RANKED_CANDIDATES_TABLE,
     SCREENING_RUNS_INDEXES,
     SCREENING_RUNS_TABLE,
+    SIGNAL_QUALITY_RECOMMENDATION_REPORTS_TABLE,
     SUPPORT_LEVELS_TABLE,
     STOCKS_TABLE,
     TECHNICAL_INDICATORS_TABLE,
@@ -108,6 +109,7 @@ class DatabaseManager:
         self.cursor.execute(VALIDATION_RUNS_TABLE)
         self.cursor.execute(VALIDATION_SIGNAL_RESULTS_TABLE)
         self.cursor.execute(WEIGHT_OPTIMIZATION_RESULTS_TABLE)
+        self.cursor.execute(SIGNAL_QUALITY_RECOMMENDATION_REPORTS_TABLE)
         for index_statement in VALIDATION_INDEXES:
             self.cursor.execute(index_statement)
 
@@ -2284,6 +2286,82 @@ class DatabaseManager:
             self.connection.commit()
         return deleted
 
+    def save_signal_quality_recommendation_report(self, report):
+        report_id = self.record_value(report, "report_id")
+        if report_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO signal_quality_recommendation_reports
+            (
+                report_id,
+                validation_run_id,
+                created_at,
+                weak_groups_json,
+                recommendations_json,
+                warnings_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(report_id),
+                self.record_value(report, "validation_run_id"),
+                self.record_value(report, "created_at"),
+                json.dumps(self._json_safe(self.record_value(report, "weak_groups") or [])),
+                json.dumps(self._json_safe(self.record_value(report, "recommendations") or [])),
+                self._json_text(self.record_value(report, "warnings") or []),
+            ),
+        )
+        self.connection.commit()
+        return self.fetch_signal_quality_recommendation_report(report_id)
+
+    def fetch_signal_quality_recommendation_report(self, report_id):
+        if report_id in (None, ""):
+            return None
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM signal_quality_recommendation_reports
+            WHERE report_id = ?
+            """,
+            (str(report_id),),
+        )
+        return self._row_to_signal_quality_recommendation_report(self.cursor.fetchone())
+
+    def fetch_latest_signal_quality_recommendation_report(self, validation_run_id=None):
+        params = []
+        where = ""
+        if validation_run_id not in (None, ""):
+            where = "WHERE validation_run_id = ?"
+            params.append(str(validation_run_id))
+        self.cursor.execute(
+            f"""
+            SELECT *
+            FROM signal_quality_recommendation_reports
+            {where}
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT 1
+            """,
+            params,
+        )
+        return self._row_to_signal_quality_recommendation_report(self.cursor.fetchone())
+
+    def fetch_signal_quality_recommendation_history(self, limit=25, offset=0):
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
+        self.cursor.execute(
+            f"""
+            SELECT *
+            FROM signal_quality_recommendation_reports
+            ORDER BY created_at DESC, rowid DESC
+            {paging_sql}
+            """,
+            tuple(paging_values),
+        )
+        return [
+            self._row_to_signal_quality_recommendation_report(row)
+            for row in self.cursor.fetchall()
+        ]
+
     @staticmethod
     def _limit_offset_clause(limit=None, offset=0):
         if limit is None:
@@ -3096,6 +3174,19 @@ class DatabaseManager:
             "profit_factor": row["profit_factor"],
             "warnings": DatabaseManager._json_list(row["warnings_json"]),
             "created_at": row["created_at"],
+        }
+
+    @staticmethod
+    def _row_to_signal_quality_recommendation_report(row):
+        if row is None:
+            return None
+        return {
+            "report_id": row["report_id"],
+            "validation_run_id": row["validation_run_id"],
+            "created_at": row["created_at"],
+            "weak_groups": DatabaseManager._json_load(row["weak_groups_json"], []),
+            "recommendations": DatabaseManager._json_load(row["recommendations_json"], []),
+            "warnings": DatabaseManager._json_list(row["warnings_json"]),
         }
 
     @staticmethod

@@ -650,6 +650,25 @@ CREATE TABLE IF NOT EXISTS weight_optimization_results (
 """
 
 
+SIGNAL_QUALITY_RECOMMENDATION_REPORTS_TABLE = """
+CREATE TABLE IF NOT EXISTS signal_quality_recommendation_reports (
+
+    report_id TEXT PRIMARY KEY,
+
+    validation_run_id TEXT,
+
+    created_at TEXT,
+
+    weak_groups_json TEXT,
+
+    recommendations_json TEXT,
+
+    warnings_json TEXT
+
+);
+"""
+
+
 VALIDATION_INDEXES = [
     """
     CREATE INDEX IF NOT EXISTS idx_validation_runs_completed_at
@@ -666,6 +685,14 @@ VALIDATION_INDEXES = [
     """
     CREATE INDEX IF NOT EXISTS idx_weight_optimization_results_run_id
     ON weight_optimization_results(run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_signal_quality_recommendations_validation_run_id
+    ON signal_quality_recommendation_reports(validation_run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_signal_quality_recommendations_created_at
+    ON signal_quality_recommendation_reports(created_at);
     """,
 ]
 

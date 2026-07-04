@@ -43,6 +43,8 @@ from services.chart_analytics_service import ChartAnalyticsService
 from services.algorithm_validation_service import (
     AlgorithmValidationReportService,
     AlgorithmValidationService,
+    SignalQualityAnalysisService,
+    SignalQualityRecommendationPersistenceService,
 )
 from services.data_quality_service import DataQualityService
 from services.market_data_cache_service import MarketDataCacheService
@@ -373,6 +375,9 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.export_algorithm_validation_report_requested.connect(
             self.export_algorithm_validation_report
+        )
+        self.screening_results_panel.export_signal_quality_recommendations_requested.connect(
+            self.export_signal_quality_recommendations
         )
         self.screening_results_panel.cancel_algorithm_validation_requested.connect(
             self.cancel_algorithm_validation
@@ -2607,6 +2612,15 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def signal_quality_analysis_service(self):
+
+        explicit = getattr(self, "_signal_quality_analysis_service", None)
+        if explicit is not None:
+            return explicit
+        return SignalQualityAnalysisService()
+
+    # ----------------------------------------------------------
+
     def run_algorithm_validation(self, config_values=None):
 
         return self.start_algorithm_validation_worker(config_values or {})
@@ -2681,6 +2695,7 @@ class MainWindow(QMainWindow):
 
         self.latest_algorithm_validation_report = report
         self.screening_results_panel.set_algorithm_validation_report(report)
+        self.update_signal_quality_recommendations(report)
         self.screening_results_panel.set_algorithm_validation_active(
             False,
             f"Validation complete: {getattr(report, 'signal_count', 0)} signal(s)",
@@ -2704,6 +2719,7 @@ class MainWindow(QMainWindow):
 
         self.latest_algorithm_validation_report = report
         self.screening_results_panel.set_algorithm_validation_report(report)
+        self.update_signal_quality_recommendations(report)
         self.screening_results_panel.set_algorithm_validation_active(
             False,
             "Validation cancelled",
@@ -2730,6 +2746,22 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def update_signal_quality_recommendations(self, validation_report):
+
+        quality_report = self.signal_quality_analysis_service().analyze_report(
+            validation_report
+        )
+        repository = self.screening_repository()
+        if repository is not None:
+            SignalQualityRecommendationPersistenceService(repository).save_report(
+                quality_report
+            )
+        self.latest_signal_quality_report = quality_report
+        self.screening_results_panel.set_signal_quality_report(quality_report)
+        return quality_report
+
+    # ----------------------------------------------------------
+
     def export_algorithm_validation_report(self):
 
         report = getattr(self, "latest_algorithm_validation_report", None)
@@ -2752,6 +2784,35 @@ class MainWindow(QMainWindow):
         )
         self.screening_results_panel.set_algorithm_validation_status(
             result.get("message", "Validation report exported")
+        )
+        return result
+
+    # ----------------------------------------------------------
+
+    def export_signal_quality_recommendations(self):
+
+        report = getattr(self, "latest_signal_quality_report", None)
+        repository = self.screening_repository()
+        if report is None and repository is not None:
+            report = SignalQualityRecommendationPersistenceService(
+                repository
+            ).fetch_latest()
+        if report is None:
+            self.screening_results_panel.set_algorithm_validation_status(
+                "No signal quality recommendations available"
+            )
+            return None
+        output_dir = self.app_preference("default_export_directory", "exports/validation")
+        report_id = getattr(report, "report_id", None) or (
+            report.get("report_id") if isinstance(report, dict) else "signal_quality"
+        )
+        result = self.algorithm_validation_report_service().export_recommendations_json(
+            report,
+            output_dir,
+            f"{report_id}_signal_quality_recommendations.json",
+        )
+        self.screening_results_panel.set_algorithm_validation_status(
+            result.get("message", "Signal quality recommendations exported")
         )
         return result
 

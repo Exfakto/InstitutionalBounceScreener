@@ -52,6 +52,7 @@ class ScreeningResultsPanel(QWidget):
     run_algorithm_validation_requested = Signal(dict)
     run_weight_optimization_requested = Signal(dict)
     export_algorithm_validation_report_requested = Signal()
+    export_signal_quality_recommendations_requested = Signal()
     cancel_algorithm_validation_requested = Signal()
     update_full_market_universe_requested = Signal()
     refresh_full_market_data_requested = Signal()
@@ -669,6 +670,12 @@ class ScreeningResultsPanel(QWidget):
             self.export_algorithm_validation_report_requested.emit
         )
         self.export_algorithm_validation_button.setEnabled(False)
+        self.export_signal_quality_recommendations_button = QPushButton("Export Recommendations")
+        self.export_signal_quality_recommendations_button.setObjectName("SecondaryButton")
+        self.export_signal_quality_recommendations_button.clicked.connect(
+            self.export_signal_quality_recommendations_requested.emit
+        )
+        self.export_signal_quality_recommendations_button.setEnabled(False)
         self.cancel_algorithm_validation_button = QPushButton("Cancel")
         self.cancel_algorithm_validation_button.setObjectName("SecondaryButton")
         self.cancel_algorithm_validation_button.setEnabled(False)
@@ -689,6 +696,7 @@ class ScreeningResultsPanel(QWidget):
         header.addWidget(self.run_algorithm_validation_button)
         header.addWidget(self.run_weight_optimization_button)
         header.addWidget(self.export_algorithm_validation_button)
+        header.addWidget(self.export_signal_quality_recommendations_button)
         header.addWidget(self.cancel_algorithm_validation_button)
         layout.addLayout(header)
         layout.addWidget(self.algorithm_validation_status_label)
@@ -702,10 +710,19 @@ class ScreeningResultsPanel(QWidget):
         self.algorithm_validation_issues_label = QLabel("Warnings/errors: N/A")
         self.algorithm_validation_issues_label.setObjectName("ResearchPreviewFieldValue")
         self.algorithm_validation_issues_label.setWordWrap(True)
+        self.signal_quality_weak_groups_label = QLabel("Weak groups: N/A")
+        self.signal_quality_weak_groups_label.setObjectName("ResearchPreviewFieldValue")
+        self.signal_quality_weak_groups_label.setWordWrap(True)
+        self.signal_quality_recommendations_label = QLabel("Recommended thresholds: N/A")
+        self.signal_quality_recommendations_label.setObjectName("ResearchPreviewFieldValue")
+        self.signal_quality_recommendations_label.setWordWrap(True)
         layout.addWidget(self.algorithm_validation_summary_label)
         layout.addWidget(self.algorithm_validation_weights_label)
         layout.addWidget(self.algorithm_validation_issues_label)
+        layout.addWidget(self.signal_quality_weak_groups_label)
+        layout.addWidget(self.signal_quality_recommendations_label)
         self.current_algorithm_validation_report = None
+        self.current_signal_quality_report = None
         return section
 
     def emit_run_algorithm_validation(self):
@@ -767,6 +784,27 @@ class ScreeningResultsPanel(QWidget):
             "Warnings/errors: " + ("; ".join(str(item) for item in issues) if issues else "None")
         )
         self.export_algorithm_validation_button.setEnabled(bool(report))
+
+    def set_signal_quality_report(self, report):
+        self.current_signal_quality_report = report
+        weak_groups = self.value(report, "weak_groups") or []
+        recommendations = self.value(report, "recommendations") or []
+        weak_text = "; ".join(
+            f"{self.value(group, 'dimension')}={self.value(group, 'group')}"
+            for group in weak_groups[:4]
+        )
+        recommendation_text = "; ".join(
+            f"{self.value(item, 'field')} -> {self.value(item, 'recommended_value')}"
+            for item in recommendations[:4]
+        )
+        self.signal_quality_weak_groups_label.setText(
+            "Weak groups: " + (weak_text if weak_text else "None")
+        )
+        self.signal_quality_recommendations_label.setText(
+            "Recommended thresholds: "
+            + (recommendation_text if recommendation_text else "No threshold changes recommended")
+        )
+        self.export_signal_quality_recommendations_button.setEnabled(bool(report))
 
     def emit_run_screening(self):
         self.run_screening_requested.emit(self.ticker_input.text())
