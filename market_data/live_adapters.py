@@ -51,39 +51,63 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
         }
 
     def fetch_universe_symbols(self, exchange=None):
+        self.last_warnings = []
+        self.last_errors = []
         exchange_filter = self.normalize_exchange(exchange)
-        params = {"market": "stocks", "active": "true", "limit": 1000, "apiKey": self.api_key}
-        if exchange_filter:
-            params["exchange"] = exchange_filter
+        polygon_exchange = self.polygon_exchange_code(exchange)
+        params = {
+            "market": "stocks",
+            "active": "true",
+            "limit": 1000,
+            "apiKey": self.api_key,
+        }
+        if polygon_exchange:
+            params["exchange"] = polygon_exchange
         results = []
         data = self.safe_get_json("/v3/reference/tickers", params=params)
+        if data is None:
+            return []
+        if not isinstance(data, dict):
+            self.last_errors.append("Malformed Polygon universe response: expected object")
+            return []
         while isinstance(data, dict):
-            page = data.get("results") or []
+            page = data.get("results")
             if isinstance(page, list):
                 results.extend(page)
+            elif page is not None:
+                self.last_errors.append("Malformed Polygon universe response: results must be a list")
+                break
             next_url = data.get("next_url")
             if not next_url:
                 break
             data = self.fetch_next_page(next_url)
             if data is None:
                 break
+            if not isinstance(data, dict):
+                self.last_errors.append("Malformed Polygon universe page: expected object")
+                break
+        if not results:
+            self.last_warnings.append(
+                f"Polygon returned zero universe symbols for {exchange_filter or 'all exchanges'}"
+            )
         symbols = []
         for item in results or []:
+            if not isinstance(item, dict):
+                self.last_warnings.append("Skipping malformed Polygon universe row")
+                continue
             item_exchange = self.normalize_exchange(item.get("primary_exchange"))
             if exchange_filter and item_exchange != exchange_filter:
                 continue
-            symbols.append(
-                UniverseSymbol(
-                    ticker=str(item.get("ticker") or "").upper(),
-                    exchange=item_exchange or None,
-                    security_type=item.get("type"),
-                    company_name=item.get("name"),
-                )
-        )
-        return [symbol for symbol in symbols if symbol.ticker]
+            symbol = self.normalize_universe_row(item)
+            if symbol.get("ticker"):
+                symbols.append(symbol)
+        if results and not symbols:
+            self.last_warnings.append(
+                f"Polygon universe response contained no usable symbols for {exchange_filter or 'all exchanges'}"
+            )
+        return symbols
 
     def fetch_next_page(self, next_url):
-        self.last_errors = []
         url = self.with_api_key(next_url)
         response = self.http_client.get_json(url)
         self.last_warnings.extend(response.warnings)
@@ -122,6 +146,45 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
             "XNYS": "NYSE",
             "NYSE": "NYSE",
         }.get(normalized, normalized)
+
+    @staticmethod
+    def polygon_exchange_code(exchange):
+        if exchange is None:
+            return None
+        normalized = str(exchange).strip().upper()
+        return {
+            "NASDAQ": "XNAS",
+            "XNAS": "XNAS",
+            "NYSE": "XNYS",
+            "XNYS": "XNYS",
+        }.get(normalized, normalized)
+
+    @classmethod
+    def normalize_universe_row(cls, item):
+        exchange = cls.normalize_exchange(item.get("primary_exchange"))
+        return {
+            "ticker": str(item.get("ticker") or "").strip().upper(),
+            "company_name": item.get("name"),
+            "exchange": exchange,
+            "security_type": cls.normalize_security_type(item.get("type")),
+            "sector": item.get("sic_description"),
+            "industry": item.get("locale"),
+            "market_cap": item.get("market_cap"),
+            "price": item.get("price"),
+            "average_volume": item.get("average_volume"),
+            "average_dollar_volume": item.get("average_dollar_volume"),
+            "active": item.get("active", True),
+            "source": cls.SOURCE,
+        }
+
+    @staticmethod
+    def normalize_security_type(value):
+        normalized = str(value or "").strip().upper()
+        return {
+            "CS": "Common Stock",
+            "COMMON STOCK": "Common Stock",
+            "STOCK": "Common Stock",
+        }.get(normalized, value or "Common Stock")
 
 
 class FinancialModelingPrepProvider(LiveMarketDataProvider):

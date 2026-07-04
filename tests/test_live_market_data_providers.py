@@ -1,6 +1,7 @@
 import json
 from types import SimpleNamespace
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlparse
 
 from market_data.http_client import HttpClient
 from market_data.live_adapters import (
@@ -173,6 +174,172 @@ def test_polygon_successful_mocked_ohlcv_response():
     assert rows[0].close == 104
     assert rows[0].source == "polygon"
     assert "apiKey=key" in opener.calls[0][0]
+
+
+def test_polygon_universe_symbols_nasdaq_maps_to_xnas():
+    opener = FakeOpener(
+        responses=[
+            FakeResponse(
+                {
+                    "results": [
+                        {
+                            "ticker": "AAPL",
+                            "name": "Apple Inc.",
+                            "primary_exchange": "XNAS",
+                            "type": "CS",
+                            "active": True,
+                            "sic_description": "Technology",
+                            "market_cap": 300,
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=opener),
+    )
+
+    symbols = provider.fetch_universe_symbols(exchange="NASDAQ")
+    query = parse_qs(urlparse(opener.calls[0][0]).query)
+
+    assert query["exchange"] == ["XNAS"]
+    assert query["market"] == ["stocks"]
+    assert query["active"] == ["true"]
+    assert query["limit"] == ["1000"]
+    assert query["apiKey"] == ["key"]
+    assert symbols == [
+        {
+            "ticker": "AAPL",
+            "company_name": "Apple Inc.",
+            "exchange": "NASDAQ",
+            "security_type": "Common Stock",
+            "sector": "Technology",
+            "industry": None,
+            "market_cap": 300,
+            "price": None,
+            "average_volume": None,
+            "average_dollar_volume": None,
+            "active": True,
+            "source": "polygon",
+        }
+    ]
+
+
+def test_polygon_universe_symbols_nyse_maps_to_xnys():
+    opener = FakeOpener(
+        responses=[
+            FakeResponse(
+                {
+                    "results": [
+                        {
+                            "ticker": "IBM",
+                            "name": "IBM",
+                            "primary_exchange": "XNYS",
+                            "type": "CS",
+                            "active": True,
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=opener),
+    )
+
+    symbols = provider.fetch_universe_symbols(exchange="NYSE")
+    query = parse_qs(urlparse(opener.calls[0][0]).query)
+
+    assert query["exchange"] == ["XNYS"]
+    assert symbols[0]["ticker"] == "IBM"
+    assert symbols[0]["exchange"] == "NYSE"
+
+
+def test_polygon_universe_symbols_paginates_next_url():
+    opener = FakeOpener(
+        responses=[
+            FakeResponse(
+                {
+                    "results": [
+                        {
+                            "ticker": "AAPL",
+                            "name": "Apple Inc.",
+                            "primary_exchange": "XNAS",
+                            "type": "CS",
+                        }
+                    ],
+                    "next_url": "https://api.polygon.io/v3/reference/tickers?cursor=abc",
+                }
+            ),
+            FakeResponse(
+                {
+                    "results": [
+                        {
+                            "ticker": "MSFT",
+                            "name": "Microsoft Corp.",
+                            "primary_exchange": "XNAS",
+                            "type": "CS",
+                        }
+                    ]
+                }
+            ),
+        ]
+    )
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=opener),
+    )
+
+    symbols = provider.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert [symbol["ticker"] for symbol in symbols] == ["AAPL", "MSFT"]
+    assert len(opener.calls) == 2
+    assert "cursor=abc" in opener.calls[1][0]
+    assert "apiKey=key" in opener.calls[1][0]
+
+
+def test_polygon_universe_zero_rows_adds_warning():
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=FakeOpener(responses=[FakeResponse({"results": []})])),
+    )
+
+    symbols = provider.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert symbols == []
+    assert provider.last_errors == []
+    assert provider.last_warnings == [
+        "Polygon returned zero universe symbols for NASDAQ"
+    ]
+
+
+def test_polygon_universe_malformed_response_adds_error():
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=FakeOpener(responses=[FakeResponse([])])),
+    )
+
+    symbols = provider.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert symbols == []
+    assert provider.last_errors == [
+        "Malformed Polygon universe response: expected object"
+    ]
+
+
+def test_polygon_universe_http_error_preserves_error():
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=FakeOpener(errors=[http_error(500)]), max_retries=0),
+    )
+
+    symbols = provider.fetch_universe_symbols(exchange="NASDAQ")
+
+    assert symbols == []
+    assert provider.last_errors == ["HTTP 500"]
 
 
 def test_fmp_mocked_fundamentals_response():
