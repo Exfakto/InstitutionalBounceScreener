@@ -10,8 +10,8 @@ class SupportDetectionService:
     Business workflow for support detection.
     """
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, database_manager=None):
+        self.db = database_manager or DatabaseManager()
         self.detector = SwingLowDetector()
         self.clusterer = SupportZoneClusterer()
         self.strength = SupportStrength()

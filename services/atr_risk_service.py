@@ -16,8 +16,8 @@ class ATRRiskService:
     Calculate ATR risk metrics using stored OHLC price history.
     """
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, database_manager=None):
+        self.db = database_manager or DatabaseManager()
         self.calculator = ATRRiskCalculator()
 
     def calculate_for_ticker(self, ticker):

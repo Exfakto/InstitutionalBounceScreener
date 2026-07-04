@@ -19,8 +19,8 @@ class VolumeIntelligenceService:
     Calculate volume intelligence using stored price history.
     """
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, database_manager=None):
+        self.db = database_manager or DatabaseManager()
         self.calculator = VolumeIntelligenceCalculator()
 
     def calculate_for_ticker(self, ticker):

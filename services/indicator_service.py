@@ -10,8 +10,8 @@ class IndicatorService:
     Business workflow for calculating technical indicators.
     """
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, database_manager=None):
+        self.db = database_manager or DatabaseManager()
         self.sma = SMAIndicator()
 
     def calculate_indicators(self):

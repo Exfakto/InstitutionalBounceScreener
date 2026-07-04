@@ -17,8 +17,8 @@ class TrendStrengthService:
     Calculate trend strength using stored price history and SMA values.
     """
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, database_manager=None):
+        self.db = database_manager or DatabaseManager()
         self.calculator = TrendStrengthCalculator()
         self.sma = SMAIndicator()
 

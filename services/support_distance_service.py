@@ -19,8 +19,8 @@ class SupportDistanceService:
     Calculate support distance context from stored price, support, and bounce data.
     """
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, database_manager=None):
+        self.db = database_manager or DatabaseManager()
         self.calculator = SupportDistanceCalculator()
 
     def calculate_for_ticker(self, ticker):
