@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -50,6 +50,7 @@ class CandidateTable(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setShowGrid(False)
         self.setMouseTracking(True)
+        self.setIconSize(QSize(26, 26))
         self.setSortingEnabled(False)
         self.setWordWrap(False)
         self.verticalHeader().setVisible(False)
@@ -92,7 +93,7 @@ class CandidateTable(QTableWidget):
                     item.setData(Qt.UserRole, sort_value)
                 item.setTextAlignment(self.alignment_for_column(column))
                 if column == 1:
-                    item.setIcon(TickerLogoProvider.icon_for(value, size=24))
+                    item.setIcon(TickerLogoProvider.icon_for(value, size=26))
                 self.apply_item_style(item, role)
                 self.setItem(row, column, item)
 
@@ -449,7 +450,7 @@ class CandidateTable(QTableWidget):
     def apply_default_column_widths(self):
         widths = {
             0: 68,
-            1: 122,
+            1: 136,
             2: 126,
             3: 148,
             4: 104,
@@ -496,32 +497,33 @@ class CandidateTable(QTableWidget):
         return """
         QTableWidget#CandidateTable {
             border: 1px solid #3A4654;
-            border-radius: 9px;
-            background-color: #141B23;
-            alternate-background-color: #1A232D;
-            selection-background-color: #244C73;
+            border-radius: 8px;
+            background-color: #111922;
+            alternate-background-color: #16212B;
+            selection-background-color: #1E4970;
             selection-color: #F3F7FA;
             gridline-color: transparent;
             outline: none;
+            color: #F3F7FA;
         }
         QTableWidget#CandidateTable::item {
-            padding: 10px 12px;
-            border-bottom: 1px solid #273340;
+            padding: 8px 12px;
+            border-bottom: 1px solid #243140;
         }
         QTableWidget#CandidateTable::item:hover {
-            background-color: #202B36;
+            background-color: #1D2A36;
         }
         QTableWidget#CandidateTable::item:selected {
-            background-color: #244C73;
+            background-color: #1E4970;
             color: #F3F7FA;
         }
         QHeaderView::section {
-            background-color: #111922;
+            background-color: #0E151D;
             color: #D7E0EA;
             border: none;
-            border-right: 1px solid #273340;
+            border-right: 1px solid #243140;
             border-bottom: 1px solid #3A4654;
-            padding: 11px 12px;
+            padding: 9px 12px;
             font-weight: 800;
         }
         """

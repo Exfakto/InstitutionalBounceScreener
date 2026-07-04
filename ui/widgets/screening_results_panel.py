@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -1057,6 +1057,7 @@ class ScreeningResultsPanel(QWidget):
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         table.setShowGrid(False)
+        table.setIconSize(QSize(26, 26))
         table.setWordWrap(False)
         table.verticalHeader().setVisible(False)
         table.verticalHeader().setDefaultSectionSize(
@@ -1068,6 +1069,12 @@ class ScreeningResultsPanel(QWidget):
         table.horizontalHeader().setMinimumSectionSize(56)
         if title == "Ranked Candidates":
             table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+            table.setColumnWidth(0, 64)
+            table.setColumnWidth(1, 120)
+            table.setColumnWidth(2, 180)
+            table.setColumnWidth(3, 104)
+            table.setColumnWidth(4, 72)
+            table.setColumnWidth(5, 112)
         else:
             table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         table.setStyleSheet(DesignSystem.table_style())
@@ -1375,7 +1382,10 @@ class ScreeningResultsPanel(QWidget):
                 else:
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                 if table.objectName() == "RankedCandidatesTable" and column == 1:
-                    item.setIcon(TickerLogoProvider.icon_for(value, size=24))
+                    item.setIcon(TickerLogoProvider.icon_for(value, size=26))
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
                 role = ScreeningResultsPanel.status_role(value)
                 if role:
                     item.setData(Qt.UserRole + 2, role)

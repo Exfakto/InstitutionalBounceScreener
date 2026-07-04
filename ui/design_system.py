@@ -86,14 +86,39 @@ class DashboardDesignSystem:
 
     @classmethod
     def table_style(cls):
-        return (
-            f"background-color: {cls.Table.BACKGROUND};"
-            f"alternate-background-color: {cls.Table.ALTERNATE_BACKGROUND};"
-            f"border: 1px solid {cls.Table.BORDER};"
-            f"border-radius: {cls.Table.RADIUS}px;"
-            f"color: {cls.Colors.TEXT_PRIMARY};"
-            "gridline-color: transparent;"
-        )
+        return f"""
+        QTableWidget {{
+            background-color: #111922;
+            alternate-background-color: #16212B;
+            border: 1px solid {cls.Table.BORDER};
+            border-radius: {cls.Table.RADIUS}px;
+            color: {cls.Colors.TEXT_PRIMARY};
+            gridline-color: transparent;
+            outline: none;
+            selection-background-color: #1E4970;
+            selection-color: {cls.Colors.TEXT_PRIMARY};
+        }}
+        QTableWidget::item {{
+            padding: 7px 10px;
+            border-bottom: 1px solid {cls.Colors.BORDER_MUTED};
+        }}
+        QTableWidget::item:hover {{
+            background-color: #1D2A36;
+        }}
+        QTableWidget::item:selected {{
+            background-color: #1E4970;
+            color: {cls.Colors.TEXT_PRIMARY};
+        }}
+        QHeaderView::section {{
+            background-color: #0E151D;
+            color: {cls.Colors.TEXT_SECONDARY};
+            border: none;
+            border-right: 1px solid {cls.Colors.BORDER_MUTED};
+            border-bottom: 1px solid {cls.Colors.BORDER};
+            padding: 8px 10px;
+            font-weight: 800;
+        }}
+        """
 
     @classmethod
     def section_title_style(cls):

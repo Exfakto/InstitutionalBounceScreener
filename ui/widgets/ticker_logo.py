@@ -42,28 +42,36 @@ class TickerLogoProvider:
         if not ticker:
             return None
 
-        for extension in cls.EXTENSIONS:
-            path = cls.LOGO_DIR / f"{ticker.lower()}{extension}"
-            if path.exists():
-                icon = QIcon(str(path))
-                if not icon.isNull():
-                    return icon
+        names = {ticker, ticker.lower(), ticker.upper()}
+        for name in names:
+            for extension in cls.EXTENSIONS:
+                path = cls.LOGO_DIR / f"{name}{extension}"
+                if path.exists():
+                    icon = QIcon(str(path))
+                    if not icon.isNull():
+                        return icon
         return None
 
     @classmethod
     def badge_pixmap(cls, ticker, size):
         ticker = ticker or "--"
         initials, color = cls.badge_identity(ticker)
-        pixmap = QPixmap(QSize(size, size))
+        scale = 2
+        device_size = size * scale
+        pixmap = QPixmap(QSize(device_size, device_size))
+        pixmap.setDevicePixelRatio(scale)
         pixmap.fill(Qt.transparent)
 
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
-        rect = pixmap.rect().adjusted(1, 1, -1, -1)
+        rect = pixmap.rect().adjusted(scale, scale, -scale, -scale)
         path = QPainterPath()
-        path.addRoundedRect(rect, 7, 7)
-        painter.fillPath(path, QColor(color))
+        radius = max(7, int(size * 0.34)) * scale
+        path.addRoundedRect(rect, radius, radius)
+
+        base = QColor(color)
+        painter.fillPath(path, base)
 
         border = QColor("#DCE8F2")
         border.setAlpha(70)
