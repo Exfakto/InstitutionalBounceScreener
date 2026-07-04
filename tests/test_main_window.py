@@ -926,6 +926,7 @@ def test_main_window_screening_results_view_construction(patched_window):
     assert ranked_headers == [
         "Rank",
         "Ticker",
+        "Company",
         "Final Score",
         "Grade",
         "Confidence",
@@ -961,7 +962,7 @@ def test_main_window_results_tables_have_professional_configuration(patched_wind
     assert ranked.isSortingEnabled() is True
     assert ranked.showGrid() is False
     assert ranked.verticalHeader().defaultSectionSize() >= 30
-    assert ranked.horizontalHeader().sectionResizeMode(5) == QHeaderView.Stretch
+    assert ranked.horizontalHeader().sectionResizeMode(6) == QHeaderView.Stretch
     assert history.horizontalHeader().sectionResizeMode(0) == QHeaderView.Stretch
 
 
@@ -995,6 +996,7 @@ def test_main_window_loads_ranked_candidates_view(patched_window):
         SimpleNamespace(
             rank=1,
             ticker="AAPL",
+            company_name="Apple Inc.",
             final_score=91.25,
             grade="A+",
             confidence_level="HIGH",
@@ -1012,8 +1014,10 @@ def test_main_window_loads_ranked_candidates_view(patched_window):
     assert table.rowCount() == 1
     assert table.item(0, 0).text() == "1"
     assert table.item(0, 1).text() == "AAPL"
-    assert table.item(0, 2).text() == "91.25"
-    assert table.item(0, 6).text() == "1"
+    assert table.item(0, 1).icon().isNull() is False
+    assert table.item(0, 2).text() == "Apple Inc."
+    assert table.item(0, 3).text() == "91.25"
+    assert table.item(0, 7).text() == "1"
     assert window.screening_results_panel.ranked_empty_label.isHidden() is True
 
 

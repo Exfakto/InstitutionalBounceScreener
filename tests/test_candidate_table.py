@@ -155,6 +155,15 @@ def test_candidate_table_exposes_selected_ticker(app):
     assert table.selected_ticker() == "AAPL"
 
 
+def test_candidate_table_adds_local_ticker_badge_icon(app):
+    table = CandidateTable()
+
+    table.populate([make_candidate("AAPL", 75.0)])
+
+    assert table.item(0, 1).text() == "AAPL"
+    assert table.item(0, 1).icon().isNull() is False
+
+
 def test_candidate_table_emits_ticker_on_double_click(app):
     table = CandidateTable()
     table.populate([make_candidate("MSFT", 82.0)])

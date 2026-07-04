@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from ui.design_system import DashboardDesignSystem as DesignSystem
 from ui.widgets.backtest_analytics_panel import BacktestAnalyticsPanel
 from ui.widgets.candidate_chart_panel import CandidateChartPanel
+from ui.widgets.ticker_logo import TickerLogoProvider
 
 
 class ScreeningResultsPanel(QWidget):
@@ -66,6 +67,7 @@ class ScreeningResultsPanel(QWidget):
     RANKED_HEADERS = [
         "Rank",
         "Ticker",
+        "Company",
         "Final Score",
         "Grade",
         "Confidence",
@@ -1046,6 +1048,9 @@ class ScreeningResultsPanel(QWidget):
         layout.addLayout(header)
 
         table = QTableWidget(0, len(headers))
+        table.setObjectName(
+            "RankedCandidatesTable" if title == "Ranked Candidates" else "RunHistoryTable"
+        )
         table.setHorizontalHeaderLabels(headers)
         table.setAlternatingRowColors(True)
         table.setSortingEnabled(True)
@@ -1054,13 +1059,15 @@ class ScreeningResultsPanel(QWidget):
         table.setShowGrid(False)
         table.setWordWrap(False)
         table.verticalHeader().setVisible(False)
-        table.verticalHeader().setDefaultSectionSize(30)
+        table.verticalHeader().setDefaultSectionSize(
+            40 if title == "Ranked Candidates" else 32
+        )
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         table.horizontalHeader().setMinimumSectionSize(56)
         if title == "Ranked Candidates":
-            table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+            table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
         else:
             table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         table.setStyleSheet(DesignSystem.table_style())
@@ -1205,6 +1212,7 @@ class ScreeningResultsPanel(QWidget):
                 [
                     self.value(candidate, "rank"),
                     self.value(candidate, "ticker"),
+                    self.company_name_for_candidate(candidate),
                     self.value(candidate, "final_score"),
                     self.value(candidate, "grade"),
                     self.value(candidate, "confidence_level"),
@@ -1214,7 +1222,7 @@ class ScreeningResultsPanel(QWidget):
                 ]
                 for candidate in self.current_candidates
             ],
-            numeric_columns={0, 2, 6, 7},
+            numeric_columns={0, 3, 7, 8},
             source_rows=self.current_candidates,
         )
         self.set_empty_state(
@@ -1366,6 +1374,8 @@ class ScreeningResultsPanel(QWidget):
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 else:
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                if table.objectName() == "RankedCandidatesTable" and column == 1:
+                    item.setIcon(TickerLogoProvider.icon_for(value, size=24))
                 role = ScreeningResultsPanel.status_role(value)
                 if role:
                     item.setData(Qt.UserRole + 2, role)
@@ -1375,6 +1385,15 @@ class ScreeningResultsPanel(QWidget):
                 table.setItem(row_index, column, item)
         table.resizeColumnsToContents()
         table.setSortingEnabled(True)
+
+    @classmethod
+    def company_name_for_candidate(cls, candidate):
+        return (
+            cls.value(candidate, "company_name")
+            or cls.value(candidate, "company")
+            or cls.value(candidate, "name")
+            or ""
+        )
 
     @staticmethod
     def set_empty_state(table, label, is_empty):
