@@ -1,5 +1,8 @@
 from controllers.model_calibration_controller import ModelCalibrationController
 from services.model_calibration_apply_service import CalibrationApplyResult
+from services.model_calibration_integration_audit_service import (
+    CalibrationIntegrationAuditResult,
+)
 from services.model_calibration_validation_service import CalibrationValidationResult
 from services.model_calibration_recommendation_service import (
     CalibrationRecommendationView,
@@ -181,3 +184,28 @@ def test_model_calibration_controller_validate_delegates_to_service():
     assert service.current_settings == {"a": 1}
     assert service.proposed_settings == {"b": 2}
     assert result.status == "passed"
+
+
+def test_model_calibration_controller_audit_delegates_to_service():
+    class AuditService:
+        def __init__(self):
+            self.controller = None
+            self.repository = None
+
+        def audit(self, controller=None, repository=None):
+            self.controller = controller
+            self.repository = repository
+            return CalibrationIntegrationAuditResult(items=[])
+
+    repository = object()
+    service = AuditService()
+    controller = ModelCalibrationController(
+        repository=repository,
+        audit_service=service,
+    )
+
+    result = controller.audit_calibration_integration()
+
+    assert service.controller is controller
+    assert service.repository is repository
+    assert result.status == "Pass"

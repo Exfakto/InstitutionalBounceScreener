@@ -5,6 +5,9 @@ from services.model_calibration_comparison_service import (
     ModelCalibrationComparisonService,
 )
 from services.model_calibration_history_service import ModelCalibrationHistoryService
+from services.model_calibration_integration_audit_service import (
+    ModelCalibrationIntegrationAuditService,
+)
 from services.model_calibration_recommendation_service import (
     ModelCalibrationRecommendationService,
 )
@@ -24,6 +27,9 @@ class ModelCalibrationController:
         comparison_service=None,
         apply_service=None,
         validation_service=None,
+        audit_service=None,
+        analysis_service=None,
+        export_service=None,
     ):
         self.repository = repository
         self.recommendation_service = (
@@ -47,6 +53,11 @@ class ModelCalibrationController:
             validation_service
             or ModelCalibrationValidationService(history_service=self.history_service)
         )
+        self.audit_service = audit_service or ModelCalibrationIntegrationAuditService()
+        self.analysis_service = analysis_service
+        self.calibration_service = analysis_service
+        self.export_service = export_service
+        self.beta_report_export_service = export_service
 
     def get_calibration_recommendations(self, run_id=None):
         return self.recommendation_service.get_recommendations(run_id=run_id)
@@ -74,3 +85,6 @@ class ModelCalibrationController:
             current_settings=current_settings,
             proposed_settings=proposed_settings,
         )
+
+    def audit_calibration_integration(self):
+        return self.audit_service.audit(controller=self, repository=self.repository)
