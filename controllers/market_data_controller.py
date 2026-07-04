@@ -2,16 +2,34 @@ from __future__ import annotations
 
 from services.live_provider_resilience_service import LiveProviderResilienceService
 from services.market_data_service import MarketDataService
+from services.provider_configuration_validation_service import (
+    ProviderConfigurationValidationService,
+)
 
 
 class MarketDataController:
-    def __init__(self, market_data_service=None, resilience_service=None, providers=None):
+    def __init__(
+        self,
+        market_data_service=None,
+        resilience_service=None,
+        providers=None,
+        settings_service=None,
+        provider_configuration_validation_service=None,
+    ):
         self.resilience_service = resilience_service or (
             LiveProviderResilienceService(providers=providers) if providers else None
         )
         self.market_data_service = market_data_service or MarketDataService(
             providers=providers,
             resilience_service=self.resilience_service,
+        )
+        self.settings_service = settings_service
+        self.provider_configuration_validation_service = (
+            provider_configuration_validation_service
+            or ProviderConfigurationValidationService(
+                settings_service=settings_service,
+                resilience_service=self.resilience_service,
+            )
         )
 
     def fetch_daily_ohlcv(self, ticker, start_date=None, end_date=None, use_cache=True):
@@ -51,6 +69,9 @@ class MarketDataController:
             "failover_provider": failover,
             "failover_events": self.provider_failover_history(),
         }
+
+    def validate_provider_configuration(self):
+        return self.provider_configuration_validation_service.validate()
 
     @staticmethod
     def active_provider_name(health):
