@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -95,6 +95,10 @@ from ui.about_dialog import AboutDialog
 from ui.design_system import DashboardDesignSystem as DesignSystem
 
 
+class _LiveRefreshBridge(QObject):
+    live_refresh_received = Signal(str, object)
+
+
 class MainWindow(QMainWindow):
 
     DEFAULT_WORKSPACE_LAYOUT = "Default"
@@ -163,7 +167,9 @@ class MainWindow(QMainWindow):
         self.scan_preset_service = ScanPresetService()
         self.workspace_state_service = WorkspaceStateService()
         self.refresh_scheduler = RefreshScheduler()
-        self.refresh_scheduler.register_callback(self.handle_live_refresh_result)
+        self.live_refresh_bridge = _LiveRefreshBridge(self)
+        self.live_refresh_bridge.live_refresh_received.connect(self.handle_live_refresh_result)
+        self.refresh_scheduler.register_callback(self.live_refresh_bridge.live_refresh_received.emit)
         self.dashboard_controller = DashboardController(
             market_controller=self.controller,
             watchlist_controller=self.watchlist_controller,
