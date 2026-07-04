@@ -6,6 +6,9 @@ from services.diagnostics_service import DiagnosticsService
 from services.production_readiness_dashboard_service import (
     ProductionReadinessDashboardService,
 )
+from services.release_candidate_validation_service import (
+    ReleaseCandidateValidationService,
+)
 from services.screening_diagnostics_service import ScreeningDiagnosticsService
 
 
@@ -19,6 +22,7 @@ class DiagnosticsController:
         diagnostics_service: DiagnosticsService | None = None,
         screening_diagnostics_service: ScreeningDiagnosticsService | None = None,
         production_readiness_dashboard_service: ProductionReadinessDashboardService | None = None,
+        release_candidate_validation_service: ReleaseCandidateValidationService | None = None,
     ) -> None:
         self.diagnostics_service = diagnostics_service or DiagnosticsService()
         self.screening_diagnostics_service = (
@@ -30,6 +34,15 @@ class DiagnosticsController:
                 startup_diagnostics_service=self.diagnostics_service,
                 screening_diagnostics_service=self.screening_diagnostics_service,
                 production_packaging_service=self.diagnostics_service,
+            )
+        )
+        self.release_candidate_validation_service = (
+            release_candidate_validation_service
+            or ReleaseCandidateValidationService(
+                startup_diagnostics_service=self.diagnostics_service,
+                production_readiness_dashboard_service=self.production_readiness_dashboard_service,
+                screening_diagnostics_service=self.screening_diagnostics_service,
+                packaging_status_service=self.diagnostics_service,
             )
         )
 
@@ -54,3 +67,6 @@ class DiagnosticsController:
 
     def get_production_readiness_dashboard(self):
         return self.production_readiness_dashboard_service.build_dashboard()
+
+    def run_release_candidate_validation(self):
+        return self.release_candidate_validation_service.validate()
