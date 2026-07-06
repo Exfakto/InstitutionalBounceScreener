@@ -158,6 +158,7 @@ class ScreeningOrchestrator:
                 warnings=final_warnings,
                 errors=errors,
             )
+            self.record_signal_history(run_id, pipeline_result, completed_at)
             return ScreeningRunResult(
                 run_id=run_id,
                 status=status,
@@ -261,6 +262,7 @@ class ScreeningOrchestrator:
             warnings=final_warnings,
             errors=errors,
         )
+        self.record_signal_history(run_id, pipeline_result, completed_at)
 
         return ScreeningRunResult(
             run_id=run_id,
@@ -273,6 +275,24 @@ class ScreeningOrchestrator:
             warnings=final_warnings,
             errors=errors,
         )
+
+    def record_signal_history(self, run_id, pipeline_result, created_at):
+        if self.repository is None or not hasattr(self.repository, "save_screening_run"):
+            return 0
+
+        candidates = [
+            *list(getattr(pipeline_result, "ranked_candidates", []) or []),
+            *list(getattr(pipeline_result, "rejected_candidates", []) or []),
+        ]
+        try:
+            return self.repository.save_screening_run(
+                run_id=run_id,
+                candidates=candidates,
+                created_at=created_at,
+            )
+        except Exception:
+            logger.exception("Unable to save screening signal history for run_id=%s", run_id)
+            return 0
 
     def persist_scores(
         self,

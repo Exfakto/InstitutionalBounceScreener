@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -13,7 +14,7 @@ class RiskAnalytics:
     flags: list[str] = field(default_factory=list)
     commentary: str = "Risk analytics are not available."
 
-    def as_metrics(self):
+    def as_metrics(self) -> dict[str, Any]:
         values = dict(self.component_scores)
         values.update(
             {
@@ -38,7 +39,7 @@ class RiskAnalyticsService:
     Composite trading risk assessment from technical, bounce and fundamentals.
     """
 
-    def analytics_for_metrics(self, ticker, metrics):
+    def analytics_for_metrics(self, ticker: str, metrics: dict[str, Any] | None) -> RiskAnalytics:
         ticker = str(ticker or "").strip().upper()
         metrics = dict(metrics or {})
         components = self.component_scores(metrics)
@@ -58,7 +59,7 @@ class RiskAnalyticsService:
             commentary=commentary,
         )
 
-    def component_scores(self, metrics):
+    def component_scores(self, metrics: dict[str, Any]) -> dict[str, float | None]:
         return {
             "atr_risk": self.atr_risk(metrics),
             "support_failure_risk": self.support_failure_risk(metrics),
@@ -77,7 +78,7 @@ class RiskAnalyticsService:
         }
 
     @classmethod
-    def weighted_score(cls, components):
+    def weighted_score(cls, components: dict[str, float | None]) -> float:
         weights = {
             "atr_risk": 0.10,
             "support_failure_risk": 0.15,
@@ -101,7 +102,7 @@ class RiskAnalyticsService:
         return round(sum(score * weight for score, weight in seen) / total_weight, 1)
 
     @staticmethod
-    def risk_class(score):
+    def risk_class(score: float) -> str:
         if score < 20:
             return "Very Low"
         if score < 40:
@@ -113,7 +114,7 @@ class RiskAnalyticsService:
         return "Very High"
 
     @staticmethod
-    def recommendation(score):
+    def recommendation(score: float) -> str:
         if score < 20:
             return "Excellent Risk"
         if score < 40:
@@ -124,7 +125,7 @@ class RiskAnalyticsService:
             return "High Risk"
         return "Avoid"
 
-    def flags(self, metrics, components):
+    def flags(self, metrics: dict[str, Any], components: dict[str, float | None]) -> list[str]:
         flags = []
         if self.number(metrics.get("support_strength_score") or metrics.get("support_strength")) is not None:
             if self.number(metrics.get("support_strength_score") or metrics.get("support_strength")) < 50:
@@ -147,7 +148,14 @@ class RiskAnalyticsService:
             flags.append("Aggressive Leverage")
         return flags
 
-    def commentary(self, metrics, components, score, risk_class, flags):
+    def commentary(
+        self,
+        metrics: dict[str, Any],
+        components: dict[str, float | None],
+        score: float,
+        risk_class: str,
+        flags: list[str],
+    ) -> str:
         sentences = [
             f"The setup carries {risk_class.lower()} composite risk with a Risk Intelligence Score of {score:.1f}."
         ]
@@ -182,7 +190,7 @@ class RiskAnalyticsService:
         return " ".join(sentences)
 
     @classmethod
-    def atr_risk(cls, metrics):
+    def atr_risk(cls, metrics: dict[str, Any]) -> float | None:
         atr = cls.number(metrics.get("atr14") or metrics.get("atr"))
         price = cls.number(metrics.get("current_price") or metrics.get("close") or metrics.get("price"))
         atr_pct = cls.number(metrics.get("atr_pct") or metrics.get("volatility_pct"))
@@ -193,7 +201,7 @@ class RiskAnalyticsService:
         return cls.clamp(atr_pct / 8 * 100)
 
     @classmethod
-    def support_failure_risk(cls, metrics):
+    def support_failure_risk(cls, metrics: dict[str, Any]) -> float | None:
         failure = cls.number(metrics.get("support_failure_risk_pct") or metrics.get("breakdown_risk"))
         if failure is not None:
             return cls.clamp(failure)
@@ -203,14 +211,14 @@ class RiskAnalyticsService:
         return cls.clamp(100 - success)
 
     @classmethod
-    def distance_from_support_risk(cls, metrics):
+    def distance_from_support_risk(cls, metrics: dict[str, Any]) -> float | None:
         distance = cls.number(metrics.get("distance_to_support_pct") or metrics.get("distance_from_support_pct"))
         if distance is None:
             return None
         return cls.clamp((distance - 2) / 13 * 100)
 
     @classmethod
-    def volatility_risk(cls, metrics):
+    def volatility_risk(cls, metrics: dict[str, Any]) -> float | None:
         relative_volume = cls.number(metrics.get("relative_volume"))
         atr_risk = cls.atr_risk(metrics)
         volume_component = None
@@ -222,7 +230,7 @@ class RiskAnalyticsService:
         return sum(values) / len(values)
 
     @classmethod
-    def trend_risk(cls, metrics):
+    def trend_risk(cls, metrics: dict[str, Any]) -> float:
         trend = str(metrics.get("trend") or "").lower()
         if "bear" in trend or "down" in trend:
             return 85.0
@@ -235,7 +243,7 @@ class RiskAnalyticsService:
         return 50.0
 
     @classmethod
-    def liquidity_risk(cls, metrics):
+    def liquidity_risk(cls, metrics: dict[str, Any]) -> float | None:
         volume = cls.number(metrics.get("latest_volume") or metrics.get("volume"))
         if volume is None:
             return None
@@ -248,7 +256,7 @@ class RiskAnalyticsService:
         return 90.0
 
     @classmethod
-    def gap_risk(cls, metrics):
+    def gap_risk(cls, metrics: dict[str, Any]) -> float:
         earnings_soon = metrics.get("earnings_within_7_days")
         if str(earnings_soon).lower() in {"1", "true", "yes"} or earnings_soon is True:
             return 85.0
@@ -257,14 +265,14 @@ class RiskAnalyticsService:
         return 25.0
 
     @classmethod
-    def fundamental_risk(cls, metrics):
+    def fundamental_risk(cls, metrics: dict[str, Any]) -> float | None:
         score = cls.number(metrics.get("fundamental_intelligence_score") or metrics.get("quality_score"))
         if score is None:
             return None
         return cls.clamp(100 - score)
 
     @classmethod
-    def market_structure_risk(cls, metrics):
+    def market_structure_risk(cls, metrics: dict[str, Any]) -> float:
         structure = str(metrics.get("market_structure") or "").lower()
         if "strong bullish" in structure:
             return 15.0
@@ -277,7 +285,7 @@ class RiskAnalyticsService:
         return 50.0
 
     @classmethod
-    def bounce_reliability_risk(cls, metrics):
+    def bounce_reliability_risk(cls, metrics: dict[str, Any]) -> float | None:
         success = cls.number(metrics.get("bounce_success_pct") or metrics.get("historical_bounce_success_rate"))
         tests = cls.number(metrics.get("support_tests") or metrics.get("bounce_count"))
         if success is None and tests is None:
@@ -287,19 +295,19 @@ class RiskAnalyticsService:
         return cls.clamp(success_risk + test_penalty)
 
     @classmethod
-    def leverage_risk(cls, metrics):
+    def leverage_risk(cls, metrics: dict[str, Any]) -> float | None:
         debt = cls.number(metrics.get("debt_to_equity"))
         if debt is None:
             return None
         return cls.clamp((debt - 0.5) / 2.5 * 100)
 
     @staticmethod
-    def number(value):
+    def number(value: Any) -> float | None:
         try:
             return float(value)
         except (TypeError, ValueError):
             return None
 
     @staticmethod
-    def clamp(value):
+    def clamp(value: float) -> float:
         return max(0.0, min(100.0, value))

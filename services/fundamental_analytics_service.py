@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from database.manager import DatabaseManager
 
@@ -16,7 +17,7 @@ class FundamentalAnalytics:
     commentary: str = "Fundamental analytics are not available."
     research_summary: str = "Fundamental analytics are not available."
 
-    def as_metrics(self):
+    def as_metrics(self) -> dict[str, Any]:
         values = dict(self.metrics)
         values.update(self.scores)
         values.update(
@@ -35,7 +36,7 @@ class FundamentalAnalytics:
         )
         return values
 
-    def risk_rating(self):
+    def risk_rating(self) -> str:
         if self.intelligence_score >= 75:
             return "Low"
         if self.intelligence_score >= 55:
@@ -50,10 +51,10 @@ class FundamentalAnalyticsService:
     Convert stored fundamentals into actionable company-quality analytics.
     """
 
-    def __init__(self, db=None):
+    def __init__(self, db: Any | None = None) -> None:
         self.db = db or DatabaseManager()
 
-    def analytics_for_ticker(self, ticker):
+    def analytics_for_ticker(self, ticker: str) -> FundamentalAnalytics:
         ticker = str(ticker or "").strip().upper()
         row = self.fetch_fundamentals(ticker)
         if not row:
@@ -78,7 +79,7 @@ class FundamentalAnalyticsService:
             research_summary=summary,
         )
 
-    def fetch_fundamentals(self, ticker):
+    def fetch_fundamentals(self, ticker: str) -> dict[str, Any]:
         for method_name in ("fetch_fundamental_data", "get_fundamentals"):
             method = getattr(self.db, method_name, None)
             if method is None:
@@ -88,7 +89,7 @@ class FundamentalAnalyticsService:
                 return self.row_dict(row)
         return {}
 
-    def derived_metrics(self, row):
+    def derived_metrics(self, row: dict[str, Any]) -> dict[str, float]:
         revenue = self.value(row, "revenue", "total_revenue")
         gross_profit = self.value(row, "gross_profit")
         operating_income = self.value(row, "operating_income")
@@ -131,7 +132,7 @@ class FundamentalAnalyticsService:
             if value is not None
         }
 
-    def component_scores(self, metrics):
+    def component_scores(self, metrics: dict[str, Any]) -> dict[str, float | None]:
         return {
             "liquidity_score": self.average(
                 self.score_high(metrics.get("current_ratio"), 1.0, 2.0),
@@ -165,7 +166,7 @@ class FundamentalAnalyticsService:
         }
 
     @staticmethod
-    def weighted_score(scores):
+    def weighted_score(scores: dict[str, float | None]) -> float:
         weights = {
             "growth_score": 0.20,
             "profitability_score": 0.25,
@@ -181,7 +182,7 @@ class FundamentalAnalyticsService:
         return round(sum(score * weight for score, weight in seen) / total_weight, 1)
 
     @staticmethod
-    def classification(score):
+    def classification(score: float) -> str:
         if score >= 90:
             return "Elite"
         if score >= 80:
@@ -194,7 +195,7 @@ class FundamentalAnalyticsService:
             return "Weak"
         return "Critical"
 
-    def quality_flags(self, metrics, scores):
+    def quality_flags(self, metrics: dict[str, Any], scores: dict[str, float | None]) -> list[str]:
         flags = []
         if (scores.get("liquidity_score") or 0) >= 75 and (scores.get("leverage_score") or 0) >= 75:
             flags.append("Strong Balance Sheet")
@@ -213,7 +214,7 @@ class FundamentalAnalyticsService:
             flags.append("Excellent Capital Allocation")
         return flags
 
-    def commentary(self, metrics, scores, classification):
+    def commentary(self, metrics: dict[str, Any], scores: dict[str, float | None], classification: str) -> str:
         fragments = [f"Fundamental intelligence is {classification.lower()}"]
         growth = self.describe_growth(metrics)
         profitability = self.describe_profitability(scores)
@@ -226,7 +227,13 @@ class FundamentalAnalyticsService:
             fragments.append(balance_sheet)
         return " while ".join(fragments) + "."
 
-    def research_summary(self, metrics, scores, classification, flags):
+    def research_summary(
+        self,
+        metrics: dict[str, Any],
+        scores: dict[str, float | None],
+        classification: str,
+        flags: list[str],
+    ) -> str:
         sentences = [
             f"The company earns a {classification} Fundamental Intelligence classification with a balanced score of {self.weighted_score(scores):.1f}.",
             self.describe_growth(metrics, sentence=True),
@@ -239,7 +246,7 @@ class FundamentalAnalyticsService:
             sentences.append("Key quality flags include " + ", ".join(flags[:4]) + ".")
         return " ".join(sentence for sentence in sentences if sentence)
 
-    def describe_growth(self, metrics, sentence=False):
+    def describe_growth(self, metrics: dict[str, Any], sentence: bool = False) -> str:
         revenue_growth = self.number(metrics.get("revenue_growth_ttm"))
         eps_growth = self.number(metrics.get("eps_growth_ttm"))
         if revenue_growth is None and eps_growth is None:
@@ -255,7 +262,7 @@ class FundamentalAnalyticsService:
         return text if not sentence else text.capitalize() + "."
 
     @staticmethod
-    def describe_profitability(scores, sentence=False):
+    def describe_profitability(scores: dict[str, float | None], sentence: bool = False) -> str:
         score = scores.get("profitability_score")
         if score is None:
             text = "profitability data is limited"
@@ -268,7 +275,7 @@ class FundamentalAnalyticsService:
         return text if not sentence else text.capitalize() + "."
 
     @staticmethod
-    def describe_balance_sheet(scores, sentence=False):
+    def describe_balance_sheet(scores: dict[str, float | None], sentence: bool = False) -> str:
         liquidity = scores.get("liquidity_score")
         leverage = scores.get("leverage_score")
         if liquidity is None and leverage is None:
@@ -282,7 +289,7 @@ class FundamentalAnalyticsService:
         return text if not sentence else text.capitalize() + "."
 
     @staticmethod
-    def describe_cash_flow(metrics, scores):
+    def describe_cash_flow(metrics: dict[str, Any], scores: dict[str, float | None]) -> str:
         fcf = FundamentalAnalyticsService.number(metrics.get("free_cash_flow"))
         score = scores.get("cash_flow_score")
         if fcf is None and score is None:
@@ -294,7 +301,7 @@ class FundamentalAnalyticsService:
         return "Cash flow support is moderate."
 
     @staticmethod
-    def describe_valuation(scores):
+    def describe_valuation(scores: dict[str, float | None]) -> str:
         score = scores.get("valuation_score")
         if score is None:
             return "Valuation data is limited."
@@ -305,7 +312,7 @@ class FundamentalAnalyticsService:
         return "Valuation appears demanding relative to fundamentals."
 
     @staticmethod
-    def row_dict(row):
+    def row_dict(row: Any) -> dict[str, Any]:
         if row is None:
             return {}
         if isinstance(row, dict):
@@ -315,7 +322,7 @@ class FundamentalAnalyticsService:
         return {}
 
     @classmethod
-    def value(cls, row, *keys):
+    def value(cls, row: dict[str, Any], *keys: str) -> float | None:
         for key in keys:
             value = row.get(key)
             number = cls.number(value)
@@ -324,14 +331,14 @@ class FundamentalAnalyticsService:
         return None
 
     @staticmethod
-    def number(value):
+    def number(value: Any) -> float | None:
         try:
             return float(value)
         except (TypeError, ValueError):
             return None
 
     @classmethod
-    def ratio(cls, numerator, denominator):
+    def ratio(cls, numerator: Any, denominator: Any) -> float | None:
         numerator = cls.number(numerator)
         denominator = cls.number(denominator)
         if numerator is None or denominator in (None, 0):
@@ -339,23 +346,23 @@ class FundamentalAnalyticsService:
         return numerator / denominator
 
     @classmethod
-    def percent(cls, numerator, denominator):
+    def percent(cls, numerator: Any, denominator: Any) -> float | None:
         ratio = cls.ratio(numerator, denominator)
         return None if ratio is None else ratio * 100
 
     @staticmethod
-    def average(*values):
+    def average(*values: float | None) -> float | None:
         present = [value for value in values if value is not None]
         if not present:
             return None
         return sum(present) / len(present)
 
     @staticmethod
-    def clamp(value):
+    def clamp(value: float) -> float:
         return max(0.0, min(100.0, value))
 
     @classmethod
-    def score_high(cls, value, weak, strong):
+    def score_high(cls, value: Any, weak: float, strong: float) -> float | None:
         value = cls.number(value)
         if value is None:
             return None
@@ -364,7 +371,7 @@ class FundamentalAnalyticsService:
         return cls.clamp((value - weak) / (strong - weak) * 100)
 
     @classmethod
-    def score_low(cls, value, weak, strong):
+    def score_low(cls, value: Any, weak: float, strong: float) -> float | None:
         value = cls.number(value)
         if value is None:
             return None
@@ -373,7 +380,7 @@ class FundamentalAnalyticsService:
         return cls.clamp((weak - value) / (weak - strong) * 100)
 
     @classmethod
-    def score_positive(cls, value):
+    def score_positive(cls, value: Any) -> float | None:
         value = cls.number(value)
         if value is None:
             return None

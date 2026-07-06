@@ -51,7 +51,7 @@ def test_diagnostics_release_ui_construction_and_labels(tmp_path):
     assert dialog.restore_database_button.text() == "Restore Database"
     assert dialog.run_beta_validation_button.text() == "Run Beta Validation"
     assert dialog.scroll_area.widgetResizable() is True
-    assert dialog.release_labels["release_channel"].text() == "dev"
+    assert dialog.release_labels["release_channel"].text() == "rc"
 
 
 def test_diagnostics_release_ui_backup_database_action(tmp_path):

@@ -268,7 +268,7 @@ class StockDetailDataTest(unittest.TestCase):
         self.assertEqual(detail["fundamentals"], {})
         self.assertEqual(
             detail["institutional"]["status"],
-            "Institutional data not configured",
+            "Provider not configured",
         )
         self.assertEqual(detail["technical"], {})
         self.assertEqual(detail["support"], {})
@@ -311,7 +311,7 @@ class StockDetailDataTest(unittest.TestCase):
         )
         self.assertEqual(
             detail["institutional"]["status"],
-            "Institutional data not configured",
+            "Provider not configured",
         )
 
     def test_nee_candidate_detail_window_has_no_blank_analytics_tabs(self):
@@ -331,8 +331,8 @@ class StockDetailDataTest(unittest.TestCase):
         self.assertEqual(window.trade_level_labels["support"].text(), "$68.75")
         self.assertEqual(window.trade_level_labels["ideal_buy_zone"].text(), "$68.00 - $69.50")
         self.assertNotEqual(window.trade_level_labels["target_1"].text(), "Data not available")
-        self.assertIn("PASS", window.checklist_labels["trend"].text())
-        self.assertIn("PASS", window.checklist_labels["bounce_history"].text())
+        self.assertIn("Pass", window.checklist_labels["trend_aligned"].text())
+        self.assertIn("Pass", window.checklist_labels["bounce_history_positive"].text())
         self.assertNotEqual(window.kpi_labels["bounce"].text(), "Data not available")
         self.assertEqual(window.technical_labels["trend"].text(), "Bullish")
         self.assertEqual(

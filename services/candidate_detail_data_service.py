@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from database.manager import DatabaseManager
 from services.bounce_analytics_service import BounceAnalyticsService
 from services.fundamental_analytics_service import FundamentalAnalyticsService
+from services.institutional_analytics_service import InstitutionalAnalyticsService
 from services.ohlcv_cache_access import fetch_ohlcv_frame
 from services.risk_analytics_service import RiskAnalyticsService
 
@@ -12,10 +13,13 @@ class CandidateDetailDataService:
     Assemble the read-only view model used by CandidateDetailWindow.
     """
 
-    def __init__(self, db=None):
+    def __init__(self, db=None, institutional_provider=None):
         self.db = db or DatabaseManager()
         self.bounce_analytics_service = BounceAnalyticsService(self.db)
         self.fundamental_analytics_service = FundamentalAnalyticsService(self.db)
+        self.institutional_analytics_service = InstitutionalAnalyticsService(
+            institutional_provider
+        )
         self.risk_analytics_service = RiskAnalyticsService()
 
     def get_candidate_detail(self, ticker, scored_candidate=None):
@@ -43,6 +47,12 @@ class CandidateDetailDataService:
             else {}
         )
         institutional = self.fetch_row("get_institutional_metrics", ticker)
+        institutional_analytics = (
+            self.institutional_analytics_service.analytics_for_ticker(
+                ticker,
+                institutional,
+            )
+        )
         ranked = self.fetch_ranked_candidate(ticker)
 
         metrics = {}
@@ -55,15 +65,12 @@ class CandidateDetailDataService:
         self.merge(metrics, self.bounce_metrics(bounce))
         self.merge(metrics, bounce_metrics)
         self.merge(metrics, institutional)
+        self.merge(metrics, institutional_analytics.as_metrics())
         self.merge(metrics, self.ranked_metrics(ranked))
 
         metrics.setdefault("ticker", ticker)
         metrics.setdefault("current_price", metrics.get("close"))
         metrics.setdefault("price", metrics.get("current_price"))
-        metrics.setdefault(
-            "institutional_status",
-            "Available" if institutional else "Institutional data not configured",
-        )
         risk_analytics = self.risk_analytics_service.analytics_for_metrics(
             ticker,
             metrics,
@@ -91,7 +98,7 @@ class CandidateDetailDataService:
             "bounce_history": bounce_analytics.history or self.bounce_history(metrics),
             "price_history": metrics.get("price_history", []),
             "trade_levels": metrics.get("trade_levels", {}),
-            "institutional": self.institutional_detail(institutional),
+            "institutional": self.institutional_detail(metrics),
             "screening_result": self.ranked_metrics(ranked),
             "metrics": metrics,
         }
@@ -556,15 +563,47 @@ class CandidateDetailDataService:
             }
         ]
 
-    def institutional_detail(self, institutional):
-        if not institutional:
+    def institutional_detail(self, metrics):
+        if not metrics or metrics.get("institutional_provider_status") == "Provider not configured":
             return {
-                "recent_13f_activity": "Institutional data not configured",
-                "recent_13f_accumulation": "Institutional data not configured",
-                "insider_net_activity": "Institutional data not configured",
-                "status": "Institutional data not configured",
+                "provider_status": "Provider not configured",
+                "institutional_provider_status": "Provider not configured",
+                "status": "Provider not configured",
             }
-        return dict(institutional)
+        keys = {
+            "provider_status",
+            "institutional_provider_status",
+            "institutional_status",
+            "institutional_score",
+            "institutional_ownership_pct",
+            "institutional_ownership_change_qoq",
+            "ownership_trend",
+            "institutional_13f_summary",
+            "recent_13f_activity",
+            "recent_13f_accumulation",
+            "insider_activity_summary",
+            "insider_buying_flag",
+            "insider_selling_flag",
+            "insider_net_activity",
+            "short_interest_pct",
+            "accumulation_score",
+            "distribution_score",
+            "conviction_score",
+            "smart_money_score",
+            "institutional_confidence_level",
+            "institutional_holders",
+            "institutional_holders_change",
+            "net_institutional_buying",
+            "major_buyers",
+            "major_sellers",
+            "source",
+            "as_of_date",
+        }
+        return {
+            key: value
+            for key, value in metrics.items()
+            if key in keys and value not in (None, "")
+        }
 
     def ranked_metrics(self, ranked):
         if ranked is None:

@@ -309,7 +309,7 @@ class CandidateDetailWindow(QDialog):
         layout.addLayout(top_layout)
 
         layout.addWidget(self.create_price_chart_section())
-        layout.addWidget(self.create_trade_levels_section())
+        layout.addWidget(self.create_trade_planning_section())
         layout.addWidget(self.create_trade_checklist_section())
 
         why_section = self.create_why_section()
@@ -333,11 +333,13 @@ class CandidateDetailWindow(QDialog):
         layout.setVerticalSpacing(10)
         items = [
             ("overall", "Overall Score", self.kpi_value(("final_score", "score", "primary_score_value"))),
-            ("quality", "Quality Score", self.kpi_value(("quality_score", "fundamental_intelligence_score"))),
             ("technical", "Technical Score", self.kpi_value(("technical_score", "trend_score"))),
             ("bounce", "Bounce Score", self.kpi_value(("bounce_quality_score", "bounce_score", "bounce_success_pct"))),
             ("fundamental", "Fundamental Score", self.kpi_value(("fundamental_intelligence_score", "quality_score"))),
             ("risk", "Risk Score", self.kpi_value(("overall_risk_score", "risk_score"))),
+            ("quality", "Quality Score", self.kpi_value(("quality_score", "fundamental_intelligence_score"))),
+            ("signal", "Signal", self.signal_text()),
+            ("risk_rating", "Risk Rating", self.risk_text()),
         ]
         for index, (key, title, value) in enumerate(items):
             card, label = self.create_summary_card(title, value)
@@ -346,7 +348,7 @@ class CandidateDetailWindow(QDialog):
             label.style().unpolish(label)
             label.style().polish(label)
             self.kpi_labels[key] = label
-            layout.addWidget(card, 0, index)
+            layout.addWidget(card, index // 4, index % 4)
         return section
 
     def create_price_chart_section(self):
@@ -368,14 +370,14 @@ class CandidateDetailWindow(QDialog):
         layout.addWidget(self.price_chart)
         return section
 
-    def create_trade_levels_section(self):
+    def create_trade_planning_section(self):
         self.trade_level_labels = {}
         section = QFrame()
         section.setObjectName("CandidateDetailWhySection")
         layout = QVBoxLayout(section)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
-        title = QLabel("Trade Levels")
+        title = QLabel("Trade Planning")
         title.setObjectName("CandidateDetailSectionTitle")
         layout.addWidget(title)
         grid = QGridLayout()
@@ -389,9 +391,14 @@ class CandidateDetailWindow(QDialog):
             label.style().unpolish(label)
             label.style().polish(label)
             self.trade_level_labels[key] = label
+            if key == "primary_support":
+                self.trade_level_labels["support"] = label
             grid.addWidget(card, index // 3, index % 3)
         layout.addLayout(grid)
         return section
+
+    def create_trade_levels_section(self):
+        return self.create_trade_planning_section()
 
     def create_trade_checklist_section(self):
         self.checklist_labels = {}
@@ -408,12 +415,12 @@ class CandidateDetailWindow(QDialog):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
         for index, (key, title_text, passed, note) in enumerate(self.trade_checklist_items()):
-            value = "PASS" if passed is True else "WATCH" if passed is None else "FAIL"
+            value = self.checklist_status_text(passed)
             if note:
                 value = f"{value} - {note}"
             card, label = self.create_summary_card(title_text, value)
             card.setObjectName("CandidateDetailTechnicalCard")
-            label.setProperty("status", "positive" if passed is True else "watch" if passed is None else "negative")
+            label.setProperty("status", self.checklist_role(passed))
             label.style().unpolish(label)
             label.style().polish(label)
             self.checklist_labels[key] = label
@@ -479,6 +486,17 @@ class CandidateDetailWindow(QDialog):
         return self.format_score_value(number)
 
     def kpi_role(self, key, value):
+        if key == "signal":
+            text = str(value or "").lower()
+            if any(word in text for word in ("strong", "buy")):
+                return "positive"
+            if any(word in text for word in ("watch", "hold")):
+                return "watch"
+            if any(word in text for word in ("avoid", "sell")):
+                return "negative"
+            return "missing"
+        if key == "risk_rating":
+            return self.risk_role(value, "rating")
         number = self.number_value(value)
         if number is None:
             return "missing"
@@ -557,7 +575,10 @@ class CandidateDetailWindow(QDialog):
         levels = self.trade_levels()
         items = [
             ("ideal_buy_zone", "Ideal Buy Zone", self.buy_zone_text(levels), "positive"),
-            ("support", "Support", self.format_trade_price(levels.get("support")), "positive"),
+            ("current_price", "Current Price", self.price_text(), "neutral"),
+            ("primary_support", "Primary Support", self.format_trade_price(self.first_existing(levels.get("support"), self.metrics().get("primary_support"), self.metrics().get("support_price"))), "positive"),
+            ("support_zone_low", "Support Zone Low", self.format_trade_price(self.first_existing(levels.get("ideal_buy_zone_low"), self.metrics().get("support_zone_low"))), "positive"),
+            ("support_zone_high", "Support Zone High", self.format_trade_price(self.first_existing(levels.get("ideal_buy_zone_high"), self.metrics().get("support_zone_high"))), "positive"),
             ("technical_stop", "Technical Stop", self.format_trade_price(levels.get("technical_stop")), "negative"),
             ("atr_stop", "ATR Stop", self.format_trade_price(levels.get("atr_stop")), "negative"),
             ("target_1", "Target 1", self.format_trade_price(levels.get("target_1")), "positive"),
@@ -598,6 +619,20 @@ class CandidateDetailWindow(QDialog):
             )
         )
         relative_volume = self.number_value(self.technical_value("relative_volume"))
+        latest_volume = self.number_value(self.metrics().get("latest_volume") or self.metrics().get("volume"))
+        support_strength = self.number_value(
+            self.first_existing(
+                self.metrics().get("support_strength_score"),
+                self.metrics().get("support_strength"),
+            )
+        )
+        support_tests = self.number_value(
+            self.first_existing(
+                self.metrics().get("support_tests"),
+                self.metrics().get("bounce_count"),
+                self.metrics().get("successful_support_tests"),
+            )
+        )
         risk_score = self.number_value(self.metrics().get("overall_risk_score") or self.metrics().get("risk_score"))
         fundamental_score = self.number_value(
             self.metrics().get("fundamental_intelligence_score") or self.metrics().get("quality_score")
@@ -610,13 +645,77 @@ class CandidateDetailWindow(QDialog):
             )
         )
         return [
-            ("trend", "Trend", True if "bull" in trend_text or "positive" in trend_text else None if not trend_text else False, self.technical_value("trend")),
-            ("support", "Support", True if distance is not None and distance <= 8 else None if distance is None else False, self.format_trade_percent(distance) if distance is not None else ""),
-            ("volume", "Volume", True if relative_volume is not None and relative_volume >= 1 else None if relative_volume is None else False, f"{relative_volume:.1f}x" if relative_volume is not None else ""),
-            ("risk", "Risk", True if risk_score is not None and risk_score <= 60 else None if risk_score is None else False, self.format_score_value(risk_score) if risk_score is not None else ""),
-            ("fundamentals", "Fundamentals", True if fundamental_score is not None and fundamental_score >= 60 else None if fundamental_score is None else False, self.format_score_value(fundamental_score) if fundamental_score is not None else ""),
-            ("bounce_history", "Bounce History", True if bounce_success is not None and bounce_success >= 70 else None if bounce_success is None else False, self.format_trade_percent(bounce_success) if bounce_success is not None else ""),
+            ("trend_aligned", "Trend aligned", True if "bull" in trend_text or "positive" in trend_text else None if not trend_text else False, self.technical_value("trend")),
+            ("near_support", "Near support", True if distance is not None and distance <= 5 else "warning" if distance is not None and distance <= 8 else None if distance is None else False, self.format_trade_percent(distance) if distance is not None else ""),
+            ("support_validated", "Support validated", self.support_validated_status(support_strength, support_tests), self.support_validation_note(support_strength, support_tests)),
+            ("bounce_history_positive", "Bounce history positive", True if bounce_success is not None and bounce_success >= 70 else None if bounce_success is None else False, self.format_trade_percent(bounce_success) if bounce_success is not None else ""),
+            ("risk_acceptable", "Risk acceptable", True if risk_score is not None and risk_score <= 60 else None if risk_score is None else False, self.format_score_value(risk_score) if risk_score is not None else ""),
+            ("fundamentals_acceptable", "Fundamentals acceptable", True if fundamental_score is not None and fundamental_score >= 60 else None if fundamental_score is None else False, self.format_score_value(fundamental_score) if fundamental_score is not None else ""),
+            ("liquidity_acceptable", "Liquidity acceptable", self.liquidity_status(relative_volume, latest_volume), self.liquidity_note(relative_volume, latest_volume)),
         ]
+
+    @staticmethod
+    def checklist_status_text(status):
+        if status is True:
+            return "Pass"
+        if status is False:
+            return "Fail"
+        if status == "warning":
+            return "Warning"
+        return "Data not available"
+
+    @staticmethod
+    def checklist_role(status):
+        if status is True:
+            return "positive"
+        if status == "warning":
+            return "watch"
+        if status is False:
+            return "negative"
+        return "missing"
+
+    @staticmethod
+    def support_validated_status(support_strength, support_tests):
+        if support_strength is None and support_tests is None:
+            return None
+        if (support_strength is None or support_strength >= 70) and (support_tests is None or support_tests >= 3):
+            return True
+        if (support_strength is not None and support_strength >= 50) or (support_tests is not None and support_tests >= 1):
+            return "warning"
+        return False
+
+    def support_validation_note(self, support_strength, support_tests):
+        parts = []
+        if support_strength is not None:
+            parts.append(f"{self.format_score_value(support_strength)} strength")
+        if support_tests is not None:
+            parts.append(f"{int(support_tests):,} tests")
+        return ", ".join(parts)
+
+    @staticmethod
+    def liquidity_status(relative_volume, latest_volume):
+        if relative_volume is None and latest_volume is None:
+            return None
+        if relative_volume is not None:
+            if relative_volume >= 1:
+                return True
+            if relative_volume >= 0.75:
+                return "warning"
+            return False
+        if latest_volume is not None:
+            if latest_volume >= 1_000_000:
+                return True
+            if latest_volume >= 250_000:
+                return "warning"
+            return False
+        return None
+
+    def liquidity_note(self, relative_volume, latest_volume):
+        if relative_volume is not None:
+            return f"{relative_volume:.1f}x relative volume"
+        if latest_volume is not None:
+            return self.format_integer_value(latest_volume)
+        return ""
 
     def create_why_section(self):
         section = QFrame()
@@ -1202,6 +1301,35 @@ class CandidateDetailWindow(QDialog):
     def institutional_sections(self):
         return [
             (
+                "Provider Intelligence",
+                [
+                    self.institutional_item(
+                        "provider_status",
+                        "Provider Status",
+                        ("provider_status", "institutional_provider_status", "institutional_status", "status"),
+                        value_type="status",
+                    ),
+                    self.institutional_item(
+                        "institutional_score",
+                        "Institutional Score",
+                        ("institutional_score",),
+                        value_type="score",
+                    ),
+                    self.institutional_item(
+                        "smart_money_score",
+                        "Smart Money Score",
+                        ("smart_money_score",),
+                        value_type="score",
+                    ),
+                    self.institutional_item(
+                        "confidence_level",
+                        "Confidence Level",
+                        ("institutional_confidence_level", "confidence_level"),
+                        value_type="text",
+                    ),
+                ],
+            ),
+            (
                 "Ownership Summary",
                 [
                     self.institutional_item(
@@ -1215,6 +1343,12 @@ class CandidateDetailWindow(QDialog):
                         "Ownership Change QoQ",
                         ("institutional_ownership_change_qoq", "ownership_change_qoq"),
                         value_type="signed_percent",
+                    ),
+                    self.institutional_item(
+                        "ownership_trend",
+                        "Ownership Trend",
+                        ("ownership_trend",),
+                        value_type="text",
                     ),
                     self.institutional_item(
                         "holder_count",
@@ -1258,8 +1392,9 @@ class CandidateDetailWindow(QDialog):
                 [
                     self.institutional_item(
                         "recent_13f_activity",
-                        "Recent 13F Activity",
+                        "13F Summary",
                         (
+                            "institutional_13f_summary",
                             "recent_13f_activity",
                             "13f_status",
                             "thirteen_f_status",
@@ -1300,6 +1435,18 @@ class CandidateDetailWindow(QDialog):
                         ("insider_net_activity", "net_insider_activity", "insider_net_buying"),
                         value_type="signed_text",
                     ),
+                    self.institutional_item(
+                        "insider_activity",
+                        "Insider Activity",
+                        ("insider_activity_summary",),
+                        value_type="text",
+                    ),
+                    self.institutional_item(
+                        "short_interest",
+                        "Short Interest",
+                        ("short_interest_pct", "short_interest"),
+                        value_type="percent_low_good",
+                    ),
                 ],
             ),
         ]
@@ -1315,8 +1462,19 @@ class CandidateDetailWindow(QDialog):
         raw_value = self.first_existing(
             *[self.institutional_value(alias) for alias in aliases]
         )
+        if raw_value in (None, "") and self.institutional_provider_not_configured():
+            raw_value = "Provider not configured"
         display = self.format_institutional_value(raw_value, value_type)
         return key, title, display, self.institutional_role(raw_value, value_type)
+
+    def institutional_provider_not_configured(self):
+        status = self.first_existing(
+            self.institutional_value("provider_status"),
+            self.institutional_value("institutional_provider_status"),
+            self.institutional_value("institutional_status"),
+            self.institutional_value("status"),
+        )
+        return str(status or "").lower() == "provider not configured"
 
     def institutional_value(self, key):
         institutional = self.detail.get("institutional")
@@ -1352,7 +1510,13 @@ class CandidateDetailWindow(QDialog):
 
         number = self.number_value(value)
 
+        if value_type == "status":
+            return str(value)
+        if value_type == "score":
+            return self.format_score_value(number) if number is not None else str(value)
         if value_type == "percent_high_good":
+            return self.format_percent_value(number) if number is not None else str(value)
+        if value_type == "percent_low_good":
             return self.format_percent_value(number) if number is not None else str(value)
         if value_type == "signed_percent":
             return f"{number:+.1f}%" if number is not None else str(value)
@@ -1392,16 +1556,30 @@ class CandidateDetailWindow(QDialog):
         number = self.number_value(value)
         if number is None:
             text = str(value).lower()
+            if "provider not configured" in text:
+                return "missing"
             if any(word in text for word in ("current", "positive", "buying", "rising")):
                 return "positive"
             if any(word in text for word in ("stale", "selling", "negative", "falling")):
                 return "negative"
             return "neutral"
 
+        if value_type == "score":
+            if number >= 70:
+                return "positive"
+            if number >= 45:
+                return "watch"
+            return "negative"
         if value_type == "percent_high_good":
             if number >= 60:
                 return "positive"
             if number >= 35:
+                return "watch"
+            return "negative"
+        if value_type == "percent_low_good":
+            if number <= 10:
+                return "positive"
+            if number <= 20:
                 return "watch"
             return "negative"
         if value_type in {"signed_percent", "currency"}:
@@ -1546,6 +1724,8 @@ class CandidateDetailWindow(QDialog):
         )
 
         if outlook == "Unknown":
+            if self.institutional_provider_not_configured():
+                return "Provider not configured."
             return "Institutional data not configured."
 
         if outlook == "Distribution":

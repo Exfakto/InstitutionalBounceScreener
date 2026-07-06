@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from statistics import median
+from typing import Any
 
 from bounce import BounceValidator
 from database.manager import DatabaseManager
@@ -30,7 +31,7 @@ class BounceAnalytics:
     quality_label: str = "Weak"
     history: list[dict] = field(default_factory=list)
 
-    def metrics(self):
+    def metrics(self) -> dict[str, Any]:
         return {
             "primary_support": self.primary_support,
             "support_price": self.primary_support,
@@ -72,11 +73,11 @@ class BounceAnalyticsService:
     Build historical bounce analytics from stored support and validation data.
     """
 
-    def __init__(self, db=None, validator=None):
+    def __init__(self, db: Any | None = None, validator: Any | None = None) -> None:
         self.db = db or DatabaseManager()
         self.validator = validator or BounceValidator()
 
-    def analytics_for_ticker(self, ticker):
+    def analytics_for_ticker(self, ticker: str) -> BounceAnalytics:
         ticker = str(ticker or "").strip().upper()
         support_levels = self.rows("get_support_levels", ticker)
         validations = self.rows("get_bounce_validations", ticker)
@@ -164,7 +165,7 @@ class BounceAnalyticsService:
             history=history,
         )
 
-    def history_rows(self, frame, support_levels):
+    def history_rows(self, frame: Any, support_levels: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if frame is None or frame.empty:
             return []
 
@@ -202,7 +203,7 @@ class BounceAnalyticsService:
         return history
 
     @staticmethod
-    def aggregate_from_history(history):
+    def aggregate_from_history(history: list[dict[str, Any]]) -> dict[str, Any]:
         if not history:
             return {}
         bounces = [
@@ -232,7 +233,7 @@ class BounceAnalyticsService:
             ),
         }
 
-    def aggregate_from_validations(self, validations):
+    def aggregate_from_validations(self, validations: list[dict[str, Any]]) -> dict[str, Any]:
         if not validations:
             return {}
         tests = sum(int(self.number(row.get("total_touches")) or 0) for row in validations)
@@ -276,13 +277,13 @@ class BounceAnalyticsService:
 
     def quality_score(
         self,
-        support_strength,
-        success_rate,
-        average_bounce,
-        median_bounce,
-        tests,
-        most_recent,
-    ):
+        support_strength: float | None,
+        success_rate: float | None,
+        average_bounce: float | None,
+        median_bounce: float | None,
+        tests: float | int | None,
+        most_recent: Any,
+    ) -> float:
         consistency = 100.0
         if average_bounce is not None and median_bounce is not None:
             consistency = max(0.0, 100.0 - abs(average_bounce - median_bounce) * 5)
@@ -298,7 +299,7 @@ class BounceAnalyticsService:
         return max(0.0, min(100.0, sum(values)))
 
     @staticmethod
-    def quality_label(score):
+    def quality_label(score: float) -> str:
         if score >= 85:
             return "Excellent"
         if score >= 70:
@@ -307,14 +308,14 @@ class BounceAnalyticsService:
             return "Average"
         return "Weak"
 
-    def rows(self, method_name, ticker):
+    def rows(self, method_name: str, ticker: str) -> list[dict[str, Any]]:
         method = getattr(self.db, method_name, None)
         if method is None:
             return []
         return [self.row_dict(row) for row in method(ticker) or []]
 
     @staticmethod
-    def support_width(support):
+    def support_width(support: dict[str, Any]) -> float | None:
         low = BounceAnalyticsService.number(support.get("zone_low"))
         high = BounceAnalyticsService.number(support.get("zone_high"))
         if low is None or high is None:
@@ -322,7 +323,7 @@ class BounceAnalyticsService:
         return high - low
 
     @staticmethod
-    def row_dict(row):
+    def row_dict(row: Any) -> dict[str, Any]:
         if row is None:
             return {}
         if isinstance(row, dict):
@@ -332,20 +333,20 @@ class BounceAnalyticsService:
         return {}
 
     @staticmethod
-    def date_text(value):
+    def date_text(value: Any) -> str | None:
         if hasattr(value, "date"):
             return str(value.date())
         return str(value) if value is not None else None
 
     @staticmethod
-    def first_existing(*values):
+    def first_existing(*values: Any) -> Any:
         for value in values:
             if value not in (None, ""):
                 return value
         return None
 
     @staticmethod
-    def first_number(*values):
+    def first_number(*values: Any) -> float | None:
         for value in values:
             number = BounceAnalyticsService.number(value)
             if number is not None:
@@ -353,7 +354,7 @@ class BounceAnalyticsService:
         return None
 
     @staticmethod
-    def number(value):
+    def number(value: Any) -> float | None:
         try:
             return float(value)
         except (TypeError, ValueError):

@@ -181,7 +181,7 @@ def test_about_dialog_release_ui_construction(monkeypatch, tmp_path):
     dialog._render_release_readiness()
 
     assert dialog.release_group.title() == "Release Readiness"
-    assert dialog.release_labels["release_channel"].text() == "dev"
+    assert dialog.release_labels["release_channel"].text() == "rc"
     assert dialog.backup_database_button.text() == "Backup Database"
     assert dialog.restore_database_button.text() == "Restore Database"
     assert app is not None

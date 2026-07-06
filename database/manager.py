@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import sqlite3
+from uuid import uuid4
 import pandas as pd
 
 from database.institutional_data import InstitutionalData
@@ -26,6 +27,8 @@ from database.schema import (
     PRICE_HISTORY_TABLE,
     RANKED_CANDIDATES_INDEXES,
     RANKED_CANDIDATES_TABLE,
+    SCREENING_SIGNAL_HISTORY_INDEXES,
+    SCREENING_SIGNAL_HISTORY_TABLE,
     SCREENING_RUNS_INDEXES,
     SCREENING_RUNS_TABLE,
     SIGNAL_QUALITY_RECOMMENDATION_REPORTS_TABLE,
@@ -109,6 +112,9 @@ class DatabaseManager:
         self.cursor.execute(PAPER_TRADES_TABLE)
         self.cursor.execute(RANKED_CANDIDATES_TABLE)
         for index_statement in RANKED_CANDIDATES_INDEXES:
+            self.cursor.execute(index_statement)
+        self.cursor.execute(SCREENING_SIGNAL_HISTORY_TABLE)
+        for index_statement in SCREENING_SIGNAL_HISTORY_INDEXES:
             self.cursor.execute(index_statement)
         self.cursor.execute(SCREENING_RUNS_TABLE)
         for index_statement in SCREENING_RUNS_INDEXES:
@@ -1659,6 +1665,26 @@ class DatabaseManager:
                 return value
         return None
 
+    @classmethod
+    def _signal_value(cls, candidate, source, source_metrics, *keys):
+        for key in keys:
+            value = cls.first_existing(
+                cls.record_value(candidate, key),
+                cls.record_value(source, key),
+                cls.record_value(source_metrics, key),
+            )
+            if value not in (None, ""):
+                return value
+        return None
+
+    @staticmethod
+    def _entry_zone_text(value):
+        if value in (None, ""):
+            return None
+        if isinstance(value, (list, tuple)):
+            return " - ".join(str(item) for item in value if item not in (None, ""))
+        return str(value)
+
     # ==========================================================
     # Institutional Metrics
     # ==========================================================
@@ -2004,6 +2030,231 @@ class DatabaseManager:
         deleted = self.cursor.rowcount
         self.connection.commit()
         return deleted
+
+    # ==========================================================
+    # Screening Signal History
+    # ==========================================================
+
+    def save_screening_run(self, run_id, candidates, created_at=None, notes=None):
+        """
+        Append generated screening candidates to permanent validation history.
+        """
+
+        if run_id in (None, ""):
+            return 0
+
+        rows = []
+        for candidate in candidates or []:
+            row = self._screening_signal_row(run_id, candidate, created_at, notes)
+            if row is not None:
+                rows.append(row)
+
+        if rows:
+            self.cursor.executemany(
+                """
+                INSERT INTO screening_signal_history
+                (
+                    signal_id,
+                    run_id,
+                    created_at,
+                    ticker,
+                    company_name,
+                    sector,
+                    industry,
+                    overall_score,
+                    technical_score,
+                    bounce_score,
+                    fundamental_score,
+                    risk_score,
+                    current_price,
+                    entry_zone,
+                    support,
+                    stop_loss,
+                    target_1,
+                    target_2,
+                    target_3,
+                    signal_status,
+                    notes,
+                    price_after_5d,
+                    price_after_10d,
+                    price_after_20d,
+                    price_after_60d,
+                    max_drawdown,
+                    max_runup,
+                    outcome
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+                """,
+                rows,
+            )
+            self.connection.commit()
+
+        return len(rows)
+
+    def fetch_screening_history(self, run_id=None, ticker=None, limit=100, offset=0):
+        filters = []
+        values = []
+        if run_id not in (None, ""):
+            filters.append("run_id = ?")
+            values.append(str(run_id))
+        normalized_ticker = self._normalize_ticker(ticker)
+        if normalized_ticker is not None:
+            filters.append("ticker = ?")
+            values.append(normalized_ticker)
+
+        where_clause = ""
+        if filters:
+            where_clause = "WHERE " + " AND ".join(filters)
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
+        values.extend(paging_values)
+
+        self.cursor.execute(
+            f"""
+            SELECT *
+            FROM screening_signal_history
+            {where_clause}
+            ORDER BY created_at DESC, rowid DESC
+            {paging_sql}
+            """,
+            tuple(values),
+        )
+        return [self._row_to_screening_signal(row) for row in self.cursor.fetchall()]
+
+    def fetch_signal(self, signal_id):
+        if signal_id in (None, ""):
+            return None
+
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM screening_signal_history
+            WHERE signal_id = ?
+            """,
+            (str(signal_id),),
+        )
+        return self._row_to_screening_signal(self.cursor.fetchone())
+
+    def fetch_latest_signals(self, limit=20, offset=0):
+        paging_sql, paging_values = self._limit_offset_clause(limit, offset)
+        self.cursor.execute(
+            f"""
+            SELECT *
+            FROM screening_signal_history
+            ORDER BY created_at DESC, rowid DESC
+            {paging_sql}
+            """,
+            tuple(paging_values),
+        )
+        return [self._row_to_screening_signal(row) for row in self.cursor.fetchall()]
+
+    def _screening_signal_row(self, run_id, candidate, created_at, notes):
+        ticker = self._normalize_ticker(self.record_value(candidate, "ticker"))
+        if ticker is None:
+            return None
+
+        category_scores = self.record_value(candidate, "category_scores") or {}
+        source = self.record_value(candidate, "source")
+        source_metrics = self.record_value(source, "metrics") or {}
+        trade_thesis = self.record_value(candidate, "trade_thesis") or self.record_value(source, "trade_thesis")
+
+        return (
+            str(uuid4()),
+            str(run_id),
+            created_at,
+            ticker,
+            self._signal_value(candidate, source, source_metrics, "company_name", "company", "name"),
+            self._signal_value(candidate, source, source_metrics, "sector"),
+            self._signal_value(candidate, source, source_metrics, "industry"),
+            self._sqlite_float(
+                self.first_existing(
+                    self.record_value(candidate, "final_score"),
+                    self.record_value(candidate, "overall_score"),
+                    self.record_value(candidate, "primary_score_value"),
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self.record_value(category_scores, "technical_score"),
+                    self.record_value(source, "technical_score"),
+                    self.record_value(source_metrics, "technical_score"),
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self.record_value(category_scores, "bounce_score"),
+                    self.record_value(category_scores, "bounce_history_score"),
+                    self.record_value(source, "bounce_score"),
+                    self.record_value(source_metrics, "bounce_score"),
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self.record_value(category_scores, "fundamental_score"),
+                    self.record_value(category_scores, "fundamental_quality_score"),
+                    self.record_value(source, "fundamental_score"),
+                    self.record_value(source_metrics, "fundamental_score"),
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self.record_value(category_scores, "risk_score"),
+                    self.record_value(category_scores, "risk_penalty_score"),
+                    self.record_value(source, "risk_score"),
+                    self.record_value(source_metrics, "risk_score"),
+                )
+            ),
+            self._sqlite_float(
+                self._signal_value(
+                    candidate,
+                    source,
+                    source_metrics,
+                    "current_price",
+                    "price",
+                    "close",
+                    "latest_close",
+                )
+            ),
+            self._entry_zone_text(
+                self._signal_value(candidate, source, source_metrics, "entry_zone", "ideal_buy_zone")
+            ),
+            self._sqlite_float(
+                self._signal_value(
+                    candidate,
+                    source,
+                    source_metrics,
+                    "support",
+                    "support_price",
+                    "primary_support",
+                    "support_level",
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self._signal_value(candidate, source, source_metrics, "stop_loss", "technical_stop"),
+                    self.record_value(trade_thesis, "stop_loss"),
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self._signal_value(candidate, source, source_metrics, "target_1", "target1"),
+                    self.record_value(trade_thesis, "target_1"),
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self._signal_value(candidate, source, source_metrics, "target_2", "target2"),
+                    self.record_value(trade_thesis, "target_2"),
+                )
+            ),
+            self._sqlite_float(
+                self.first_existing(
+                    self._signal_value(candidate, source, source_metrics, "target_3", "target3"),
+                    self.record_value(trade_thesis, "target_3"),
+                )
+            ),
+            self.record_value(candidate, "signal_status") or "OPEN",
+            notes or self.record_value(candidate, "notes"),
+        )
 
     # ==========================================================
     # Screening Runs
@@ -3681,6 +3932,42 @@ class DatabaseManager:
             "candidate_count": row["candidate_count"],
             "warnings": DatabaseManager._json_list(row["warnings_json"]),
             "errors": DatabaseManager._json_list(row["errors_json"]),
+        }
+
+    @staticmethod
+    def _row_to_screening_signal(row):
+        if row is None:
+            return None
+
+        return {
+            "signal_id": row["signal_id"],
+            "run_id": row["run_id"],
+            "created_at": row["created_at"],
+            "ticker": row["ticker"],
+            "company_name": row["company_name"],
+            "sector": row["sector"],
+            "industry": row["industry"],
+            "overall_score": row["overall_score"],
+            "technical_score": row["technical_score"],
+            "bounce_score": row["bounce_score"],
+            "fundamental_score": row["fundamental_score"],
+            "risk_score": row["risk_score"],
+            "current_price": row["current_price"],
+            "entry_zone": row["entry_zone"],
+            "support": row["support"],
+            "stop_loss": row["stop_loss"],
+            "target_1": row["target_1"],
+            "target_2": row["target_2"],
+            "target_3": row["target_3"],
+            "signal_status": row["signal_status"],
+            "notes": row["notes"],
+            "price_after_5d": row["price_after_5d"],
+            "price_after_10d": row["price_after_10d"],
+            "price_after_20d": row["price_after_20d"],
+            "price_after_60d": row["price_after_60d"],
+            "max_drawdown": row["max_drawdown"],
+            "max_runup": row["max_runup"],
+            "outcome": row["outcome"],
         }
 
     @staticmethod

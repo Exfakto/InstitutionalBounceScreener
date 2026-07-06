@@ -539,6 +539,85 @@ RANKED_CANDIDATES_INDEXES = [
 ]
 
 
+SCREENING_SIGNAL_HISTORY_TABLE = """
+CREATE TABLE IF NOT EXISTS screening_signal_history (
+
+    signal_id TEXT PRIMARY KEY,
+
+    run_id TEXT NOT NULL,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    ticker TEXT NOT NULL,
+
+    company_name TEXT,
+
+    sector TEXT,
+
+    industry TEXT,
+
+    overall_score REAL,
+
+    technical_score REAL,
+
+    bounce_score REAL,
+
+    fundamental_score REAL,
+
+    risk_score REAL,
+
+    current_price REAL,
+
+    entry_zone TEXT,
+
+    support REAL,
+
+    stop_loss REAL,
+
+    target_1 REAL,
+
+    target_2 REAL,
+
+    target_3 REAL,
+
+    signal_status TEXT DEFAULT 'OPEN',
+
+    notes TEXT,
+
+    price_after_5d REAL,
+
+    price_after_10d REAL,
+
+    price_after_20d REAL,
+
+    price_after_60d REAL,
+
+    max_drawdown REAL,
+
+    max_runup REAL,
+
+    outcome TEXT
+
+);
+"""
+
+
+SCREENING_SIGNAL_HISTORY_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_screening_signal_history_run_id
+    ON screening_signal_history(run_id);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_screening_signal_history_ticker
+    ON screening_signal_history(ticker);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_screening_signal_history_created_at
+    ON screening_signal_history(created_at);
+    """,
+]
+
+
 SCREENING_RUNS_TABLE = """
 CREATE TABLE IF NOT EXISTS screening_runs (
 

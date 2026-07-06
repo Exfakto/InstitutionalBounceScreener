@@ -212,6 +212,9 @@ def test_screening_orchestrator_successful_multi_ticker_run():
     assert run["tickers_requested"] == 2
     assert run["tickers_processed"] == 2
     assert run["candidate_count"] == 2
+    signals = manager.fetch_screening_history(run_id="run-success")
+    assert {signal["ticker"] for signal in signals} == {"AAA", "BBB"}
+    assert all(signal["outcome"] is None for signal in signals)
     manager.close()
 
 
@@ -310,6 +313,8 @@ def test_screening_orchestrator_returns_and_persists_ranked_candidates_through_a
     assert [item.ticker for item in persisted] == ["WIN", "REJECT"]
     assert persisted[1].grade == "REJECT"
     assert persisted[1].rejection_reasons == ["Final score below minimum threshold (60)"]
+    signals = manager.fetch_screening_history(run_id="adapter-run")
+    assert {signal["ticker"] for signal in signals} == {"WIN", "REJECT"}
     run = manager.fetch_screening_run("adapter-run")
     assert run["status"] == "COMPLETED"
     assert run["candidate_count"] == 1

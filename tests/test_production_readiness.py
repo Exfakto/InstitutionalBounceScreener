@@ -17,9 +17,9 @@ def build_manager(path):
 
 
 def test_release_metadata_constants():
-    assert APPLICATION_NAME == "Institutional Bounce Screener"
-    assert VERSION.count(".") == 2
-    assert BUILD_DATE == "2026-07-03"
+    assert APPLICATION_NAME == "Institutional Bounce Platform"
+    assert VERSION == "v2.2.0 RC"
+    assert BUILD_DATE == "Release Candidate"
     assert SCHEMA_VERSION == "1"
 
 

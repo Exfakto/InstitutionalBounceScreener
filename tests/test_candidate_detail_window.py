@@ -131,6 +131,18 @@ def test_candidate_detail_window_accepts_candidate_object(app):
     assert window.summary_labels["signal"].text() == "Strong Buy"
     assert window.summary_labels["opportunity"].text() == "Elite Bounce 93.2"
     assert window.summary_labels["risk"].text() == "Moderate"
+    assert window.kpi_labels["overall"].text() == "91.4"
+    assert window.kpi_labels["technical"].text() == "76.0"
+    assert window.kpi_labels["bounce"].text() == "80.0"
+    assert window.kpi_labels["risk"].text() == "62.0"
+    assert window.kpi_labels["signal"].text() == "Strong Buy"
+    assert window.kpi_labels["risk_rating"].text() == "Moderate"
+    assert window.trade_level_labels["current_price"].text() == "$450.25"
+    assert window.trade_level_labels["primary_support"].text() == "$438.00"
+    assert window.trade_level_labels["risk_reward"].text() == "Data not available"
+    assert window.checklist_labels["trend_aligned"].text() == "Pass"
+    assert window.checklist_labels["bounce_history_positive"].text() == "Pass - 80.0%"
+    assert window.checklist_labels["risk_acceptable"].text() == "Fail - 62.0"
     assert window.summary_text.toPlainText() == "High-quality institutional bounce setup."
     assert [label.text() for label in window.why_labels] == [
         "* Strong institutional ownership",
@@ -251,6 +263,23 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     assert window.summary_labels["score"].text() == "Data not available"
     assert window.summary_labels["overall_rating"].text() == "Data not available"
     assert window.summary_labels["opportunity"].text() == "Data not available"
+    assert set(window.kpi_labels) == {
+        "overall",
+        "technical",
+        "bounce",
+        "fundamental",
+        "risk",
+        "quality",
+        "signal",
+        "risk_rating",
+    }
+    assert all(label.text() == "Data not available" for label in window.kpi_labels.values())
+    assert window.trade_level_labels["ideal_buy_zone"].text() == "Data not available"
+    assert window.trade_level_labels["current_price"].text() == "Data not available"
+    assert window.trade_level_labels["primary_support"].text() == "Data not available"
+    assert window.checklist_labels["trend_aligned"].text() == "Data not available"
+    assert window.checklist_labels["near_support"].text() == "Data not available"
+    assert window.checklist_labels["liquidity_acceptable"].text() == "Data not available"
     assert window.summary_text.toPlainText() == "Data not available"
     assert [label.text() for label in window.why_labels] == ["Data not available"]
     assert window.technical_labels["sma20"].text() == "Data not available"
