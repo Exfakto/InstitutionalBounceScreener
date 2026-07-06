@@ -39,7 +39,10 @@ class CandidateDetailDataService:
         metrics.setdefault("ticker", ticker)
         metrics.setdefault("current_price", metrics.get("close"))
         metrics.setdefault("price", metrics.get("current_price"))
-        metrics.setdefault("institutional_status", "Available" if institutional else "Not Available")
+        metrics.setdefault(
+            "institutional_status",
+            "Available" if institutional else "Institutional data not configured",
+        )
 
         candidate = self.build_candidate(ticker, metrics, ranked, scored_candidate)
         detail = {
@@ -89,6 +92,9 @@ class CandidateDetailDataService:
         result = {
             "current_price": latest.get("Close"),
             "close": latest.get("Close"),
+            "latest_close_date": str(frame.index[-1].date())
+            if hasattr(frame.index[-1], "date")
+            else str(frame.index[-1]),
             "latest_volume": latest.get("Volume"),
             "volume": latest.get("Volume"),
         }
@@ -207,12 +213,6 @@ class CandidateDetailDataService:
         }
         if not detail:
             return {}
-        if "sma20" in detail:
-            detail["ema20"] = detail.get("ema20") or detail.get("sma20")
-        if "sma50" in detail:
-            detail["ema50"] = detail.get("ema50") or detail.get("sma50")
-        if "sma200" in detail:
-            detail["ema200"] = detail.get("ema200") or detail.get("sma200")
         detail["trend"] = self.trend_label(detail)
         detail["market_structure"] = detail["trend"]
         return detail
@@ -248,6 +248,8 @@ class CandidateDetailDataService:
             "support_strength": support.get("strength_score"),
             "support_strength_score": support.get("strength_score"),
             "distance_to_support_pct": support.get("distance_from_current_pct"),
+            "latest_bounce_date": support.get("last_touch_date"),
+            "most_recent_bounce": support.get("last_touch_date"),
         }
 
     def bounce_metrics(self, bounce):
@@ -264,6 +266,8 @@ class CandidateDetailDataService:
             "average_bounce": bounce.get("average_bounce_pct"),
             "median_bounce": bounce.get("median_bounce_pct"),
             "failed_support_breaks": bounce.get("failed_breakdowns"),
+            "latest_bounce_date": bounce.get("validated_at"),
+            "most_recent_bounce": bounce.get("validated_at"),
         }
 
     def bounce_detail(self, metrics):
@@ -285,6 +289,8 @@ class CandidateDetailDataService:
                 "median_bounce",
                 "median_bounce_pct",
                 "failed_support_breaks",
+                "latest_bounce_date",
+                "most_recent_bounce",
                 "primary_support",
                 "support_price",
                 "support_zone_low",
@@ -300,7 +306,10 @@ class CandidateDetailDataService:
             return []
         return [
             {
-                "date": metrics.get("last_touch_date") or metrics.get("validated_at") or "Latest",
+                "date": metrics.get("latest_bounce_date")
+                or metrics.get("last_touch_date")
+                or metrics.get("validated_at")
+                or "Latest",
                 "support_price": support,
                 "low_price": metrics.get("support_zone_low"),
                 "peak_price": metrics.get("high52"),
@@ -313,10 +322,10 @@ class CandidateDetailDataService:
     def institutional_detail(self, institutional):
         if not institutional:
             return {
-                "recent_13f_activity": "Not Available",
-                "recent_13f_accumulation": "Not Available",
-                "insider_net_activity": "Not Available",
-                "status": "Not Available",
+                "recent_13f_activity": "Institutional data not configured",
+                "recent_13f_accumulation": "Institutional data not configured",
+                "insider_net_activity": "Institutional data not configured",
+                "status": "Institutional data not configured",
             }
         return dict(institutional)
 
@@ -358,8 +367,8 @@ class CandidateDetailDataService:
         else:
             parts.append("Technical momentum is mixed.")
 
-        if metrics.get("institutional_status") == "Not Available":
-            parts.append("Institutional data is Not Available.")
+        if metrics.get("institutional_status") == "Institutional data not configured":
+            parts.append("Institutional data is not configured.")
         else:
             parts.append("Institutional support data is available for review.")
 

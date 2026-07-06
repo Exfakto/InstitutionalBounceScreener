@@ -243,35 +243,37 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     window = CandidateDetailWindow(SimpleNamespace(ticker="MISS"))
 
     assert window.summary_labels["ticker"].text() == "MISS"
-    assert window.summary_labels["company_name"].text() == "N/A"
-    assert window.summary_labels["exchange"].text() == "N/A"
-    assert window.summary_labels["sector"].text() == "N/A"
-    assert window.summary_labels["industry"].text() == "N/A"
-    assert window.summary_labels["current_price"].text() == "N/A"
-    assert window.summary_labels["score"].text() == "N/A"
-    assert window.summary_labels["overall_rating"].text() == "N/A"
-    assert window.summary_labels["opportunity"].text() == "N/A"
-    assert window.summary_text.toPlainText() == "N/A"
-    assert [label.text() for label in window.why_labels] == ["N/A"]
-    assert all(label.text() == "N/A" for label in window.technical_labels.values())
+    assert window.summary_labels["company_name"].text() == "Data not available"
+    assert window.summary_labels["exchange"].text() == "Data not available"
+    assert window.summary_labels["sector"].text() == "Data not available"
+    assert window.summary_labels["industry"].text() == "Data not available"
+    assert window.summary_labels["current_price"].text() == "Data not available"
+    assert window.summary_labels["score"].text() == "Data not available"
+    assert window.summary_labels["overall_rating"].text() == "Data not available"
+    assert window.summary_labels["opportunity"].text() == "Data not available"
+    assert window.summary_text.toPlainText() == "Data not available"
+    assert [label.text() for label in window.why_labels] == ["Data not available"]
+    assert window.technical_labels["sma20"].text() == "Data not available"
+    assert window.technical_labels["ema20"].text() == "Coming in v2.2"
+    assert window.technical_labels["macd"].text() == "Coming in v2.2"
     assert window.technical_summary_label.text() == (
-        "Moving average positioning is N/A.\n"
-        "Momentum readings are N/A.\n"
-        "Support proximity is N/A.\n"
-        "Historical bounce probability is N/A."
+        "Moving average positioning is Data not available.\n"
+        "Momentum readings are Coming in v2.2.\n"
+        "Support proximity is Data not available.\n"
+        "Historical bounce probability is Data not available."
     )
     assert window.institutional_outlook_label.text() == "Unknown"
-    assert all(label.text() == "N/A" for label in window.institutional_labels.values())
+    assert all(label.text() == "Data not available" for label in window.institutional_labels.values())
     assert window.institutional_summary_label.text() == "Institutional sponsorship is N/A."
-    assert all(label.text() == "N/A" for label in window.risk_labels.values())
+    assert all(label.text() == "Data not available" for label in window.risk_labels.values())
     assert [label.text() for label in window.risk_warning_labels] == [
         "No major active risk warnings."
     ]
-    assert all(label.text() == "N/A" for label in window.bounce_summary_labels.values())
+    assert all(label.text() == "Data not available" for label in window.bounce_summary_labels.values())
     assert window.bounce_empty_label.text() == "No historical bounce data available."
     assert not window.bounce_empty_label.isHidden()
     assert window.bounce_history_table.rowCount() == 0
-    assert window.bounce_interpretation_label.text() == "Bounce interpretation is N/A."
+    assert window.bounce_interpretation_label.text() == "Bounce interpretation is Data not available."
 
 
 def test_candidate_detail_window_institutional_outlook_can_show_distribution(app):
@@ -444,7 +446,7 @@ def test_candidate_detail_window_accepts_institutional_detail_values(app):
     assert window.institutional_labels["recent_13f_activity"].text() == "Filed"
     assert window.institutional_labels["recent_13f_accumulation"].text() == "neutral"
     assert window.institutional_labels["major_buyers"].text() == "State Street"
-    assert window.institutional_labels["major_sellers"].text() == "N/A"
+    assert window.institutional_labels["major_sellers"].text() == "Data not available"
     assert window.institutional_labels["insider_net_activity"].text() == "Neutral"
     assert window.institutional_summary_label.text() == (
         "Institutional sponsorship appears neutral. ownership is moderate, "

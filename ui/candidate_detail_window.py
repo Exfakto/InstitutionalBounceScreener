@@ -112,6 +112,12 @@ class CandidateDetailWindow(QDialog):
             ("sector", "Sector", self.sector_text()),
             ("industry", "Industry", self.industry_text()),
             ("current_price", "Current Price", self.price_text()),
+            ("latest_close_date", "Latest Close Date", self.latest_close_date_text()),
+            ("latest_volume", "Latest Volume", self.latest_volume_text()),
+            ("week_52_high", "52-Week High", self.week_52_high_text()),
+            ("week_52_low", "52-Week Low", self.week_52_low_text()),
+            ("primary_support", "Primary Support", self.primary_support_text()),
+            ("bounce_success", "Bounce Success", self.bounce_success_text()),
             ("overall_rating", "Overall Rating", self.overall_rating_text()),
             ("signal", "Signal", self.signal_text()),
             ("opportunity", "Opportunity Rating", self.opportunity_text()),
@@ -181,7 +187,7 @@ class CandidateDetailWindow(QDialog):
         value_label.setObjectName("CandidateDetailCardValue")
         value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         value_label.setWordWrap(True)
-        if value == "N/A":
+        if value in {"N/A", "Data not available", "Institutional data not configured"}:
             value_label.setProperty("status", "missing")
 
         layout.addWidget(title_label)
@@ -288,6 +294,24 @@ class CandidateDetailWindow(QDialog):
                         "Market Structure",
                         ("market_structure", "structure", "price_structure"),
                         value_type="trend",
+                    ),
+                    self.technical_item(
+                        "sma20",
+                        "SMA 20",
+                        ("sma20", "sma_20"),
+                        value_type="price",
+                    ),
+                    self.technical_item(
+                        "sma50",
+                        "SMA 50",
+                        ("sma50", "sma_50"),
+                        value_type="price",
+                    ),
+                    self.technical_item(
+                        "sma200",
+                        "SMA 200",
+                        ("sma200", "sma_200"),
+                        value_type="price",
                     ),
                     self.technical_item(
                         "ema20",
@@ -397,8 +421,22 @@ class CandidateDetailWindow(QDialog):
         raw_value = self.first_existing(
             *[self.technical_value(alias) for alias in aliases]
         )
+        if raw_value in (None, "") and key in self.v22_technical_keys():
+            return key, title, "Coming in v2.2", "watch"
         display = self.format_technical_value(raw_value, value_type)
         return key, title, display, self.technical_role(raw_value, value_type)
+
+    @staticmethod
+    def v22_technical_keys():
+        return {
+            "ema20",
+            "ema50",
+            "ema200",
+            "rsi",
+            "macd",
+            "signal_line",
+            "macd_histogram",
+        }
 
     def technical_value(self, key):
         technical = self.detail.get("technical")
@@ -413,7 +451,7 @@ class CandidateDetailWindow(QDialog):
 
     def format_technical_value(self, value, value_type):
         if value in (None, ""):
-            return "N/A"
+            return "Data not available"
         if value_type == "trend" and isinstance(value, str):
             return value
 
@@ -443,7 +481,7 @@ class CandidateDetailWindow(QDialog):
             return "Bearish"
         if role == "watch":
             return "Neutral"
-        return "N/A"
+        return "Data not available"
 
     def technical_role(self, value, value_type):
         if value in (None, ""):
@@ -531,9 +569,21 @@ class CandidateDetailWindow(QDialog):
             or self.metrics().get("price")
         )
         ema_values = [
-            self.number_value(self.technical_value("ema20") or self.technical_value("ema_20")),
-            self.number_value(self.technical_value("ema50") or self.technical_value("ema_50")),
-            self.number_value(self.technical_value("ema200") or self.technical_value("ema_200")),
+            self.number_value(
+                self.technical_value("ema20")
+                or self.technical_value("ema_20")
+                or self.technical_value("sma20")
+            ),
+            self.number_value(
+                self.technical_value("ema50")
+                or self.technical_value("ema_50")
+                or self.technical_value("sma50")
+            ),
+            self.number_value(
+                self.technical_value("ema200")
+                or self.technical_value("ema_200")
+                or self.technical_value("sma200")
+            ),
         ]
         known_emas = [value for value in ema_values if value is not None]
         if price is not None and len(known_emas) == 3:
@@ -544,7 +594,7 @@ class CandidateDetailWindow(QDialog):
             else:
                 summary.append("The stock is mixed relative to major moving averages.")
         else:
-            summary.append("Moving average positioning is N/A.")
+            summary.append("Moving average positioning is Data not available.")
 
         rsi = self.number_value(self.technical_value("rsi") or self.technical_value("rsi14"))
         macd = self.number_value(self.technical_value("macd") or self.technical_value("macd_value"))
@@ -561,7 +611,7 @@ class CandidateDetailWindow(QDialog):
             else:
                 summary.append("Momentum is neutral.")
         else:
-            summary.append("Momentum readings are N/A.")
+            summary.append("Momentum readings are Coming in v2.2.")
 
         distance = self.number_value(
             self.technical_value("distance_to_support_pct")
@@ -581,7 +631,7 @@ class CandidateDetailWindow(QDialog):
         elif distance is not None:
             summary.append(f"Price is trading within {distance:.1f}% of support.")
         else:
-            summary.append("Support proximity is N/A.")
+            summary.append("Support proximity is Data not available.")
 
         bounce_probability = self.number_value(
             self.technical_value("bounce_probability")
@@ -597,7 +647,7 @@ class CandidateDetailWindow(QDialog):
             else:
                 summary.append("Historical bounce probability is weak.")
         else:
-            summary.append("Historical bounce probability is N/A.")
+            summary.append("Historical bounce probability is Data not available.")
 
         return "\n".join(summary)
 
@@ -811,11 +861,15 @@ class CandidateDetailWindow(QDialog):
 
     def format_institutional_value(self, value, value_type):
         if value in (None, ""):
-            return "N/A"
+            return "Data not available"
 
         if value_type == "list":
             if isinstance(value, (list, tuple)):
-                return ", ".join(str(item) for item in value) if value else "N/A"
+                return (
+                    ", ".join(str(item) for item in value)
+                    if value
+                    else "Data not available"
+                )
             return str(value)
 
         if value_type in {"flag_positive", "flag_negative"}:
@@ -1392,7 +1446,7 @@ class CandidateDetailWindow(QDialog):
 
     def format_bounce_value(self, value, value_type):
         if value in (None, ""):
-            return "N/A"
+            return "Data not available"
         if value_type == "text":
             return str(value)
 
@@ -1413,7 +1467,7 @@ class CandidateDetailWindow(QDialog):
 
     def format_successful_value(self, value):
         if value in (None, ""):
-            return "N/A"
+            return "Data not available"
         return "Yes" if self.truthy_value(value) else "No"
 
     def bounce_role(self, value, value_type):
@@ -1495,22 +1549,22 @@ class CandidateDetailWindow(QDialog):
                 average_bounce_number,
             )
         ):
-            return "Bounce interpretation is N/A."
+            return "Bounce interpretation is Data not available."
 
         tests_text = (
             f"{int(support_tests_number):,} times"
             if support_tests_number is not None
-            else "N/A times"
+            else "Data not available times"
         )
         success_text = (
             f"{success_rate_number:.1f}% success rate"
             if success_rate_number is not None
-            else "N/A success rate"
+            else "Data not available success rate"
         )
         average_text = (
             f"{average_bounce_number:.1f}%"
             if average_bounce_number is not None
-            else "N/A"
+            else "Data not available"
         )
 
         if successful_number is not None:
@@ -1767,7 +1821,7 @@ class CandidateDetailWindow(QDialog):
 
     def format_risk_value(self, value, value_type):
         if value in (None, ""):
-            return "N/A"
+            return "Data not available"
 
         if value_type == "rating":
             label = self.object_value(value, "rating_label") or self.object_value(value, "label")
@@ -1892,7 +1946,7 @@ class CandidateDetailWindow(QDialog):
     def header_text(self):
         ticker = self.ticker_text()
         company = self.company_text()
-        if company == "N/A":
+        if company in {"N/A", "Data not available"}:
             return ticker
         return f"{ticker} - {company}"
 
@@ -1934,8 +1988,55 @@ class CandidateDetailWindow(QDialog):
             value = metrics.get("current_price") or metrics.get("price")
         number = self.number_value(value)
         if number is None:
-            return "N/A"
+            return "Data not available"
         return f"${number:,.2f}"
+
+    def latest_close_date_text(self):
+        return self.format_value(self.metrics().get("latest_close_date"))
+
+    def latest_volume_text(self):
+        number = self.number_value(
+            self.metrics().get("latest_volume") or self.metrics().get("volume")
+        )
+        if number is None:
+            return "Data not available"
+        return self.format_integer_value(number)
+
+    def week_52_high_text(self):
+        number = self.number_value(
+            self.metrics().get("week_52_high") or self.metrics().get("high52")
+        )
+        if number is None:
+            return "Data not available"
+        return self.format_price_value(number)
+
+    def week_52_low_text(self):
+        number = self.number_value(
+            self.metrics().get("week_52_low") or self.metrics().get("low52")
+        )
+        if number is None:
+            return "Data not available"
+        return self.format_price_value(number)
+
+    def primary_support_text(self):
+        number = self.number_value(
+            self.metrics().get("primary_support")
+            or self.metrics().get("support_price")
+            or self.metrics().get("support_level")
+        )
+        if number is None:
+            return "Data not available"
+        return self.format_price_value(number)
+
+    def bounce_success_text(self):
+        number = self.number_value(
+            self.metrics().get("bounce_success_pct")
+            or self.metrics().get("bounce_success_rate")
+            or self.metrics().get("historical_bounce_success_rate")
+        )
+        if number is None:
+            return "Data not available"
+        return self.format_percent_value(number)
 
     def score_text(self):
         value = self.candidate_value("primary_score_value")
@@ -1943,7 +2044,7 @@ class CandidateDetailWindow(QDialog):
             value = self.candidate_value("institutional_bounce_score")
         number = self.number_value(value)
         if number is None:
-            return "N/A"
+            return "Data not available"
         return f"{number:.1f}"
 
     def signal_text(self):
@@ -1953,7 +2054,7 @@ class CandidateDetailWindow(QDialog):
 
         score = self.number_value(self.candidate_value("primary_score_value"))
         if score is None:
-            return "N/A"
+            return "Data not available"
         if score >= 85:
             return "Strong Buy"
         if score >= 70:
@@ -1967,7 +2068,7 @@ class CandidateDetailWindow(QDialog):
         if score is None:
             score = self.number_value(self.candidate_value("institutional_bounce_score"))
         if score is None:
-            return "N/A"
+            return "Data not available"
         if score >= 85:
             return "Elite"
         if score >= 70:
@@ -1997,7 +2098,7 @@ class CandidateDetailWindow(QDialog):
         value = self.metrics().get("risk_reward") or self.candidate_value("risk_reward")
         number = self.number_value(value)
         if number is None:
-            return "N/A"
+            return "Data not available"
         return f"{number:.2f}:1"
 
     def summary_body_text(self):
@@ -2009,7 +2110,7 @@ class CandidateDetailWindow(QDialog):
         ]:
             if value:
                 return str(value)
-        return "N/A"
+        return "Data not available"
 
     def why_candidate_reasons(self):
         explicit = self.first_existing(
@@ -2052,7 +2153,7 @@ class CandidateDetailWindow(QDialog):
             reasons.extend(strengths[:4])
 
         if not reasons:
-            return ["N/A"]
+            return ["Data not available"]
 
         return [self.reason_text(reason) for reason in reasons[:4]]
 
@@ -2060,9 +2161,9 @@ class CandidateDetailWindow(QDialog):
     def reason_text(reason):
         text = str(reason or "").strip()
         if not text:
-            text = "N/A"
-        if text == "N/A":
-            return "N/A"
+            text = "Data not available"
+        if text in {"N/A", "Data not available"}:
+            return "Data not available"
         return f"* {text}"
 
     def metric_group(self, group):
@@ -2124,7 +2225,7 @@ class CandidateDetailWindow(QDialog):
     @staticmethod
     def format_value(value):
         if value in (None, ""):
-            return "N/A"
+            return "Data not available"
         return str(value)
 
     @staticmethod
