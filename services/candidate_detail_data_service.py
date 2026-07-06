@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 
 from database.manager import DatabaseManager
+from services.bounce_analytics_service import BounceAnalyticsService
+from services.fundamental_analytics_service import FundamentalAnalyticsService
 from services.ohlcv_cache_access import fetch_ohlcv_frame
+from services.risk_analytics_service import RiskAnalyticsService
 
 
 class CandidateDetailDataService:
@@ -11,6 +14,9 @@ class CandidateDetailDataService:
 
     def __init__(self, db=None):
         self.db = db or DatabaseManager()
+        self.bounce_analytics_service = BounceAnalyticsService(self.db)
+        self.fundamental_analytics_service = FundamentalAnalyticsService(self.db)
+        self.risk_analytics_service = RiskAnalyticsService()
 
     def get_candidate_detail(self, ticker, scored_candidate=None):
         ticker = self.normalize_ticker(ticker)
@@ -19,20 +25,35 @@ class CandidateDetailDataService:
 
         universe = self.fetch_universe(ticker)
         fundamentals = self.fetch_row("get_fundamentals", ticker)
+        fundamental_analytics = self.fundamental_analytics_service.analytics_for_ticker(ticker)
+        fundamental_metrics = (
+            fundamental_analytics.as_metrics()
+            if fundamental_analytics.metrics
+            else {}
+        )
         ohlcv = self.fetch_ohlcv(ticker)
         technical = self.fetch_latest_row("get_technical_indicators", ticker)
         support = self.fetch_first_row("get_support_levels", ticker)
         bounce = self.fetch_first_row("get_bounce_validations", ticker)
+        bounce_analytics = self.bounce_analytics_service.analytics_for_ticker(ticker)
+        bounce_metrics = (
+            bounce_analytics.metrics()
+            if bounce_analytics.primary_support is not None
+            or bounce_analytics.historical_tests > 0
+            else {}
+        )
         institutional = self.fetch_row("get_institutional_metrics", ticker)
         ranked = self.fetch_ranked_candidate(ticker)
 
         metrics = {}
         self.merge(metrics, universe)
         self.merge(metrics, fundamentals)
+        self.merge(metrics, fundamental_metrics)
         self.merge(metrics, ohlcv)
         self.merge(metrics, technical)
         self.merge(metrics, self.support_metrics(support))
         self.merge(metrics, self.bounce_metrics(bounce))
+        self.merge(metrics, bounce_metrics)
         self.merge(metrics, institutional)
         self.merge(metrics, self.ranked_metrics(ranked))
 
@@ -43,6 +64,11 @@ class CandidateDetailDataService:
             "institutional_status",
             "Available" if institutional else "Institutional data not configured",
         )
+        risk_analytics = self.risk_analytics_service.analytics_for_metrics(
+            ticker,
+            metrics,
+        )
+        self.merge(metrics, risk_analytics.as_metrics())
 
         candidate = self.build_candidate(ticker, metrics, ranked, scored_candidate)
         detail = {
@@ -54,9 +80,10 @@ class CandidateDetailDataService:
             "industry": metrics.get("industry"),
             "technical": self.technical_detail(metrics),
             "fundamentals": self.fundamental_detail(metrics),
-            "support": self.support_metrics(support),
+            "risk": self.risk_detail(metrics),
+            "support": self.support_metrics(support) or bounce_metrics,
             "bounce": self.bounce_detail(metrics),
-            "bounce_history": self.bounce_history(metrics),
+            "bounce_history": bounce_analytics.history or self.bounce_history(metrics),
             "institutional": self.institutional_detail(institutional),
             "screening_result": self.ranked_metrics(ranked),
             "metrics": metrics,
@@ -150,6 +177,7 @@ class CandidateDetailDataService:
             explanation_text = " ".join(str(item) for item in explanation if item)
         else:
             explanation_text = explanation
+        summary_text = self.summary_text(explanation_text, metrics, ticker)
 
         return SimpleNamespace(
             ticker=ticker,
@@ -164,8 +192,9 @@ class CandidateDetailDataService:
             signal=self.value(source, "signal"),
             opportunity_rating=self.value(source, "opportunity_rating"),
             opportunity=self.value(source, "opportunity_rating"),
-            risk_rating=self.value(source, "risk_rating"),
-            summary=explanation_text or self.explanation_text(ticker, metrics),
+            risk_rating=self.value(source, "risk_rating") or metrics.get("risk_rating"),
+            risk_recommendation=metrics.get("risk_recommendation"),
+            summary=summary_text,
             reasons=[self.explanation_text(ticker, metrics)],
             metrics=metrics,
             grade=self.value(source, "grade"),
@@ -173,6 +202,15 @@ class CandidateDetailDataService:
             setup_label=self.value(source, "setup_label"),
             warnings=list(self.value(source, "warnings") or []),
         )
+
+    def summary_text(self, explanation_text, metrics, ticker):
+        if explanation_text:
+            return explanation_text
+        risk_summary = metrics.get("risk_research_summary")
+        fundamental_summary = metrics.get("fundamental_research_summary")
+        if risk_summary and fundamental_summary:
+            return f"{risk_summary} {fundamental_summary}"
+        return risk_summary or fundamental_summary or self.explanation_text(ticker, metrics)
 
     def technical_detail(self, metrics):
         keys = {
@@ -198,7 +236,16 @@ class CandidateDetailDataService:
             "macd",
             "macd_signal",
             "macd_histogram",
+            "vwap",
+            "avg_volume20",
+            "average_volume_20",
             "relative_volume",
+            "distance_from_ema20",
+            "distance_from_ema50",
+            "distance_from_ema200",
+            "relative_strength_spy",
+            "trend",
+            "market_structure",
             "primary_support",
             "support_strength_score",
             "distance_to_support_pct",
@@ -213,8 +260,10 @@ class CandidateDetailDataService:
         }
         if not detail:
             return {}
-        detail["trend"] = self.trend_label(detail)
-        detail["market_structure"] = detail["trend"]
+        detail["trend"] = detail.get("trend") or self.trend_label(detail)
+        detail["market_structure"] = (
+            detail.get("market_structure") or self.market_structure_label(detail)
+        )
         return detail
 
     def fundamental_detail(self, metrics):
@@ -230,9 +279,64 @@ class CandidateDetailDataService:
                 "debt_to_equity",
                 "current_ratio",
                 "quality_score",
+                "operating_margin",
+                "net_margin",
+                "roa",
+                "quick_ratio",
+                "interest_coverage",
+                "free_cash_flow_margin",
+                "enterprise_value",
+                "ev_to_ebitda",
+                "price_to_sales",
+                "forward_pe",
+                "trailing_pe",
+                "liquidity_score",
+                "profitability_score",
+                "leverage_score",
+                "cash_flow_score",
+                "growth_score",
+                "valuation_score",
+                "fundamental_intelligence_score",
+                "fundamental_classification",
+                "fundamental_quality_flags",
+                "fundamental_commentary",
+                "fundamental_research_summary",
             )
             if key in metrics and metrics[key] is not None
         }
+
+    def risk_detail(self, metrics):
+        risk = {}
+        for key in (
+            "debt_to_equity",
+            "debt_risk_score",
+            "excessive_debt",
+            "overall_risk_score",
+            "risk_rating",
+            "fundamental_classification",
+            "atr_risk",
+            "support_failure_risk",
+            "support_failure_risk_pct",
+            "distance_from_support_risk",
+            "volatility_risk",
+            "volatility_pct",
+            "trend_risk",
+            "liquidity_risk",
+            "gap_risk",
+            "fundamental_risk",
+            "market_structure_risk",
+            "historical_bounce_reliability",
+            "risk_recommendation",
+            "risk_flags",
+            "risk_commentary",
+            "risk_research_summary",
+            "price_above_support_10pct",
+            "price_below_200dma",
+            "recent_support_break",
+        ):
+            if key in metrics and metrics[key] is not None:
+                risk[key] = metrics[key]
+        return risk
 
     def support_metrics(self, support):
         if not support:
@@ -289,8 +393,11 @@ class CandidateDetailDataService:
                 "median_bounce",
                 "median_bounce_pct",
                 "failed_support_breaks",
+                "support_width",
                 "latest_bounce_date",
                 "most_recent_bounce",
+                "bounce_quality",
+                "bounce_quality_score",
                 "primary_support",
                 "support_price",
                 "support_zone_low",
@@ -376,19 +483,23 @@ class CandidateDetailDataService:
 
     def trend_label(self, metrics):
         price = self.number(metrics.get("current_price") or metrics.get("close"))
-        sma50 = self.number(metrics.get("sma50"))
-        sma200 = self.number(metrics.get("sma200"))
+        average50 = self.number(metrics.get("ema50"))
+        if average50 is None:
+            average50 = self.number(metrics.get("sma50"))
+        average200 = self.number(metrics.get("ema200"))
+        if average200 is None:
+            average200 = self.number(metrics.get("sma200"))
         rsi = self.number(metrics.get("rsi14") or metrics.get("rsi"))
         macd = self.number(metrics.get("macd"))
 
         bullish_votes = 0
         bearish_votes = 0
-        if price is not None and sma50 is not None:
-            bullish_votes += int(price >= sma50)
-            bearish_votes += int(price < sma50)
-        if sma50 is not None and sma200 is not None:
-            bullish_votes += int(sma50 >= sma200)
-            bearish_votes += int(sma50 < sma200)
+        if price is not None and average50 is not None:
+            bullish_votes += int(price >= average50)
+            bearish_votes += int(price < average50)
+        if average50 is not None and average200 is not None:
+            bullish_votes += int(average50 >= average200)
+            bearish_votes += int(average50 < average200)
         if rsi is not None:
             bullish_votes += int(rsi >= 50)
             bearish_votes += int(rsi < 45)
@@ -401,6 +512,19 @@ class CandidateDetailDataService:
         if bearish_votes > bullish_votes:
             return "Bearish"
         return "Neutral"
+
+    def market_structure_label(self, metrics):
+        price = self.number(metrics.get("current_price") or metrics.get("close"))
+        ema20 = self.number(metrics.get("ema20"))
+        ema50 = self.number(metrics.get("ema50"))
+        ema200 = self.number(metrics.get("ema200"))
+
+        if None not in (price, ema20, ema50, ema200):
+            if price > ema20 > ema50 > ema200:
+                return "Strong Bullish Structure"
+            if price < ema20 < ema50 < ema200:
+                return "Strong Bearish Structure"
+        return self.trend_label(metrics)
 
     def query_one(self, sql, params):
         cursor = getattr(self.db, "cursor", None)

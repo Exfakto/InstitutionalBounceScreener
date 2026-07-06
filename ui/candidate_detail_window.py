@@ -361,10 +361,62 @@ class CandidateDetailWindow(QDialog):
                         value_type="signed_status",
                     ),
                     self.technical_item(
+                        "atr",
+                        "ATR (14)",
+                        ("atr", "atr14"),
+                        value_type="number",
+                    ),
+                    self.technical_item(
                         "relative_strength",
                         "Relative Strength vs SPY",
-                        ("relative_strength_vs_spy", "relative_strength", "relative_strength_score"),
+                        (
+                            "relative_strength_spy",
+                            "relative_strength_vs_spy",
+                            "relative_strength",
+                            "relative_strength_score",
+                        ),
                         value_type="score_status",
+                    ),
+                ],
+            ),
+            (
+                "Volume & EMA Distance",
+                [
+                    self.technical_item(
+                        "vwap",
+                        "VWAP",
+                        ("vwap",),
+                        value_type="price",
+                    ),
+                    self.technical_item(
+                        "average_volume_20",
+                        "Average Volume 20",
+                        ("average_volume_20", "avg_volume20", "avg_volume_20"),
+                        value_type="integer",
+                    ),
+                    self.technical_item(
+                        "relative_volume",
+                        "Relative Volume",
+                        ("relative_volume",),
+                        value_type="number",
+                    ),
+                    self.technical_item(
+                        "distance_from_ema20",
+                        "Distance From EMA20",
+                        ("distance_from_ema20",),
+                        value_type="percent",
+                    ),
+                    self.technical_item(
+                        "distance_from_ema50",
+                        "Distance From EMA50",
+                        ("distance_from_ema50",),
+                        value_type="percent",
+                    ),
+                    self.technical_item(
+                        "distance_from_ema200",
+                        "Distance From EMA200",
+                        ("distance_from_ema200",),
+                        value_type="percent",
                     ),
                 ],
             ),
@@ -429,13 +481,7 @@ class CandidateDetailWindow(QDialog):
     @staticmethod
     def v22_technical_keys():
         return {
-            "ema20",
-            "ema50",
-            "ema200",
-            "rsi",
-            "macd",
-            "signal_line",
-            "macd_histogram",
+            "relative_strength",
         }
 
     def technical_value(self, key):
@@ -611,7 +657,7 @@ class CandidateDetailWindow(QDialog):
             else:
                 summary.append("Momentum is neutral.")
         else:
-            summary.append("Momentum readings are Coming in v2.2.")
+            summary.append("Momentum readings are Data not available.")
 
         distance = self.number_value(
             self.technical_value("distance_to_support_pct")

@@ -74,6 +74,23 @@ class FakeCandidateDetailAnalyticsDatabase:
                 "sma20": 71.2,
                 "sma50": 69.8,
                 "sma200": 65.4,
+                "ema20": 72.1,
+                "ema50": 70.4,
+                "ema200": 66.2,
+                "rsi14": 58.0,
+                "atr14": 2.2,
+                "macd": 0.84,
+                "macd_signal": 0.52,
+                "macd_histogram": 0.32,
+                "vwap": 71.9,
+                "average_volume_20": 3100000,
+                "relative_volume": 1.12,
+                "distance_from_ema20": 1.59,
+                "distance_from_ema50": 4.05,
+                "distance_from_ema200": 10.65,
+                "relative_strength_spy": None,
+                "trend": "Bullish",
+                "market_structure": "Strong Bullish Structure",
             }
         ]
 
@@ -278,6 +295,14 @@ class StockDetailDataTest(unittest.TestCase):
         self.assertEqual(detail["metrics"]["support_tests"], 5)
         self.assertEqual(detail["metrics"]["average_bounce"], 7.4)
         self.assertEqual(detail["metrics"]["latest_bounce_date"], "2026-06-21")
+        self.assertEqual(detail["technical"]["ema20"], 72.1)
+        self.assertEqual(detail["technical"]["ema50"], 70.4)
+        self.assertEqual(detail["technical"]["ema200"], 66.2)
+        self.assertEqual(detail["technical"]["trend"], "Bullish")
+        self.assertEqual(
+            detail["technical"]["market_structure"],
+            "Strong Bullish Structure",
+        )
         self.assertEqual(
             detail["institutional"]["status"],
             "Institutional data not configured",
@@ -295,8 +320,21 @@ class StockDetailDataTest(unittest.TestCase):
         self.assertEqual(window.summary_labels["latest_volume"].text(), "3,456,789")
         self.assertEqual(window.summary_labels["week_52_high"].text(), "$74.50")
         self.assertEqual(window.summary_labels["primary_support"].text(), "$68.75")
-        self.assertEqual(window.technical_labels["ema20"].text(), "Coming in v2.2")
-        self.assertEqual(window.technical_labels["macd"].text(), "Coming in v2.2")
+        self.assertEqual(window.technical_labels["trend"].text(), "Bullish")
+        self.assertEqual(
+            window.technical_labels["market_structure"].text(),
+            "Strong Bullish Structure",
+        )
+        self.assertEqual(window.technical_labels["ema20"].text(), "$72.10")
+        self.assertEqual(window.technical_labels["ema50"].text(), "$70.40")
+        self.assertEqual(window.technical_labels["ema200"].text(), "$66.20")
+        self.assertEqual(window.technical_labels["rsi"].text(), "58.0 (Bullish)")
+        self.assertEqual(window.technical_labels["macd"].text(), "0.8 (Bullish)")
+        self.assertEqual(window.technical_labels["atr"].text(), "2.2")
+        self.assertEqual(window.technical_labels["vwap"].text(), "$71.90")
+        self.assertEqual(window.technical_labels["relative_volume"].text(), "1.1")
+        self.assertEqual(window.technical_labels["distance_from_ema20"].text(), "1.6%")
+        self.assertEqual(window.technical_labels["relative_strength"].text(), "Coming in v2.2")
         self.assertEqual(window.bounce_summary_labels["support_tests"].text(), "5")
         self.assertEqual(window.bounce_summary_labels["success_pct"].text(), "80.0%")
         self.assertEqual(window.bounce_summary_labels["average_bounce"].text(), "7.4%")

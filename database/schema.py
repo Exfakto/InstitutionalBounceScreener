@@ -228,12 +228,16 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     sma200 REAL,
 
     ema21 REAL,
+    ema20 REAL,
+    ema50 REAL,
+    ema200 REAL,
 
     rsi14 REAL,
 
     atr14 REAL,
 
     avg_volume20 REAL,
+    average_volume_20 REAL,
 
     relative_volume REAL,
 
@@ -244,6 +248,18 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     macd REAL,
     macd_signal REAL,
     macd_histogram REAL,
+
+    vwap REAL,
+
+    distance_from_ema20 REAL,
+    distance_from_ema50 REAL,
+    distance_from_ema200 REAL,
+
+    relative_strength_spy REAL,
+
+    trend TEXT,
+
+    market_structure TEXT,
 
     UNIQUE(ticker, date)
 

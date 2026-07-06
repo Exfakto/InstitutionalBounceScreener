@@ -1274,12 +1274,16 @@ class ThreadBoundRepository:
         self.fundamentals = {}
         self.institutional = {}
         self.sma_rows = 0
+        self.saved_technical_indicators = []
         self.committed = False
         self.closed = False
 
     def assert_owner(self):
         if threading.get_ident() != self.owner:
             raise RuntimeError("SQLite objects created in a thread can only be used in that same thread")
+
+    def assert_thread(self):
+        self.assert_owner()
 
     def upsert_universe_symbols(self, records):
         self.assert_owner()
@@ -1350,6 +1354,14 @@ class ThreadBoundRepository:
         self.assert_owner()
         self.sma_rows += len(dataframe)
         return len(dataframe)
+
+    def ensure_technical_indicator_columns(self):
+        self.assert_thread()
+
+    def save_technical_indicators(self, indicator):
+        self.assert_thread()
+        self.saved_technical_indicators.append(indicator)
+        return 1
 
     def upsert_fundamental_data(self, records):
         self.assert_owner()

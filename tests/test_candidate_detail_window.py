@@ -254,11 +254,12 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     assert window.summary_text.toPlainText() == "Data not available"
     assert [label.text() for label in window.why_labels] == ["Data not available"]
     assert window.technical_labels["sma20"].text() == "Data not available"
-    assert window.technical_labels["ema20"].text() == "Coming in v2.2"
-    assert window.technical_labels["macd"].text() == "Coming in v2.2"
+    assert window.technical_labels["ema20"].text() == "Data not available"
+    assert window.technical_labels["macd"].text() == "Data not available"
+    assert window.technical_labels["relative_strength"].text() == "Coming in v2.2"
     assert window.technical_summary_label.text() == (
         "Moving average positioning is Data not available.\n"
-        "Momentum readings are Coming in v2.2.\n"
+        "Momentum readings are Data not available.\n"
         "Support proximity is Data not available.\n"
         "Historical bounce probability is Data not available."
     )

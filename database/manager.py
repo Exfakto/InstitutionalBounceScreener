@@ -96,6 +96,7 @@ class DatabaseManager:
         for index_statement in OHLCV_SYNC_METADATA_INDEXES:
             self.cursor.execute(index_statement)
         self.cursor.execute(TECHNICAL_INDICATORS_TABLE)
+        self.ensure_technical_indicator_columns()
         self.cursor.execute(SUPPORT_LEVELS_TABLE)
         self.cursor.execute(BOUNCE_VALIDATIONS_TABLE)
         self.cursor.execute(FUNDAMENTALS_TABLE)
@@ -564,6 +565,36 @@ class DatabaseManager:
     # Technical Indicators
     # ==========================================================
 
+    V22_TECHNICAL_INDICATOR_COLUMNS = {
+        "ema20": "REAL",
+        "ema50": "REAL",
+        "ema200": "REAL",
+        "vwap": "REAL",
+        "average_volume_20": "REAL",
+        "distance_from_ema20": "REAL",
+        "distance_from_ema50": "REAL",
+        "distance_from_ema200": "REAL",
+        "relative_strength_spy": "REAL",
+        "trend": "TEXT",
+        "market_structure": "TEXT",
+    }
+
+    def ensure_technical_indicator_columns(self):
+        """
+        Add v2.2 technical indicator columns to existing databases.
+        """
+
+        self.cursor.execute("PRAGMA table_info(technical_indicators)")
+        existing = {row["name"] if hasattr(row, "keys") else row[1] for row in self.cursor.fetchall()}
+
+        for column, column_type in self.V22_TECHNICAL_INDICATOR_COLUMNS.items():
+            if column not in existing:
+                self.cursor.execute(
+                    f"ALTER TABLE technical_indicators ADD COLUMN {column} {column_type}"
+                )
+
+        self.connection.commit()
+
     def save_indicator_row(self, values):
         """
         Save one row of technical indicators.
@@ -616,6 +647,143 @@ class DatabaseManager:
             """,
             values,
         )
+
+    def save_technical_indicators(self, indicator):
+        """
+        Persist one v2.2 technical indicator result.
+        """
+
+        self.ensure_technical_indicator_columns()
+
+        ticker = self.record_value(indicator, "ticker")
+        date_value = self.record_value(indicator, "date")
+        close = self._sqlite_float(self.record_value(indicator, "close"))
+        ema20 = self._sqlite_float(self.record_value(indicator, "ema20"))
+        ema50 = self._sqlite_float(self.record_value(indicator, "ema50"))
+        ema200 = self._sqlite_float(self.record_value(indicator, "ema200"))
+        rsi14 = self._sqlite_float(self.record_value(indicator, "rsi14"))
+        macd = self._sqlite_float(self.record_value(indicator, "macd"))
+
+        trend = self.record_value(indicator, "trend") or self._classify_trend(
+            close,
+            ema20,
+            ema50,
+            ema200,
+            rsi14,
+            macd,
+        )
+        market_structure = (
+            self.record_value(indicator, "market_structure")
+            or self._classify_market_structure(close, ema20, ema50, ema200)
+        )
+
+        self.cursor.execute(
+            """
+            INSERT OR REPLACE INTO technical_indicators
+            (
+                ticker,
+                date,
+                sma20,
+                sma50,
+                sma200,
+                ema21,
+                ema20,
+                ema50,
+                ema200,
+                rsi14,
+                atr14,
+                avg_volume20,
+                average_volume_20,
+                relative_volume,
+                high52,
+                low52,
+                macd,
+                macd_signal,
+                macd_histogram,
+                vwap,
+                distance_from_ema20,
+                distance_from_ema50,
+                distance_from_ema200,
+                relative_strength_spy,
+                trend,
+                market_structure
+            )
+            VALUES
+            (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                ticker,
+                self._format_date(date_value),
+                self._sqlite_float(self.record_value(indicator, "sma20")),
+                self._sqlite_float(self.record_value(indicator, "sma50")),
+                self._sqlite_float(self.record_value(indicator, "sma200")),
+                self._sqlite_float(self.record_value(indicator, "ema21")),
+                ema20,
+                ema50,
+                ema200,
+                rsi14,
+                self._sqlite_float(self.record_value(indicator, "atr14")),
+                self._sqlite_float(
+                    self.first_existing(
+                        self.record_value(indicator, "avg_volume20"),
+                        self.record_value(indicator, "average_volume_20"),
+                    )
+                ),
+                self._sqlite_float(
+                    self.first_existing(
+                        self.record_value(indicator, "average_volume_20"),
+                        self.record_value(indicator, "avg_volume20"),
+                    )
+                ),
+                self._sqlite_float(self.record_value(indicator, "relative_volume")),
+                self._sqlite_float(self.record_value(indicator, "high52")),
+                self._sqlite_float(self.record_value(indicator, "low52")),
+                macd,
+                self._sqlite_float(self.record_value(indicator, "macd_signal")),
+                self._sqlite_float(self.record_value(indicator, "macd_histogram")),
+                self._sqlite_float(self.record_value(indicator, "vwap")),
+                self._sqlite_float(self.record_value(indicator, "distance_from_ema20")),
+                self._sqlite_float(self.record_value(indicator, "distance_from_ema50")),
+                self._sqlite_float(self.record_value(indicator, "distance_from_ema200")),
+                self._sqlite_float(self.record_value(indicator, "relative_strength_spy")),
+                trend,
+                market_structure,
+            ),
+        )
+        self.connection.commit()
+
+    @staticmethod
+    def _classify_trend(close, ema20, ema50, ema200, rsi14, macd):
+        votes = []
+        if close is not None and ema20 is not None:
+            votes.append(1 if close > ema20 else -1 if close < ema20 else 0)
+        if close is not None and ema50 is not None:
+            votes.append(1 if close > ema50 else -1 if close < ema50 else 0)
+        if ema50 is not None and ema200 is not None:
+            votes.append(1 if ema50 > ema200 else -1 if ema50 < ema200 else 0)
+        if rsi14 is not None:
+            votes.append(1 if rsi14 >= 50 else -1)
+        if macd is not None:
+            votes.append(1 if macd > 0 else -1 if macd < 0 else 0)
+
+        bullish = sum(1 for vote in votes if vote > 0)
+        bearish = sum(1 for vote in votes if vote < 0)
+        if bullish > bearish:
+            return "Bullish"
+        if bearish > bullish:
+            return "Bearish"
+        return "Neutral"
+
+    @staticmethod
+    def _classify_market_structure(close, ema20, ema50, ema200):
+        if None not in (close, ema20, ema50, ema200):
+            if close > ema20 > ema50 > ema200:
+                return "Strong Bullish Structure"
+            if close < ema20 < ema50 < ema200:
+                return "Strong Bearish Structure"
+        return "Mixed Structure"
 
     def save_sma(self, dataframe):
         """
@@ -672,6 +840,8 @@ class DatabaseManager:
         Return stored technical indicator rows for a ticker ordered by date.
         """
 
+        self.ensure_technical_indicator_columns()
+
         self.cursor.execute(
             """
             SELECT
@@ -681,15 +851,26 @@ class DatabaseManager:
                 sma50,
                 sma200,
                 ema21,
+                ema20,
+                ema50,
+                ema200,
                 rsi14,
                 atr14,
                 avg_volume20,
+                average_volume_20,
                 relative_volume,
                 high52,
                 low52,
                 macd,
                 macd_signal,
-                macd_histogram
+                macd_histogram,
+                vwap,
+                distance_from_ema20,
+                distance_from_ema50,
+                distance_from_ema200,
+                relative_strength_spy,
+                trend,
+                market_structure
             FROM technical_indicators
             WHERE ticker = ?
             ORDER BY date
@@ -1467,6 +1648,14 @@ class DatabaseManager:
             return record.get(key)
 
         return getattr(record, key, None)
+
+    @staticmethod
+    def first_existing(*values):
+
+        for value in values:
+            if value not in (None, ""):
+                return value
+        return None
 
     # ==========================================================
     # Institutional Metrics
