@@ -1,4 +1,5 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -15,6 +16,175 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class InteractiveCandlestickChart(QWidget):
+    """
+    Lightweight cached-data candlestick chart with wheel zoom and drag pan.
+    """
+
+    def __init__(self, rows=None, support_zones=None, bounce_markers=None, ema_values=None, parent=None):
+        super().__init__(parent)
+        self.rows = []
+        self.support_zones = support_zones or []
+        self.bounce_markers = bounce_markers or []
+        self.ema_values = ema_values or {}
+        self.zoom = 1.0
+        self.offset = 0
+        self.drag_start = None
+        self.setMinimumHeight(320)
+        self.setMouseTracking(True)
+        self.set_data(rows or [], support_zones, bounce_markers, ema_values)
+
+    def set_data(self, rows, support_zones=None, bounce_markers=None, ema_values=None):
+        self.rows = [row for row in (rows or []) if self.valid_row(row)]
+        self.support_zones = support_zones or []
+        self.bounce_markers = bounce_markers or []
+        self.ema_values = ema_values or {}
+        self.offset = max(0, len(self.rows) - self.visible_count())
+        self.update()
+
+    def visible_count(self):
+        if not self.rows:
+            return 0
+        return min(len(self.rows), max(20, int(90 / self.zoom)))
+
+    @staticmethod
+    def valid_row(row):
+        return all(InteractiveCandlestickChart.number(row.get(key)) is not None for key in ("open", "high", "low", "close"))
+
+    @staticmethod
+    def number(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def wheelEvent(self, event):
+        if not self.rows:
+            return
+        factor = 1.18 if event.angleDelta().y() > 0 else 1 / 1.18
+        self.zoom = max(0.6, min(5.0, self.zoom * factor))
+        self.offset = min(self.offset, max(0, len(self.rows) - self.visible_count()))
+        self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start = QPoint(event.position().toPoint())
+
+    def mouseMoveEvent(self, event):
+        if self.drag_start is None or not self.rows:
+            return
+        visible_count = self.visible_count()
+        if visible_count <= 0:
+            return
+        dx = event.position().toPoint().x() - self.drag_start.x()
+        candle_width = max(1, self.width() / max(1, visible_count))
+        shift = int(dx / candle_width)
+        if shift:
+            self.offset = max(0, min(len(self.rows) - visible_count, self.offset - shift))
+            self.drag_start = event.position().toPoint()
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        self.drag_start = None
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.fillRect(self.rect(), QColor("#f8fafc"))
+
+        if not self.rows:
+            painter.setPen(QColor("#64748b"))
+            painter.drawText(self.rect(), Qt.AlignCenter, "Price history unavailable.")
+            return
+
+        margin = 16
+        chart_rect = QRectF(margin, margin, self.width() - margin * 2, self.height() * 0.68)
+        volume_rect = QRectF(margin, chart_rect.bottom() + 10, self.width() - margin * 2, self.height() - chart_rect.bottom() - 26)
+        visible_count = self.visible_count()
+        visible = self.rows[self.offset:self.offset + visible_count]
+        highs = [self.number(row.get("high")) for row in visible]
+        lows = [self.number(row.get("low")) for row in visible]
+        ema_numbers = [self.number(value) for value in self.ema_values.values()]
+        zone_numbers = [
+            self.number(value)
+            for zone in self.support_zones
+            for value in (zone.get("low"), zone.get("high"))
+        ]
+        prices = [value for value in highs + lows + ema_numbers + zone_numbers if value is not None]
+        min_price = min(prices)
+        max_price = max(prices)
+        if min_price == max_price:
+            min_price *= 0.98
+            max_price *= 1.02
+        price_pad = (max_price - min_price) * 0.08
+        min_price -= price_pad
+        max_price += price_pad
+
+        def y_for(price):
+            return chart_rect.bottom() - ((price - min_price) / (max_price - min_price)) * chart_rect.height()
+
+        painter.setPen(QPen(QColor("#cbd5e1"), 1))
+        painter.drawRect(chart_rect)
+        painter.drawRect(volume_rect)
+
+        for zone in self.support_zones:
+            low = self.number(zone.get("low"))
+            high = self.number(zone.get("high"))
+            if low is None or high is None:
+                continue
+            top = y_for(max(low, high))
+            bottom = y_for(min(low, high))
+            painter.fillRect(QRectF(chart_rect.left(), top, chart_rect.width(), max(2, bottom - top)), QColor(59, 130, 246, 36))
+
+        step = chart_rect.width() / max(1, len(visible))
+        body_width = max(2, step * 0.56)
+        max_volume = max([self.number(row.get("volume")) or 0 for row in visible] or [1])
+
+        for index, row in enumerate(visible):
+            x = chart_rect.left() + index * step + step / 2
+            open_price = self.number(row.get("open"))
+            high = self.number(row.get("high"))
+            low = self.number(row.get("low"))
+            close = self.number(row.get("close"))
+            volume = self.number(row.get("volume")) or 0
+            color = QColor("#16a34a") if close >= open_price else QColor("#dc2626")
+            painter.setPen(QPen(color, 1.3))
+            painter.drawLine(x, y_for(high), x, y_for(low))
+            top = y_for(max(open_price, close))
+            bottom = y_for(min(open_price, close))
+            painter.fillRect(QRectF(x - body_width / 2, top, body_width, max(2, bottom - top)), color)
+            volume_height = 0 if max_volume <= 0 else (volume / max_volume) * volume_rect.height()
+            painter.fillRect(QRectF(x - body_width / 2, volume_rect.bottom() - volume_height, body_width, volume_height), QColor(color.red(), color.green(), color.blue(), 95))
+
+        ema_colors = {
+            "ema20": QColor("#2563eb"),
+            "ema50": QColor("#9333ea"),
+            "ema200": QColor("#f97316"),
+        }
+        for key, value in self.ema_values.items():
+            ema = self.number(value)
+            if ema is None:
+                continue
+            y = y_for(ema)
+            painter.setPen(QPen(ema_colors.get(key, QColor("#334155")), 1.5, Qt.DashLine))
+            painter.drawLine(chart_rect.left(), y, chart_rect.right(), y)
+            painter.drawText(chart_rect.right() - 70, y - 4, key.upper())
+
+        dates = {str(row.get("date")): index for index, row in enumerate(visible)}
+        for marker in self.bounce_markers:
+            marker_date = str(marker.get("date"))
+            if marker_date not in dates:
+                continue
+            price = self.number(marker.get("support_price") or marker.get("low_price"))
+            if price is None:
+                continue
+            x = chart_rect.left() + dates[marker_date] * step + step / 2
+            y = y_for(price)
+            painter.setPen(QPen(QColor("#0f172a"), 1))
+            painter.setBrush(QColor("#facc15"))
+            painter.drawEllipse(QRectF(x - 4, y - 4, 8, 8))
 
 
 class CandidateDetailWindow(QDialog):
@@ -93,6 +263,8 @@ class CandidateDetailWindow(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
+        layout.addWidget(self.create_kpi_strip())
+
         top_layout = QHBoxLayout()
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.setSpacing(12)
@@ -136,6 +308,10 @@ class CandidateDetailWindow(QDialog):
 
         layout.addLayout(top_layout)
 
+        layout.addWidget(self.create_price_chart_section())
+        layout.addWidget(self.create_trade_levels_section())
+        layout.addWidget(self.create_trade_checklist_section())
+
         why_section = self.create_why_section()
         layout.addWidget(why_section)
 
@@ -146,6 +322,104 @@ class CandidateDetailWindow(QDialog):
         self.summary_text.setMinimumHeight(120)
         layout.addWidget(self.summary_text)
         return tab
+
+    def create_kpi_strip(self):
+        self.kpi_labels = {}
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QGridLayout(section)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(10)
+        items = [
+            ("overall", "Overall Score", self.kpi_value(("final_score", "score", "primary_score_value"))),
+            ("quality", "Quality Score", self.kpi_value(("quality_score", "fundamental_intelligence_score"))),
+            ("technical", "Technical Score", self.kpi_value(("technical_score", "trend_score"))),
+            ("bounce", "Bounce Score", self.kpi_value(("bounce_quality_score", "bounce_score", "bounce_success_pct"))),
+            ("fundamental", "Fundamental Score", self.kpi_value(("fundamental_intelligence_score", "quality_score"))),
+            ("risk", "Risk Score", self.kpi_value(("overall_risk_score", "risk_score"))),
+        ]
+        for index, (key, title, value) in enumerate(items):
+            card, label = self.create_summary_card(title, value)
+            card.setObjectName("CandidateDetailTechnicalCard")
+            label.setProperty("status", self.kpi_role(key, value))
+            label.style().unpolish(label)
+            label.style().polish(label)
+            self.kpi_labels[key] = label
+            layout.addWidget(card, 0, index)
+        return section
+
+    def create_price_chart_section(self):
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+        title = QLabel("Interactive Price Research Chart")
+        title.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title)
+        self.price_chart = InteractiveCandlestickChart(
+            rows=self.price_history_rows(),
+            support_zones=self.chart_support_zones(),
+            bounce_markers=self.bounce_history_rows(),
+            ema_values=self.chart_ema_values(),
+        )
+        self.price_chart.setObjectName("CandidateDetailCandlestickChart")
+        layout.addWidget(self.price_chart)
+        return section
+
+    def create_trade_levels_section(self):
+        self.trade_level_labels = {}
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+        title = QLabel("Trade Levels")
+        title.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title)
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+        for index, (key, title_text, value, role) in enumerate(self.trade_level_items()):
+            card, label = self.create_summary_card(title_text, value)
+            card.setObjectName("CandidateDetailTechnicalCard")
+            label.setProperty("status", role)
+            label.style().unpolish(label)
+            label.style().polish(label)
+            self.trade_level_labels[key] = label
+            grid.addWidget(card, index // 3, index % 3)
+        layout.addLayout(grid)
+        return section
+
+    def create_trade_checklist_section(self):
+        self.checklist_labels = {}
+        section = QFrame()
+        section.setObjectName("CandidateDetailWhySection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+        title = QLabel("Trade Checklist")
+        title.setObjectName("CandidateDetailSectionTitle")
+        layout.addWidget(title)
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+        for index, (key, title_text, passed, note) in enumerate(self.trade_checklist_items()):
+            value = "PASS" if passed is True else "WATCH" if passed is None else "FAIL"
+            if note:
+                value = f"{value} - {note}"
+            card, label = self.create_summary_card(title_text, value)
+            card.setObjectName("CandidateDetailTechnicalCard")
+            label.setProperty("status", "positive" if passed is True else "watch" if passed is None else "negative")
+            label.style().unpolish(label)
+            label.style().polish(label)
+            self.checklist_labels[key] = label
+            grid.addWidget(card, index // 3, index % 3)
+        layout.addLayout(grid)
+        return section
 
     def create_score_card(self):
         card = QFrame()
@@ -193,6 +467,156 @@ class CandidateDetailWindow(QDialog):
         layout.addWidget(title_label)
         layout.addWidget(value_label)
         return card, value_label
+
+    def kpi_value(self, aliases):
+        raw_value = self.first_existing(
+            *[self.metrics().get(alias) for alias in aliases],
+            *[self.candidate_value(alias) for alias in aliases],
+        )
+        number = self.number_value(raw_value)
+        if number is None:
+            return "Data not available"
+        return self.format_score_value(number)
+
+    def kpi_role(self, key, value):
+        number = self.number_value(value)
+        if number is None:
+            return "missing"
+        if key == "risk":
+            if number <= 35:
+                return "positive"
+            if number <= 65:
+                return "watch"
+            return "negative"
+        if number >= 75:
+            return "positive"
+        if number >= 50:
+            return "watch"
+        return "negative"
+
+    def price_history_rows(self):
+        rows = self.detail.get("price_history") or self.metrics().get("price_history") or []
+        normalized = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            normalized.append(
+                {
+                    "date": row.get("date"),
+                    "open": self.first_existing(row.get("open"), row.get("Open"), row.get("close"), row.get("Close")),
+                    "high": self.first_existing(row.get("high"), row.get("High"), row.get("close"), row.get("Close")),
+                    "low": self.first_existing(row.get("low"), row.get("Low"), row.get("close"), row.get("Close")),
+                    "close": self.first_existing(row.get("close"), row.get("Close")),
+                    "volume": self.first_existing(row.get("volume"), row.get("Volume")),
+                }
+            )
+        return normalized
+
+    def chart_support_zones(self):
+        low = self.number_value(
+            self.first_existing(
+                self.metrics().get("support_zone_low"),
+                self.bounce_value_from_aliases(("support_zone_low",)),
+            )
+        )
+        high = self.number_value(
+            self.first_existing(
+                self.metrics().get("support_zone_high"),
+                self.bounce_value_from_aliases(("support_zone_high",)),
+            )
+        )
+        support = self.number_value(
+            self.first_existing(
+                self.metrics().get("primary_support"),
+                self.metrics().get("support_price"),
+            )
+        )
+        if low is None and support is not None:
+            low = support * 0.995
+        if high is None and support is not None:
+            high = support * 1.005
+        return [{"low": low, "high": high}] if low is not None and high is not None else []
+
+    def chart_ema_values(self):
+        return {
+            key: self.technical_value(key)
+            for key in ("ema20", "ema50", "ema200")
+            if self.technical_value(key) not in (None, "")
+        }
+
+    def trade_levels(self):
+        levels = self.detail.get("trade_levels")
+        if isinstance(levels, dict) and levels:
+            return levels
+        metrics_levels = self.metrics().get("trade_levels")
+        if isinstance(metrics_levels, dict):
+            return metrics_levels
+        return {}
+
+    def trade_level_items(self):
+        levels = self.trade_levels()
+        items = [
+            ("ideal_buy_zone", "Ideal Buy Zone", self.buy_zone_text(levels), "positive"),
+            ("support", "Support", self.format_trade_price(levels.get("support")), "positive"),
+            ("technical_stop", "Technical Stop", self.format_trade_price(levels.get("technical_stop")), "negative"),
+            ("atr_stop", "ATR Stop", self.format_trade_price(levels.get("atr_stop")), "negative"),
+            ("target_1", "Target 1", self.format_trade_price(levels.get("target_1")), "positive"),
+            ("target_2", "Target 2", self.format_trade_price(levels.get("target_2")), "positive"),
+            ("target_3", "Target 3", self.format_trade_price(levels.get("target_3")), "positive"),
+            ("expected_return", "Expected Return", self.format_trade_percent(levels.get("expected_return_pct")), "positive"),
+            ("risk_reward", "Risk / Reward", self.format_risk_reward(levels.get("risk_reward")), "watch"),
+        ]
+        return items
+
+    def buy_zone_text(self, levels):
+        low = self.format_trade_price(levels.get("ideal_buy_zone_low"))
+        high = self.format_trade_price(levels.get("ideal_buy_zone_high"))
+        if low == "Data not available" and high == "Data not available":
+            return "Data not available"
+        return f"{low} - {high}"
+
+    def format_trade_price(self, value):
+        number = self.number_value(value)
+        return self.format_price_value(number) if number is not None else "Data not available"
+
+    def format_trade_percent(self, value):
+        number = self.number_value(value)
+        return self.format_percent_value(number) if number is not None else "Data not available"
+
+    def format_risk_reward(self, value):
+        number = self.number_value(value)
+        if number is None:
+            return "Data not available"
+        return f"{number:.2f}:1"
+
+    def trade_checklist_items(self):
+        trend_text = str(self.technical_value("trend") or self.technical_value("market_structure") or "").lower()
+        distance = self.number_value(
+            self.first_existing(
+                self.technical_value("distance_to_support_pct"),
+                self.metrics().get("distance_to_support_pct"),
+            )
+        )
+        relative_volume = self.number_value(self.technical_value("relative_volume"))
+        risk_score = self.number_value(self.metrics().get("overall_risk_score") or self.metrics().get("risk_score"))
+        fundamental_score = self.number_value(
+            self.metrics().get("fundamental_intelligence_score") or self.metrics().get("quality_score")
+        )
+        bounce_success = self.number_value(
+            self.first_existing(
+                self.metrics().get("bounce_success_pct"),
+                self.metrics().get("historical_bounce_success_rate"),
+                self.metrics().get("bounce_success_rate"),
+            )
+        )
+        return [
+            ("trend", "Trend", True if "bull" in trend_text or "positive" in trend_text else None if not trend_text else False, self.technical_value("trend")),
+            ("support", "Support", True if distance is not None and distance <= 8 else None if distance is None else False, self.format_trade_percent(distance) if distance is not None else ""),
+            ("volume", "Volume", True if relative_volume is not None and relative_volume >= 1 else None if relative_volume is None else False, f"{relative_volume:.1f}x" if relative_volume is not None else ""),
+            ("risk", "Risk", True if risk_score is not None and risk_score <= 60 else None if risk_score is None else False, self.format_score_value(risk_score) if risk_score is not None else ""),
+            ("fundamentals", "Fundamentals", True if fundamental_score is not None and fundamental_score >= 60 else None if fundamental_score is None else False, self.format_score_value(fundamental_score) if fundamental_score is not None else ""),
+            ("bounce_history", "Bounce History", True if bounce_success is not None and bounce_success >= 70 else None if bounce_success is None else False, self.format_trade_percent(bounce_success) if bounce_success is not None else ""),
+        ]
 
     def create_why_section(self):
         section = QFrame()
@@ -1122,7 +1546,7 @@ class CandidateDetailWindow(QDialog):
         )
 
         if outlook == "Unknown":
-            return "Institutional sponsorship is N/A."
+            return "Institutional data not configured."
 
         if outlook == "Distribution":
             lead = "Institutional sponsorship shows distribution risk."
@@ -1142,7 +1566,7 @@ class CandidateDetailWindow(QDialog):
             else:
                 details.append("ownership is below institutional leadership levels")
         else:
-            details.append("ownership is N/A")
+            details.append("ownership is not configured")
 
         if holder_change is not None:
             if holder_change > 0:
@@ -1152,12 +1576,12 @@ class CandidateDetailWindow(QDialog):
             else:
                 details.append("holder count was flat last quarter")
         else:
-            details.append("holder change is N/A")
+            details.append("holder change is not configured")
 
         if activity not in (None, ""):
             details.append(f"recent 13F activity suggests {activity}")
         else:
-            details.append("recent 13F activity is N/A")
+            details.append("recent 13F activity is not configured")
 
         return f"{lead} " + ", ".join(details) + "."
 
@@ -1638,7 +2062,7 @@ class CandidateDetailWindow(QDialog):
                 self.section_labels[f"{key}.{metric}"] = label
                 form.addRow(str(metric), label)
         else:
-            label = QLabel("N/A")
+            label = QLabel("Data not available")
             label.setObjectName("EmptyStateLabel")
             self.section_labels[key] = label
             form.addRow(title, label)
@@ -1841,7 +2265,7 @@ class CandidateDetailWindow(QDialog):
     def risk_item(self, key, title, aliases, value_type):
         if key == "risk_rating":
             fallback_risk = self.risk_text()
-            if fallback_risk == "N/A":
+            if fallback_risk in {"N/A", "Data not available"}:
                 fallback_risk = None
             raw_value = self.first_existing(
                 *[self.risk_value(alias) for alias in aliases],

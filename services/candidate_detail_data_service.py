@@ -69,6 +69,11 @@ class CandidateDetailDataService:
             metrics,
         )
         self.merge(metrics, risk_analytics.as_metrics())
+        self.merge(metrics, {"trade_levels": self.trade_levels(metrics)})
+        metrics["professional_research_summary"] = self.professional_research_summary(
+            ticker,
+            metrics,
+        )
 
         candidate = self.build_candidate(ticker, metrics, ranked, scored_candidate)
         detail = {
@@ -84,6 +89,8 @@ class CandidateDetailDataService:
             "support": self.support_metrics(support) or bounce_metrics,
             "bounce": self.bounce_detail(metrics),
             "bounce_history": bounce_analytics.history or self.bounce_history(metrics),
+            "price_history": metrics.get("price_history", []),
+            "trade_levels": metrics.get("trade_levels", {}),
             "institutional": self.institutional_detail(institutional),
             "screening_result": self.ranked_metrics(ranked),
             "metrics": metrics,
@@ -131,7 +138,24 @@ class CandidateDetailDataService:
         if "Low" in frame:
             result["low52"] = frame.tail(252)["Low"].min()
             result["week_52_low"] = result["low52"]
+        result["price_history"] = self.price_history_rows(frame)
         return result
+
+    def price_history_rows(self, frame):
+        rows = []
+        columns = set(frame.columns)
+        for index, row in frame.iterrows():
+            rows.append(
+                {
+                    "date": str(index.date()) if hasattr(index, "date") else str(index),
+                    "open": row.get("Open") if "Open" in columns else row.get("open"),
+                    "high": row.get("High") if "High" in columns else row.get("high"),
+                    "low": row.get("Low") if "Low" in columns else row.get("low"),
+                    "close": row.get("Close") if "Close" in columns else row.get("close"),
+                    "volume": row.get("Volume") if "Volume" in columns else row.get("volume"),
+                }
+            )
+        return rows
 
     def fetch_row(self, method_name, ticker):
         method = getattr(self.db, method_name, None)
@@ -206,11 +230,117 @@ class CandidateDetailDataService:
     def summary_text(self, explanation_text, metrics, ticker):
         if explanation_text:
             return explanation_text
+        professional_summary = metrics.get("professional_research_summary")
+        if professional_summary:
+            return professional_summary
         risk_summary = metrics.get("risk_research_summary")
         fundamental_summary = metrics.get("fundamental_research_summary")
         if risk_summary and fundamental_summary:
             return f"{risk_summary} {fundamental_summary}"
         return risk_summary or fundamental_summary or self.explanation_text(ticker, metrics)
+
+    def trade_levels(self, metrics):
+        price = self.number(metrics.get("current_price") or metrics.get("close"))
+        support = self.number(metrics.get("primary_support") or metrics.get("support_price"))
+        zone_low = self.number(metrics.get("support_zone_low")) or support
+        zone_high = self.number(metrics.get("support_zone_high")) or support
+        atr = self.number(metrics.get("atr14") or metrics.get("atr"))
+        average_bounce = self.number(
+            metrics.get("average_bounce") or metrics.get("average_bounce_pct")
+        )
+        largest_bounce = self.number(
+            metrics.get("largest_bounce") or metrics.get("largest_bounce_pct")
+        )
+
+        if price is None and support is None:
+            return {}
+
+        anchor = price or support
+        stop_base = zone_low or support or anchor
+        technical_stop = stop_base * 0.98 if stop_base is not None else None
+        atr_stop = price - (atr * 2) if price is not None and atr is not None else None
+        stop = atr_stop if atr_stop is not None else technical_stop
+
+        target1_pct = average_bounce if average_bounce is not None else 6.0
+        target2_pct = largest_bounce if largest_bounce is not None else target1_pct * 1.6
+        target3_pct = max(target2_pct * 1.35, target1_pct * 2.0)
+        target1 = anchor * (1 + target1_pct / 100)
+        target2 = anchor * (1 + target2_pct / 100)
+        target3 = anchor * (1 + target3_pct / 100)
+
+        expected_return = None
+        risk_reward = None
+        if price is not None:
+            expected_return = ((target1 - price) / price) * 100
+            if stop is not None and price > stop:
+                risk_reward = (target1 - price) / (price - stop)
+
+        return {
+            "ideal_buy_zone_low": zone_low,
+            "ideal_buy_zone_high": zone_high,
+            "support": support,
+            "technical_stop": technical_stop,
+            "atr_stop": atr_stop,
+            "target_1": target1,
+            "target_2": target2,
+            "target_3": target3,
+            "expected_return_pct": expected_return,
+            "risk_reward": risk_reward,
+        }
+
+    def professional_research_summary(self, ticker, metrics):
+        trend = self.trend_label(metrics).lower()
+        support = self.number(metrics.get("primary_support") or metrics.get("support_price"))
+        bounce_rate = self.number(
+            metrics.get("historical_bounce_success_rate")
+            or metrics.get("bounce_success_pct")
+            or metrics.get("bounce_success_rate")
+        )
+        risk = metrics.get("risk_recommendation") or metrics.get("risk_rating")
+        fundamental = (
+            metrics.get("fundamental_classification")
+            or metrics.get("fundamental_commentary")
+            or "fundamental data not configured"
+        )
+
+        technical_sentence = f"{ticker} shows a {trend} technical posture"
+        if support is not None:
+            technical_sentence += f" while trading against support near ${support:,.2f}"
+        technical_sentence += "."
+
+        bounce_sentence = (
+            f"Historical bounce validation is {bounce_rate:.0f}%."
+            if bounce_rate is not None
+            else "Historical bounce validation is data not available."
+        )
+        fundamental_score = self.number(metrics.get("fundamental_intelligence_score"))
+        if fundamental_score is not None:
+            fundamental_sentence = (
+                f"Fundamental Intelligence is {fundamental} at {fundamental_score:.1f}."
+            )
+        else:
+            fundamental_sentence = f"Fundamental Intelligence outlook is {fundamental}."
+        risk_score = self.number(metrics.get("overall_risk_score") or metrics.get("risk_score"))
+        risk_sentence = (
+            f"Risk Intelligence Score is {risk_score:.1f}, classified as {risk}."
+            if risk_score is not None and risk not in (None, "")
+            else f"Risk assessment is {risk}."
+            if risk not in (None, "")
+            else "Risk assessment is data not available."
+        )
+        thesis_sentence = (
+            "The trade thesis favors entries inside the support zone with stops below "
+            "validated support and targets scaled by historical bounce behavior."
+        )
+        return " ".join(
+            [
+                technical_sentence,
+                bounce_sentence,
+                fundamental_sentence,
+                risk_sentence,
+                thesis_sentence,
+            ]
+        )
 
     def technical_detail(self, metrics):
         keys = {

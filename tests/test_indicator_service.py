@@ -11,7 +11,10 @@ class FakeDatabase:
     def __init__(self):
         self.saved_dataframes = []
         self.saved_indicators = []
+        self.saved_indicator_options = []
         self.committed = False
+        self.commit_count = 0
+        self.ensure_technical_indicator_columns_count = 0
         self.closed = False
 
     def get_all_tickers(self):
@@ -38,11 +41,22 @@ class FakeDatabase:
     def save_sma(self, dataframe):
         self.saved_dataframes.append(dataframe)
 
-    def save_technical_indicators(self, result):
+    def ensure_technical_indicator_columns(self):
+        self.ensure_technical_indicator_columns_count += 1
+
+    def save_technical_indicators(self, result, commit=True, ensure_schema=True):
+        if ensure_schema:
+            self.ensure_technical_indicator_columns()
         self.saved_indicators.append(result)
+        self.saved_indicator_options.append(
+            {"commit": commit, "ensure_schema": ensure_schema}
+        )
+        if commit:
+            self.commit()
 
     def commit(self):
         self.committed = True
+        self.commit_count += 1
 
     def close(self):
         self.closed = True
@@ -103,6 +117,9 @@ class IndicatorServiceTest(unittest.TestCase):
         self.assertEqual(results["rows"], 250)
         self.assertTrue(service.db.committed)
         self.assertEqual(len(service.db.saved_indicators), 1)
+        self.assertEqual(service.db.saved_indicator_options, [{"commit": False, "ensure_schema": False}])
+        self.assertEqual(service.db.ensure_technical_indicator_columns_count, 1)
+        self.assertEqual(service.db.commit_count, 1)
 
         saved = service.db.saved_indicators[0]
 

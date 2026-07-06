@@ -648,12 +648,13 @@ class DatabaseManager:
             values,
         )
 
-    def save_technical_indicators(self, indicator):
+    def save_technical_indicators(self, indicator, commit=True, ensure_schema=True):
         """
         Persist one v2.2 technical indicator result.
         """
 
-        self.ensure_technical_indicator_columns()
+        if ensure_schema:
+            self.ensure_technical_indicator_columns()
 
         ticker = self.record_value(indicator, "ticker")
         date_value = self.record_value(indicator, "date")
@@ -752,7 +753,8 @@ class DatabaseManager:
                 market_structure,
             ),
         )
-        self.connection.commit()
+        if commit:
+            self.connection.commit()
 
     @staticmethod
     def _classify_trend(close, ema20, ema50, ema200, rsi14, macd):

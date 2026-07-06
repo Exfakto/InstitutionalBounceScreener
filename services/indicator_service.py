@@ -1,4 +1,5 @@
 from time import perf_counter
+from inspect import signature
 
 from database.manager import DatabaseManager
 from config.logging_config import logger
@@ -48,6 +49,8 @@ class IndicatorService:
             len(tickers),
         )
 
+        self.ensure_technical_indicator_schema()
+
         for ticker in tickers:
 
             logger.info("Calculating technical indicators for %s", ticker)
@@ -63,7 +66,7 @@ class IndicatorService:
             rows = self.ohlcv_rows(ticker, dataframe)
             result = self.technical_engine.calculate(rows, ticker=ticker)
 
-            self.db.save_technical_indicators(result)
+            self.save_technical_indicator_result(result)
 
             results["processed"] += 1
             results["processed_tickers"].append(ticker)
@@ -82,6 +85,28 @@ class IndicatorService:
         )
 
         return results
+
+    def ensure_technical_indicator_schema(self):
+        method = getattr(self.db, "ensure_technical_indicator_columns", None)
+        if callable(method):
+            method()
+
+    def save_technical_indicator_result(self, result):
+        method = self.db.save_technical_indicators
+        try:
+            parameters = signature(method).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+
+        kwargs = {}
+        if "commit" in parameters:
+            kwargs["commit"] = False
+        if "ensure_schema" in parameters:
+            kwargs["ensure_schema"] = False
+
+        if kwargs:
+            return method(result, **kwargs)
+        return method(result)
 
     @staticmethod
     def ohlcv_rows(ticker, dataframe):

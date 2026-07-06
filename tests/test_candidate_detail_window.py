@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtWidgets import QApplication, QTableWidget
+from PySide6.QtWidgets import QApplication, QLabel, QTableWidget
 
 from ui.candidate_detail_window import CandidateDetailWindow
 
@@ -265,7 +265,7 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     )
     assert window.institutional_outlook_label.text() == "Unknown"
     assert all(label.text() == "Data not available" for label in window.institutional_labels.values())
-    assert window.institutional_summary_label.text() == "Institutional sponsorship is N/A."
+    assert window.institutional_summary_label.text() == "Institutional data not configured."
     assert all(label.text() == "Data not available" for label in window.risk_labels.values())
     assert [label.text() for label in window.risk_warning_labels] == [
         "No major active risk warnings."
@@ -275,6 +275,13 @@ def test_candidate_detail_window_missing_fields_show_na(app):
     assert not window.bounce_empty_label.isHidden()
     assert window.bounce_history_table.rowCount() == 0
     assert window.bounce_interpretation_label.text() == "Bounce interpretation is Data not available."
+    assert_no_raw_na_labels(window)
+
+
+def assert_no_raw_na_labels(window):
+    for label in window.findChildren(QLabel):
+        assert label.text() != "N/A"
+        assert " is N/A" not in label.text()
 
 
 def test_candidate_detail_window_institutional_outlook_can_show_distribution(app):
