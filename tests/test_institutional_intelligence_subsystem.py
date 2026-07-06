@@ -7,6 +7,7 @@ from database.manager import DatabaseManager
 from services.institutional_data_provider import (
     InstitutionalDataProvider,
     LocalInstitutionalDataProvider,
+    UnavailableInstitutionalDataProvider,
 )
 from services.institutional_intelligence_engine import (
     InstitutionalIntelligenceEngine,
@@ -169,3 +170,15 @@ def test_engine_missing_ticker_returns_safe_signal():
     assert signal.raw_institutional_data is None
     assert signal.score_result.overall_institutional_strength_score == 50.0
     assert "Missing ticker" in signal.warnings
+
+
+def test_engine_without_provider_returns_unavailable_signal():
+    signal = InstitutionalIntelligenceEngine(
+        UnavailableInstitutionalDataProvider()
+    ).score_ticker("AAPL")
+
+    assert signal.ticker == "AAPL"
+    assert signal.raw_institutional_data is None
+    assert signal.institutional_score_available is False
+    assert signal.score_result.overall_institutional_strength_score == 50.0
+    assert "Institutional data provider unavailable; institutional score unavailable" in signal.warnings

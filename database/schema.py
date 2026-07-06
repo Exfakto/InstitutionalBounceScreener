@@ -79,6 +79,35 @@ HISTORICAL_OHLCV_CACHE_INDEXES = [
     """,
 ]
 
+OHLCV_SYNC_METADATA_TABLE = """
+CREATE TABLE IF NOT EXISTS ohlcv_sync_metadata (
+
+    ticker TEXT PRIMARY KEY,
+
+    last_attempted_at TEXT,
+
+    last_success_at TEXT,
+
+    last_error TEXT,
+
+    empty_response_count INTEGER DEFAULT 0,
+
+    status TEXT DEFAULT 'stale'
+
+);
+"""
+
+OHLCV_SYNC_METADATA_INDEXES = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_ohlcv_sync_metadata_status
+    ON ohlcv_sync_metadata(status);
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_ohlcv_sync_metadata_last_attempted
+    ON ohlcv_sync_metadata(last_attempted_at);
+    """,
+]
+
 
 MARKET_UNIVERSE_TABLE = """
 CREATE TABLE IF NOT EXISTS market_universe (

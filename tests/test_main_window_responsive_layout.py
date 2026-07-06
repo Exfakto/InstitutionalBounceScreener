@@ -47,6 +47,19 @@ def test_main_window_resizes_to_1920_by_1080_without_clipping_pressure():
     window.close()
 
 
+def test_main_window_resizes_to_2560_by_1440_without_clipping_pressure():
+    app()
+    window = MainWindow()
+
+    window.resize(2560, 1440)
+    window.ensure_window_fits_screen()
+
+    assert window.width() <= 2560
+    assert window.height() <= 1440
+    assert window.screener_workspace_splitter.sizes()[1] > 0
+    window.close()
+
+
 def test_main_window_key_panels_are_scrollable_or_resizable():
     app()
     window = MainWindow()
@@ -58,6 +71,24 @@ def test_main_window_key_panels_are_scrollable_or_resizable():
     assert window.dashboard.maximumHeight() <= 150
     assert window.candidates_table.minimumSize().height() <= 160
     assert window.price_chart.minimumSize().height() <= 140
+    assert window.activity_panel.maximumHeight() > 260
+    window.close()
+
+
+def test_main_window_tables_allow_horizontal_scrolling():
+    app()
+    window = MainWindow()
+
+    assert window.candidates_table.horizontalScrollBarPolicy() is not None
+    assert window.screening_results_panel.ranked_candidates_table.horizontalScrollBarPolicy() is not None
+    assert window.screening_results_panel.scroll_area.horizontalScrollBarPolicy() is not None
+    assert window.candidates_table.horizontalHeader().stretchLastSection() is False
+    assert (
+        window.screening_results_panel.ranked_candidates_table
+        .horizontalHeader()
+        .stretchLastSection()
+        is False
+    )
     window.close()
 
 

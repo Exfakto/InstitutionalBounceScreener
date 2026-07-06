@@ -59,7 +59,7 @@ class ProviderFactory:
                 api_key=api_key,
                 http_client=self.http_client,
                 timeout=getattr(preferences, "request_timeout_seconds", 10),
-                max_retries=getattr(preferences, "max_retries", 2),
+                max_retries=getattr(preferences, "max_retries", 3),
                 rate_limit_sleep_seconds=getattr(preferences, "rate_limit_sleep_seconds", 1),
             ),
         )
@@ -74,7 +74,7 @@ class ProviderFactory:
                 api_key=api_key,
                 http_client=self.http_client,
                 timeout=getattr(preferences, "request_timeout_seconds", 10),
-                max_retries=getattr(preferences, "max_retries", 2),
+                max_retries=getattr(preferences, "max_retries", 3),
                 rate_limit_sleep_seconds=getattr(preferences, "rate_limit_sleep_seconds", 1),
             ),
         )
@@ -95,7 +95,7 @@ class ProviderFactory:
                 api_secret=api_secret,
                 http_client=self.http_client,
                 timeout=getattr(preferences, "request_timeout_seconds", 10),
-                max_retries=getattr(preferences, "max_retries", 2),
+                max_retries=getattr(preferences, "max_retries", 3),
                 rate_limit_sleep_seconds=getattr(preferences, "rate_limit_sleep_seconds", 1),
             ),
         )

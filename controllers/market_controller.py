@@ -31,6 +31,13 @@ class MarketController:
 
         return self.market.get_active_market_universe_records()
 
+    def repository_factory(self):
+        """
+        Return a factory that creates fresh repository/database connections.
+        """
+
+        return self.market.repository_factory()
+
     # --------------------------------------------------
     # Prices
     # --------------------------------------------------

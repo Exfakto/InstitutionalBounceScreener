@@ -78,8 +78,9 @@ def test_app_settings_service_validation():
     assert preferences.auto_refresh_results is False
     assert preferences.selected_market_data_provider == "local_csv"
     assert preferences.request_timeout_seconds == 10
-    assert preferences.max_retries == 2
+    assert preferences.max_retries == 3
     assert preferences.rate_limit_sleep_seconds == 1
+    assert preferences.historical_ohlcv_lookback_years == 5
     manager.close()
 
 
@@ -97,6 +98,7 @@ def test_app_settings_service_provider_credentials_persist():
             "request_timeout_seconds": 7,
             "max_retries": 3,
             "rate_limit_sleep_seconds": 2,
+            "historical_ohlcv_lookback_years": 4,
         }
     )
 
@@ -106,4 +108,5 @@ def test_app_settings_service_provider_credentials_persist():
     assert preferences.request_timeout_seconds == 7
     assert preferences.max_retries == 3
     assert preferences.rate_limit_sleep_seconds == 2
+    assert preferences.historical_ohlcv_lookback_years == 4
     manager.close()

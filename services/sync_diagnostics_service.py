@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 
 from database.manager import DatabaseManager
+from services.ohlcv_cache_access import fetch_ohlcv_frame
 
 
 class SyncDiagnosticsService:
@@ -59,7 +60,7 @@ class SyncDiagnosticsService:
                 return result
 
         try:
-            history = self.database_manager.get_price_history(normalized_ticker)
+            history = fetch_ohlcv_frame(self.database_manager, normalized_ticker)
         except Exception as exc:
             result["status"] = "Error"
             result["warnings"].append(f"Price history read failed: {exc}")

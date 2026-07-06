@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from market_data.live_provider import LiveMarketDataProvider
@@ -11,12 +12,47 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
     BASE_URL = "https://api.polygon.io"
 
     def fetch_daily_ohlcv(self, ticker, start_date=None, end_date=None):
+        self.last_warnings = []
+        self.last_errors = []
         normalized = self.normalize_ticker(ticker)
+        end = end_date or date.today().isoformat()
+        start = start_date or self.default_start_date(end)
+        params = {
+            "adjusted": "true",
+            "sort": "asc",
+            "limit": 50000,
+            "apiKey": self.api_key,
+        }
+        results = []
         data = self.safe_get_json(
-            f"/v2/aggs/ticker/{normalized}/range/1/day/{start_date or '1900-01-01'}/{end_date or '2100-01-01'}",
-            params={"adjusted": "true", "sort": "asc", "apiKey": self.api_key},
+            f"/v2/aggs/ticker/{normalized}/range/1/day/{start}/{end}",
+            params=params,
         )
-        results = (data or {}).get("results") if isinstance(data, dict) else []
+        if data is None:
+            return []
+        if not isinstance(data, dict):
+            self.last_errors.append("Malformed Polygon OHLCV response: expected object")
+            return []
+        while isinstance(data, dict):
+            page = data.get("results")
+            if isinstance(page, list):
+                results.extend(page)
+            elif page is not None:
+                self.last_errors.append("Malformed Polygon OHLCV response: results must be a list")
+                break
+            next_url = data.get("next_url")
+            if not next_url:
+                break
+            data = self.fetch_next_page(next_url)
+            if data is None:
+                break
+            if not isinstance(data, dict):
+                self.last_errors.append("Malformed Polygon OHLCV page: expected object")
+                break
+        if not results and not self.last_errors:
+            self.last_warnings.append(
+                f"Polygon returned zero OHLCV rows for {normalized} from {start} to {end}"
+            )
         return [
             OhlcvRow(
                 ticker=normalized,
@@ -31,6 +67,17 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
             for item in (results or [])
             if all(key in item for key in ("o", "h", "l", "c", "v"))
         ]
+
+    @staticmethod
+    def default_start_date(end_date):
+        try:
+            end = datetime.fromisoformat(str(end_date)).date()
+        except ValueError:
+            end = date.today()
+        try:
+            return end.replace(year=end.year - 5).isoformat()
+        except ValueError:
+            return (end - timedelta(days=365 * 5)).isoformat()
 
     def fetch_fundamentals(self, ticker):
         normalized = self.normalize_ticker(ticker)
@@ -62,7 +109,7 @@ class PolygonMarketDataProvider(LiveMarketDataProvider):
             "apiKey": self.api_key,
         }
         if polygon_exchange:
-            params["exchange"] = polygon_exchange
+            params["primary_exchange"] = polygon_exchange
         results = []
         data = self.safe_get_json("/v3/reference/tickers", params=params)
         if data is None:

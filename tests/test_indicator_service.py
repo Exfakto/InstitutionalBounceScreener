@@ -25,6 +25,9 @@ class FakeDatabase:
             index=pd.date_range("2025-01-01", periods=250),
         )
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return self.get_price_history(ticker)
+
     def save_sma(self, dataframe):
         self.saved_dataframes.append(dataframe)
 

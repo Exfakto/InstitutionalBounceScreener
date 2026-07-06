@@ -73,7 +73,7 @@ def test_data_quality_report_generation_detects_warnings():
     manager.close()
 
 
-def test_provider_diagnostics_reports_credentials_and_connectivity():
+def test_provider_diagnostics_reports_credentials_and_connectivity(monkeypatch):
     class FakeSettings:
         def get_all_settings(self):
             return {
@@ -84,6 +84,8 @@ def test_provider_diagnostics_reports_credentials_and_connectivity():
                 "rate_limit_sleep_seconds": 1,
             }
 
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+
     result = ProviderDiagnosticsService(settings_service=FakeSettings()).run(
         connectivity_test=False
     )
@@ -91,6 +93,28 @@ def test_provider_diagnostics_reports_credentials_and_connectivity():
     assert result.selected_provider == "polygon"
     assert result.credential_status == "Polygon API key missing"
     assert "Polygon API key missing" in result.warnings
+
+
+def test_provider_diagnostics_accepts_environment_credentials(monkeypatch):
+    class FakeSettings:
+        def get_all_settings(self):
+            return {
+                "selected_market_data_provider": "polygon",
+                "polygon_api_key": "",
+                "request_timeout_seconds": 10,
+                "max_retries": 2,
+                "rate_limit_sleep_seconds": 1,
+            }
+
+    monkeypatch.setenv("POLYGON_API_KEY", "env-key")
+
+    result = ProviderDiagnosticsService(settings_service=FakeSettings()).run(
+        connectivity_test=False
+    )
+
+    assert result.selected_provider == "polygon"
+    assert result.credential_status == "Configured"
+    assert result.warnings == []
 
 
 def test_provider_diagnostics_uses_testable_provider_factory():
@@ -181,6 +205,49 @@ def test_market_data_refresh_can_cancel_between_tickers():
     assert "Market data refresh cancelled" in result.warnings
 
 
+def test_market_data_refresh_persists_to_historical_ohlcv_cache():
+    class FakeProviderFactory:
+        def create(self):
+            provider = SimpleNamespace(
+                SOURCE="unit",
+                last_warnings=[],
+                last_errors=[],
+                fetch_daily_ohlcv=lambda ticker, start, end: [
+                    {
+                        "date": "2026-01-02",
+                        "open": 100,
+                        "high": 105,
+                        "low": 99,
+                        "close": 104,
+                        "volume": 1000000,
+                    }
+                ],
+            )
+            return SimpleNamespace(
+                success=True,
+                provider=provider,
+                provider_name="unit",
+                warnings=[],
+                errors=[],
+            )
+
+    manager = build_manager()
+    service = MarketDataRefreshService(
+        repository=manager,
+        provider_factory=FakeProviderFactory(),
+    )
+
+    result = service.refresh_ticker("AAPL", force_refresh=True)
+    rows = manager.fetch_ohlcv("AAPL")
+
+    assert result.success is True
+    assert result.refreshed is True
+    assert rows
+    assert rows[0]["ticker"] == "AAPL"
+    assert rows[0]["source"] == "unit"
+    manager.close()
+
+
 def test_screening_results_panel_market_data_controls_construct():
     app = QApplication.instance() or QApplication([])
     panel = ScreeningResultsPanel()
@@ -194,4 +261,20 @@ def test_screening_results_panel_market_data_controls_construct():
 
     assert panel.cancel_data_refresh_button.isEnabled() is True
     assert panel.market_data_status_label.text() == "Refreshing"
+    assert app is not None
+
+
+def test_screening_results_panel_ohlcv_coverage_summary_shows_cached_ratio():
+    app = QApplication.instance() or QApplication([])
+    panel = ScreeningResultsPanel()
+
+    panel.set_cache_coverage_summary(
+        [
+            {"ticker": "AAPL", "row_count": 10},
+            {"ticker": "MSFT", "row_count": 12},
+        ],
+        total_tickers=4,
+    )
+
+    assert panel.cache_coverage_label.text() == "OHLCV Coverage: 2 / 4 cached (50.0%)"
     assert app is not None

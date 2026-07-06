@@ -1,3 +1,4 @@
+import logging
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -65,6 +66,9 @@ from services.full_market_pipeline import (
     InstitutionalDataRefreshService,
     UniverseDownloaderService,
 )
+from services.bounce_validation_service import BounceValidationService
+from services.indicator_service import IndicatorService
+from services.support_service import SupportDetectionService
 from market_data.provider_factory import ProviderFactory
 from services.scan_preset_service import ScanPresetService
 from services.universe_scan_adapter import UniverseScanAdapter
@@ -95,6 +99,9 @@ from ui.beta_testing_worker import BetaTestingWorker
 from ui.settings_dialog import SettingsDialog
 from ui.about_dialog import AboutDialog
 from ui.design_system import DashboardDesignSystem as DesignSystem
+
+
+logger = logging.getLogger(__name__)
 
 
 class _LiveRefreshBridge(QObject):
@@ -198,6 +205,7 @@ class MainWindow(QMainWindow):
         self.restore_workspace_state()
         self.ensure_window_fits_screen()
         self.register_shortcuts()
+        self.initialize_pipeline_status_from_database()
 
         self.refresh_statistics()
         self.configure_live_refresh()
@@ -437,18 +445,18 @@ class MainWindow(QMainWindow):
         self.workspace_splitter = self.screener_workspace_splitter
         self.center_splitter = self.screener_workspace_splitter
 
-        self.price_chart.setMinimumSize(300, 140)
-        self.candidates_table.setMinimumSize(320, 160)
-        self.screener_filters_panel.setMinimumWidth(130)
-        self.screener_filters_panel.setMaximumWidth(220)
-        self.research_preview.setMinimumWidth(180)
-        self.trade_card.setMinimumWidth(180)
+        self.price_chart.setMinimumSize(240, 120)
+        self.candidates_table.setMinimumSize(260, 140)
+        self.screener_filters_panel.setMinimumWidth(110)
+        self.screener_filters_panel.setMaximumWidth(230)
+        self.research_preview.setMinimumWidth(140)
+        self.trade_card.setMinimumWidth(140)
 
         self.screener_workspace_splitter.addWidget(self.screener_filters_panel)
         self.screener_workspace_splitter.addWidget(self.candidates_table)
-        self.screener_workspace_splitter.setStretchFactor(0, 14)
-        self.screener_workspace_splitter.setStretchFactor(1, 86)
-        self.screener_workspace_splitter.setSizes([180, 980])
+        self.screener_workspace_splitter.setStretchFactor(0, 12)
+        self.screener_workspace_splitter.setStretchFactor(1, 88)
+        self.screener_workspace_splitter.setSizes([160, 1040])
 
         main_layout.addWidget(self.screener_workspace_splitter, stretch=4)
         main_layout.addWidget(self.pipeline_progress_panel)
@@ -620,6 +628,7 @@ class MainWindow(QMainWindow):
         dock = QDockWidget(title, self)
         dock.setObjectName(f"{title.replace(' ', '')}Dock")
         dock.setWidget(widget)
+        dock.setMinimumSize(160, 120)
         dock.setAllowedAreas(Qt.AllDockWidgetAreas)
         dock.setFeatures(
             QDockWidget.DockWidgetMovable
@@ -665,7 +674,7 @@ class MainWindow(QMainWindow):
         )
         self.resizeDocks(
             [self.watchlist_dock, self.activity_dock],
-            [980, 460],
+            [760, 680],
             Qt.Horizontal,
         )
 
@@ -674,7 +683,7 @@ class MainWindow(QMainWindow):
     def apply_default_layout(self):
 
         self.apply_default_dock_layout()
-        self.screener_workspace_splitter.setSizes([300, 1100])
+        self.screener_workspace_splitter.setSizes([220, 1180])
         self.update_screener_status(workspace_state="Default layout")
 
     # ----------------------------------------------------------
@@ -702,7 +711,7 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.activity_dock, self.results_dock)
         self.tabifyDockWidget(self.results_dock, self.research_lab_dock)
         self.research_dock.raise_()
-        self.screener_workspace_splitter.setSizes([240, 1160])
+        self.screener_workspace_splitter.setSizes([190, 1210])
         self.resizeDocks(
             [self.research_dock, self.chart_dock],
             [520, 300],
@@ -710,7 +719,7 @@ class MainWindow(QMainWindow):
         )
         self.resizeDocks(
             [self.watchlist_dock, self.activity_dock],
-            [340, 900],
+            [420, 920],
             Qt.Horizontal,
         )
         self.update_screener_status(workspace_state="Research layout")
@@ -741,7 +750,7 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.portfolio_dock, self.results_dock)
         self.tabifyDockWidget(self.results_dock, self.research_lab_dock)
         self.chart_dock.raise_()
-        self.screener_workspace_splitter.setSizes([260, 1140])
+        self.screener_workspace_splitter.setSizes([200, 1200])
         self.resizeDocks(
             [self.chart_dock, self.research_dock],
             [760, 420],
@@ -775,7 +784,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.chart_dock)
         self.tabifyDockWidget(self.chart_dock, self.research_dock)
         self.chart_dock.raise_()
-        self.screener_workspace_splitter.setSizes([210, 990])
+        self.screener_workspace_splitter.setSizes([170, 1030])
         self.resizeDocks([self.chart_dock], [360], Qt.Horizontal)
         self.update_screener_status(workspace_state="Compact layout")
 
@@ -1526,14 +1535,12 @@ class MainWindow(QMainWindow):
     def current_provider_text(self):
 
         try:
-            provider_status = self.settings_service.provider_status()
+            result = self.provider_factory().create()
         except Exception:
+            logger.exception("Unable to resolve current market data provider")
             return None
 
-        if not isinstance(provider_status, dict):
-            return None
-
-        return provider_status.get("current_provider")
+        return getattr(result, "provider_name", None)
 
     # ----------------------------------------------------------
 
@@ -1711,6 +1718,13 @@ class MainWindow(QMainWindow):
             self.log(running_message)
             return getattr(self, worker_attr)
 
+        if not self.pipeline_prerequisite_complete(task_name):
+            message = self.pipeline_prerequisite_message(task_name)
+            self.activity_panel.set_status(message)
+            self.add_activity(message, status="warning")
+            self.log(message)
+            return None
+
         self.mark_pipeline_running(task_name)
         self.activity_panel.set_status(status_message)
         self.activity_panel.set_progress(progress)
@@ -1734,12 +1748,129 @@ class MainWindow(QMainWindow):
     def on_background_task_failed(self, task_name, failed_status, error_message):
 
         self.activity_panel.set_status(failed_status)
-        self.mark_pipeline_complete(task_name)
+        self.mark_pipeline_error(task_name)
         self.add_activity(
             f"{failed_status}: {error_message}",
             status="danger",
         )
         self.log(f"{failed_status}: {error_message}")
+
+    # ----------------------------------------------------------
+
+    PIPELINE_PREREQUISITES = {
+        "prices": "universe",
+        "indicators": "prices",
+        "support": "indicators",
+        "bounce_validation": "support",
+        "screener": "bounce_validation",
+    }
+
+    PIPELINE_STEP_NAMES = {
+        "universe": "Update Universe",
+        "prices": "Download Prices",
+        "indicators": "Calculate Indicators",
+        "support": "Detect Support",
+        "bounce_validation": "Validate Bounces",
+        "screener": "Run Screener",
+    }
+
+    def pipeline_status_for(self, step_key):
+
+        if not hasattr(self, "pipeline_progress_panel"):
+            return None
+        return self.pipeline_progress_panel.status_for(step_key)
+
+    def pipeline_prerequisite_complete(self, step_key):
+
+        prerequisite = self.PIPELINE_PREREQUISITES.get(step_key)
+        if prerequisite is None:
+            return True
+        if prerequisite == "prices" and self.ohlcv_cache_has_sufficient_coverage():
+            return True
+        if prerequisite == "indicators" and self.persisted_stage_complete("indicators"):
+            return True
+        if prerequisite == "support" and self.persisted_stage_complete("support"):
+            return True
+        if prerequisite == "bounce_validation" and self.persisted_stage_complete("bounce_validation"):
+            return True
+        return self.pipeline_status_for(prerequisite) == "Complete"
+
+    def initialize_pipeline_status_from_database(self):
+
+        if not hasattr(self, "pipeline_progress_panel"):
+            return
+
+        report = self.pipeline_database_state_report()
+        if int(report.get("ticker_count") or 0) > 0:
+            self.pipeline_progress_panel.mark_complete("universe")
+        if self.ohlcv_cache_has_sufficient_coverage(report):
+            self.pipeline_progress_panel.mark_complete("prices")
+        if self.persisted_stage_complete("indicators", report) and self.pipeline_status_for("prices") == "Complete":
+            self.pipeline_progress_panel.mark_complete("indicators")
+        if self.persisted_stage_complete("support", report) and self.pipeline_status_for("indicators") == "Complete":
+            self.pipeline_progress_panel.mark_complete("support")
+        if self.persisted_stage_complete("bounce_validation", report) and self.pipeline_status_for("support") == "Complete":
+            self.pipeline_progress_panel.mark_complete("bounce_validation")
+
+    def pipeline_database_state_report(self):
+
+        report = {}
+        try:
+            service = self.data_coverage_readiness_service()
+            if service is not None:
+                report.update(dict(service.report() or {}))
+        except Exception as exc:
+            logger.debug("Pipeline database state initialization skipped: %s", exc)
+        report.update(self.persisted_pipeline_stage_counts())
+        return report
+
+    def persisted_pipeline_stage_counts(self):
+
+        repository = self.screening_repository()
+        counts = {}
+        for step_key, method_name in (
+            ("indicators", "indicator_count"),
+            ("support", "support_level_count"),
+            ("bounce_validation", "bounce_validation_count"),
+        ):
+            counts[f"{step_key}_count"] = self.safe_repository_count(
+                repository,
+                method_name,
+            )
+        return counts
+
+    @staticmethod
+    def safe_repository_count(repository, method_name):
+
+        method = getattr(repository, method_name, None)
+        if not callable(method):
+            return 0
+        try:
+            return int(method() or 0)
+        except Exception as exc:
+            logger.debug("Pipeline stage count failed for %s: %s", method_name, exc)
+            return 0
+
+    def ohlcv_cache_has_sufficient_coverage(self, report=None):
+
+        report = report if report is not None else self.pipeline_database_state_report()
+        return int(report.get("ohlcv_covered_count") or 0) > 0
+
+    def persisted_stage_complete(self, step_key, report=None):
+
+        report = report if report is not None else self.pipeline_database_state_report()
+        return int(report.get(f"{step_key}_count") or 0) > 0
+
+    def pipeline_prerequisite_message(self, step_key):
+
+        prerequisite = self.PIPELINE_PREREQUISITES.get(step_key)
+        prerequisite_name = self.PIPELINE_STEP_NAMES.get(prerequisite, prerequisite)
+        step_name = self.PIPELINE_STEP_NAMES.get(step_key, step_key)
+        status = self.pipeline_status_for(prerequisite) or "Pending"
+        return (
+            f"{step_name} is waiting for {prerequisite_name} to complete "
+            f"(current status: {status})."
+        )
 
     # ----------------------------------------------------------
 
@@ -1758,7 +1889,7 @@ class MainWindow(QMainWindow):
 
     def run_full_market_universe_update(self):
 
-        return self.universe_downloader_service().update_universe()
+        return self.worker_universe_downloader_service().update_universe()
 
     def on_universe_update_completed(self, result):
 
@@ -1811,9 +1942,9 @@ class MainWindow(QMainWindow):
         return self.start_background_task(
             "prices_worker",
             "prices",
-            self.controller.download_prices,
+            self.run_full_market_data_refresh,
             "Price download already running",
-            "Downloading prices...",
+            "Refreshing full market data...",
             10,
             self.on_download_prices_completed,
             "Price download failed",
@@ -1821,10 +1952,38 @@ class MainWindow(QMainWindow):
 
     def on_download_prices_completed(self, result):
 
-        results, total = result
-
-        for ticker, rows in results.items():
-            self.log(f"{ticker}: {rows} rows")
+        if hasattr(result, "details"):
+            total = sum(
+                getattr(row, "row_count", 0)
+                for row in self.market_data_cache_service().coverage()
+            )
+            ohlcv_result = (getattr(result, "details", {}) or {}).get("ohlcv")
+            persisted = getattr(ohlcv_result, "persisted", getattr(result, "persisted", 0))
+            processed = getattr(result, "processed", 0)
+            warnings = len(getattr(result, "warnings", []) or [])
+            errors = len(getattr(result, "errors", []) or [])
+            ohlcv_details = getattr(ohlcv_result, "details", {}) or {}
+            updated = int(ohlcv_details.get("refreshed_tickers") or 0)
+            skipped_current = int(ohlcv_details.get("skipped_current_tickers") or 0)
+            skipped_no_data = int(ohlcv_details.get("skipped_no_data_tickers") or 0)
+            failed = int(ohlcv_details.get("failed_tickers") or errors)
+            self.log(
+                "Full market data refresh: "
+                f"{persisted:,} OHLCV rows persisted; "
+                f"{processed:,} ticker(s); "
+                f"{warnings} warning(s); {errors} error(s)"
+            )
+            self.log(
+                "Download Prices summary: "
+                f"updated: {updated:,}; "
+                f"skipped_current: {skipped_current:,}; "
+                f"skipped_no_data: {skipped_no_data:,}; "
+                f"failed: {failed:,}"
+            )
+        else:
+            results, total = result
+            for ticker, rows in results.items():
+                self.log(f"{ticker}: {rows} rows")
 
         self.activity_panel.set_progress(100)
         self.activity_panel.set_status("Ready")
@@ -1832,11 +1991,11 @@ class MainWindow(QMainWindow):
         self.mark_refresh_completed()
         self.mark_pipeline_complete("prices")
         self.add_activity(
-            f"Price download complete: {total:,} database rows",
+            f"Price download complete: {total:,} cached OHLCV rows",
             status="success",
         )
         self.log("")
-        self.log(f"Database Rows: {total:,}")
+        self.log(f"Cached OHLCV Rows: {total:,}")
 
     # ----------------------------------------------------------
 
@@ -1845,13 +2004,21 @@ class MainWindow(QMainWindow):
         return self.start_background_task(
             "indicators_worker",
             "indicators",
-            self.indicator_controller.calculate_indicators,
+            self.run_worker_indicator_calculation,
             "Indicator calculation already running",
             "Calculating indicators...",
             20,
             self.on_calculate_indicators_completed,
             "Indicator calculation failed",
         )
+
+    def run_worker_indicator_calculation(self):
+
+        service = self.worker_indicator_service()
+        try:
+            return service.calculate_indicators()
+        finally:
+            service.close()
 
     def on_calculate_indicators_completed(self, results):
 
@@ -1893,13 +2060,21 @@ class MainWindow(QMainWindow):
         return self.start_background_task(
             "support_worker",
             "support",
-            self.support_controller.detect_support,
+            self.run_worker_support_detection,
             "Support detection already running",
             "Detecting support...",
             20,
             self.on_detect_support_completed,
             "Support detection failed",
         )
+
+    def run_worker_support_detection(self):
+
+        service = self.worker_support_detection_service()
+        try:
+            return service.detect_support()
+        finally:
+            service.close()
 
     def on_detect_support_completed(self, results):
 
@@ -1932,13 +2107,21 @@ class MainWindow(QMainWindow):
         return self.start_background_task(
             "bounce_validation_worker",
             "bounce_validation",
-            self.bounce_controller.validate_bounces,
+            self.run_worker_bounce_validation,
             "Bounce validation already running",
             "Validating bounces...",
             20,
             self.on_validate_bounces_completed,
             "Bounce validation failed",
         )
+
+    def run_worker_bounce_validation(self):
+
+        service = self.worker_bounce_validation_service()
+        try:
+            return service.validate_bounces()
+        finally:
+            service.close()
 
     def on_validate_bounces_completed(self, results):
 
@@ -1968,6 +2151,62 @@ class MainWindow(QMainWindow):
 
     def run_screener(self):
 
+        if not self.pipeline_prerequisite_complete("screener"):
+            message = self.pipeline_prerequisite_message("screener")
+            self.activity_panel.set_status(message)
+            self.add_activity(message, status="warning")
+            self.log(message)
+            return None
+
+        if (
+            hasattr(self, "screening_results_panel")
+            and not self.screening_results_panel.is_universe_scan_mode()
+            and not self.screening_results_panel.ticker_input.text().strip()
+        ):
+            self.screening_results_panel.screening_mode_combo.setCurrentText(
+                "Universe scan mode"
+            )
+
+        self.mark_pipeline_running("screener")
+        self.activity_panel.clear_log()
+        self.activity_panel.set_progress(0)
+        self.screening_started_at = datetime.now()
+        self.set_run_screener_running(True)
+        worker = self.start_screening_from_input()
+        if worker is None:
+            self.set_run_screener_running(False)
+            if hasattr(self, "pipeline_progress_panel"):
+                self.pipeline_progress_panel.update_step("screener", "Pending")
+        return worker
+
+    # ----------------------------------------------------------
+
+    def set_run_screener_running(self, running):
+
+        enabled = not bool(running)
+        if hasattr(self, "operations_toolbar"):
+            self.operations_toolbar.set_run_screener_enabled(enabled)
+        if hasattr(self, "run_screener_action"):
+            self.run_screener_action.setEnabled(enabled)
+
+    # ----------------------------------------------------------
+
+    def execute_screening_pipeline(
+        self,
+        status_prefix="Screener",
+        cancellation_callback=None,
+        update_full_market_status=False,
+    ):
+
+        if not self.pipeline_prerequisite_complete("screener"):
+            message = self.pipeline_prerequisite_message("screener")
+            self.activity_panel.set_status(message)
+            self.add_activity(message, status="warning")
+            self.log(message)
+            if update_full_market_status:
+                self.screening_results_panel.set_full_market_status(message)
+            return None
+
         self.mark_pipeline_running("screener")
         self.activity_panel.set_status("Running screener...")
         self.activity_panel.set_progress(10)
@@ -1977,35 +2216,32 @@ class MainWindow(QMainWindow):
         self.activity_panel.set_status("Processing candidates...")
         self.activity_panel.set_progress(50)
 
-        results = self.scoring_controller.run_screener()
+        def progress(message):
+            self.handle_screening_progress(message)
+            if update_full_market_status:
+                self.screening_results_panel.set_full_market_status(
+                    self.screening_results_panel.screening_status_label.text()
+                )
 
-        self.candidates_by_ticker = {
-            candidate.ticker: candidate
-            for candidate in results["candidates"]
-        }
-        self.register_refresh_tickers(results["candidates"])
-        self.candidates_table.populate(results["candidates"])
-        self.refresh_candidate_kpi()
-        self.update_open_detail_state()
-        self.last_screen_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.update_screener_status(
-            candidate_count=len(results["candidates"]),
-            last_screen_time=self.last_screen_time,
+        result = self.run_full_market_scan_pipeline(
+            progress_callback=progress,
+            cancellation_callback=cancellation_callback,
         )
-        self.refresh_dashboard()
-        self.update_dashboard_result_state(results["candidates"])
+        ranked_candidates, display_candidates = self.sync_screening_candidates_to_ui(
+            result
+        )
 
         self.activity_panel.set_progress(100)
 
         self.activity_panel.set_status("Screener Complete")
 
-        highest = self.highest_candidate(results["candidates"])
-        average_score = self.average_candidate_score(results["candidates"])
+        highest = self.highest_candidate(display_candidates)
+        average_score = self.average_candidate_score(display_candidates)
 
         self.log("Candidate screening complete")
-        self.log(f'Tickers analyzed: {results["processed"]:,}')
-        self.log(f'Skipped: {results["skipped"]:,}')
-        self.log(f'Candidates generated: {len(results["candidates"]):,}')
+        self.log(f"Tickers analyzed: {getattr(result, 'processed', 0):,}")
+        self.log("Skipped: 0")
+        self.log(f"Candidates generated: {len(display_candidates):,}")
 
         if highest is None:
             self.log("Highest score: None")
@@ -2016,12 +2252,131 @@ class MainWindow(QMainWindow):
             )
 
         self.log(f"Average score: {average_score:.1f}")
-        self.log(f'Elapsed time: {results["elapsed_seconds"]:.2f}s')
+        for warning in getattr(result, "warnings", []) or []:
+            self.log(f"Warning: {warning}")
+        for error in getattr(result, "errors", []) or []:
+            self.log(f"Error: {error}")
         self.mark_pipeline_complete("screener")
         self.add_activity(
-            f"Screener run complete: {len(results['candidates']):,} candidates",
-            status="success",
+            f"{status_prefix} run complete: {len(display_candidates):,} candidates",
+            status="success" if getattr(result, "success", True) else "warning",
         )
+        if update_full_market_status:
+            self.screening_results_panel.set_full_market_status(
+                f"Full market scan complete: {len(display_candidates)} ranked candidate(s)"
+            )
+        self.refresh_screening_run_history_view()
+        self.refresh_ranked_candidates_view()
+        self.refresh_full_market_coverage_report()
+        return result
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def ranked_candidates_from_pipeline_result(result):
+
+        details = getattr(result, "details", {}) or {}
+        return list(details.get("ranked_candidates") or getattr(result, "ranked_candidates", []) or [])
+
+    # ----------------------------------------------------------
+
+    def sync_screening_candidates_to_ui(self, result):
+
+        ranked_candidates = self.ranked_candidates_from_pipeline_result(result)
+        display_candidates = [
+            self.pipeline_candidate_to_display_candidate(candidate)
+            for candidate in ranked_candidates
+        ]
+        self.candidates_by_ticker = {
+            candidate.ticker: candidate
+            for candidate in display_candidates
+            if getattr(candidate, "ticker", None)
+        }
+        self.register_refresh_tickers(display_candidates)
+        self.candidates_table.populate(display_candidates)
+        table_rows = self.candidates_table.rowCount()
+        self.refresh_candidate_kpi()
+        self.update_open_detail_state()
+        self.last_screen_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.update_screener_status(
+            candidate_count=len(display_candidates),
+            last_screen_time=self.last_screen_time,
+        )
+        self.refresh_dashboard()
+        self.update_dashboard_result_state(display_candidates)
+        self.log(f"ranked_candidates produced: {len(ranked_candidates):,}")
+        self.log(f"display_candidates: {len(display_candidates):,}")
+        self.log(f"table rows populated: {table_rows:,}")
+        self.log(f"candidate KPI: {len(display_candidates):,}")
+        return ranked_candidates, display_candidates
+
+    # ----------------------------------------------------------
+
+    @classmethod
+    def pipeline_candidate_to_display_candidate(cls, candidate):
+
+        if hasattr(candidate, "primary_score_value"):
+            return candidate
+        category_scores = getattr(candidate, "category_scores", {}) or {}
+        source = getattr(candidate, "source", None)
+        company_name = cls.first_candidate_value(
+            [candidate, source],
+            "company_name",
+            "company",
+            "name",
+        )
+        return SimpleNamespace(
+            rank=getattr(candidate, "rank", None),
+            ticker=getattr(candidate, "ticker", None),
+            company_name=company_name,
+            primary_score_value=cls.numeric_candidate_value(candidate, "final_score"),
+            composite_score=SimpleNamespace(
+                value=cls.numeric_candidate_value(candidate, "final_score")
+            ),
+            score_map={
+                "quality_score": category_scores.get("quality_score"),
+                "institutional_score": category_scores.get("institutional_score"),
+                "technical_score": category_scores.get("technical_score"),
+                "support_score": category_scores.get("support_score"),
+                "bounce_score": category_scores.get("bounce_score"),
+            },
+            scores=[],
+            warnings=list(getattr(candidate, "warnings", []) or []),
+            opportunity_rating=getattr(candidate, "opportunity_rating", None),
+            grade=getattr(candidate, "grade", None),
+            confidence_level=getattr(candidate, "confidence_level", None),
+            setup_label=getattr(candidate, "setup_label", None),
+            source=candidate,
+        )
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def first_candidate_value(sources, *keys):
+
+        for source in sources:
+            for key in keys:
+                if isinstance(source, dict):
+                    value = source.get(key)
+                else:
+                    value = getattr(source, key, None)
+                if value not in (None, ""):
+                    return value
+        return None
+
+    # ----------------------------------------------------------
+
+    @staticmethod
+    def numeric_candidate_value(candidate, key):
+
+        if isinstance(candidate, dict):
+            value = candidate.get(key)
+        else:
+            value = getattr(candidate, key, None)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
 
     # ----------------------------------------------------------
 
@@ -2029,11 +2384,16 @@ class MainWindow(QMainWindow):
 
         candidate = getattr(self, "candidates_by_ticker", {}).get(ticker)
         detail = self.candidate_detail_for_ticker(ticker)
+        detail_candidate = detail.get("candidate") if isinstance(detail, dict) else None
 
-        if candidate is None and detail:
+        if candidate is None and detail and detail_candidate is None:
             window = StockDetailWindow(detail, self)
         else:
-            window = CandidateDetailWindow(candidate=candidate, detail=detail, parent=self)
+            window = CandidateDetailWindow(
+                candidate=candidate or detail_candidate,
+                detail=detail,
+                parent=self,
+            )
         window.show()
 
         if not hasattr(self, "detail_windows"):
@@ -2262,6 +2622,42 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def repository_factory(self):
+
+        explicit = getattr(self, "_repository_factory", None)
+        if explicit is not None:
+            return explicit
+        controller_factory = getattr(self.controller, "repository_factory", None)
+        if callable(controller_factory):
+            return controller_factory()
+        return self.screening_repository
+
+    # ----------------------------------------------------------
+
+    def worker_repository(self):
+
+        return self.repository_factory()()
+
+    # ----------------------------------------------------------
+
+    def worker_indicator_service(self):
+
+        return IndicatorService(database_manager=self.worker_repository())
+
+    # ----------------------------------------------------------
+
+    def worker_support_detection_service(self):
+
+        return SupportDetectionService(database_manager=self.worker_repository())
+
+    # ----------------------------------------------------------
+
+    def worker_bounce_validation_service(self):
+
+        return BounceValidationService(database_manager=self.worker_repository())
+
+    # ----------------------------------------------------------
+
     def parse_screening_tickers(self, ticker_text):
 
         tickers = []
@@ -2293,7 +2689,10 @@ class MainWindow(QMainWindow):
         explicit = getattr(self, "_market_data_refresh_service", None)
         if explicit is not None:
             return explicit
-        return MarketDataRefreshService(repository=self.screening_repository())
+        return MarketDataRefreshService(
+            repository=self.screening_repository(),
+            lookback_years=self.historical_ohlcv_lookback_years(),
+        )
 
     # ----------------------------------------------------------
 
@@ -2320,7 +2719,10 @@ class MainWindow(QMainWindow):
         explicit = getattr(self, "_provider_diagnostics_service", None)
         if explicit is not None:
             return explicit
-        return ProviderDiagnosticsService(settings_service=self.app_settings_service)
+        return ProviderDiagnosticsService(
+            settings_service=self.app_settings_service,
+            provider_factory=self.provider_factory(),
+        )
 
     # ----------------------------------------------------------
 
@@ -2330,6 +2732,15 @@ class MainWindow(QMainWindow):
         if explicit is not None:
             return explicit
         return ProviderFactory(settings_service=self.app_settings_service)
+
+    # ----------------------------------------------------------
+
+    def worker_provider_factory(self):
+
+        explicit = getattr(self, "_provider_factory", None)
+        if explicit is not None:
+            return explicit
+        return ProviderFactory(settings_service=AppSettingsService())
 
     # ----------------------------------------------------------
 
@@ -2345,6 +2756,18 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def worker_universe_downloader_service(self, repository=None, provider_factory=None):
+
+        explicit = getattr(self, "_universe_downloader_service", None)
+        if explicit is not None:
+            return explicit
+        return UniverseDownloaderService(
+            repository=repository or self.worker_repository(),
+            provider_factory=provider_factory or self.worker_provider_factory(),
+        )
+
+    # ----------------------------------------------------------
+
     def historical_data_update_service(self):
 
         explicit = getattr(self, "_historical_data_update_service", None)
@@ -2353,7 +2776,34 @@ class MainWindow(QMainWindow):
         return HistoricalDataUpdateService(
             repository=self.screening_repository(),
             refresh_service=self.market_data_refresh_service(),
+            lookback_years=self.historical_ohlcv_lookback_years(),
         )
+
+    # ----------------------------------------------------------
+
+    def worker_historical_data_update_service(self, repository=None, provider_factory=None):
+
+        repository = repository or self.worker_repository()
+        provider_factory = provider_factory or self.worker_provider_factory()
+        return HistoricalDataUpdateService(
+            repository=repository,
+            refresh_service=MarketDataRefreshService(
+                repository=repository,
+                provider_factory=provider_factory,
+                lookback_years=self.historical_ohlcv_lookback_years(),
+            ),
+            lookback_years=self.historical_ohlcv_lookback_years(),
+        )
+
+    # ----------------------------------------------------------
+
+    def historical_ohlcv_lookback_years(self):
+
+        try:
+            preferences = self.app_settings_service.get_preferences()
+        except Exception:
+            return 5
+        return getattr(preferences, "historical_ohlcv_lookback_years", 5)
 
     # ----------------------------------------------------------
 
@@ -2369,6 +2819,15 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def worker_fundamental_downloader_service(self, repository=None, provider_factory=None):
+
+        return FundamentalDownloaderService(
+            repository=repository or self.worker_repository(),
+            provider_factory=provider_factory or self.worker_provider_factory(),
+        )
+
+    # ----------------------------------------------------------
+
     def institutional_data_refresh_service(self):
 
         explicit = getattr(self, "_institutional_data_refresh_service", None)
@@ -2377,6 +2836,15 @@ class MainWindow(QMainWindow):
         return InstitutionalDataRefreshService(
             repository=self.screening_repository(),
             provider_factory=self.provider_factory(),
+        )
+
+    # ----------------------------------------------------------
+
+    def worker_institutional_data_refresh_service(self, repository=None, provider_factory=None):
+
+        return InstitutionalDataRefreshService(
+            repository=repository or self.worker_repository(),
+            provider_factory=provider_factory or self.worker_provider_factory(),
         )
 
     # ----------------------------------------------------------
@@ -2396,12 +2864,50 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def worker_full_market_refresh_orchestrator(self):
+
+        explicit = getattr(self, "_full_market_refresh_orchestrator", None)
+        if explicit is not None:
+            return explicit
+        repository = self.worker_repository()
+        provider_factory = self.worker_provider_factory()
+        return FullMarketRefreshOrchestrator(
+            repository=repository,
+            universe_service=self.worker_universe_downloader_service(
+                repository=repository,
+                provider_factory=provider_factory,
+            ),
+            historical_service=self.worker_historical_data_update_service(
+                repository=repository,
+                provider_factory=provider_factory,
+            ),
+            fundamental_service=self.worker_fundamental_downloader_service(
+                repository=repository,
+                provider_factory=provider_factory,
+            ),
+            institutional_service=self.worker_institutional_data_refresh_service(
+                repository=repository,
+                provider_factory=provider_factory,
+            ),
+        )
+
+    # ----------------------------------------------------------
+
     def full_market_scan_runner(self):
 
         explicit = getattr(self, "_full_market_scan_runner", None)
         if explicit is not None:
             return explicit
         return FullMarketScanRunner(repository=self.screening_repository())
+
+    # ----------------------------------------------------------
+
+    def worker_full_market_scan_runner(self):
+
+        explicit = getattr(self, "_full_market_scan_runner", None)
+        if explicit is not None:
+            return explicit
+        return FullMarketScanRunner(repository=self.worker_repository())
 
     # ----------------------------------------------------------
 
@@ -2444,6 +2950,10 @@ class MainWindow(QMainWindow):
         )
 
         def progress(event):
+            status_message = event.get("status_message")
+            if status_message:
+                self.screening_results_panel.set_full_market_status(status_message)
+                return
             current = event.get("current_ticker") or "--"
             processed = event.get("processed", event.get("processed_tickers", 0))
             total = event.get("total", event.get("total_tickers", 0))
@@ -2453,7 +2963,7 @@ class MainWindow(QMainWindow):
             )
 
         try:
-            result = self.full_market_refresh_orchestrator().refresh_all(
+            result = self.run_full_market_data_refresh(
                 progress_callback=progress,
                 cancellation_callback=lambda: getattr(
                     self,
@@ -2477,25 +2987,33 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------
 
+    def run_full_market_data_refresh(
+        self,
+        progress_callback=None,
+        cancellation_callback=None,
+    ):
+
+        return self.worker_full_market_refresh_orchestrator().refresh_all(
+            progress_callback=progress_callback,
+            cancellation_callback=cancellation_callback,
+        )
+
+    # ----------------------------------------------------------
+
     def run_full_market_scan(self):
 
         self.full_market_cancel_requested = False
         self.screening_results_panel.set_full_market_active(True, "Running full market scan")
         try:
-            result = self.full_market_scan_runner().run_scan(
+            return self.execute_screening_pipeline(
+                status_prefix="Full market scan",
+                update_full_market_status=True,
                 cancellation_callback=lambda: getattr(
                     self,
                     "full_market_cancel_requested",
                     False,
                 ),
             )
-            self.screening_results_panel.set_full_market_status(
-                f"Full market scan complete: {result.persisted} ranked candidate(s)"
-            )
-            self.refresh_screening_run_history_view()
-            self.refresh_ranked_candidates_view()
-            self.refresh_full_market_coverage_report()
-            return result
         except Exception as exc:
             self.screening_results_panel.set_full_market_status(
                 f"Full market scan failed: {exc}"
@@ -2503,6 +3021,19 @@ class MainWindow(QMainWindow):
             return None
         finally:
             self.screening_results_panel.set_full_market_active(False)
+
+    # ----------------------------------------------------------
+
+    def run_full_market_scan_pipeline(
+        self,
+        progress_callback=None,
+        cancellation_callback=None,
+    ):
+
+        return self.worker_full_market_scan_runner().run_scan(
+            progress_callback=progress_callback,
+            cancellation_callback=cancellation_callback,
+        )
 
     # ----------------------------------------------------------
 
@@ -2619,7 +3150,14 @@ class MainWindow(QMainWindow):
             coverage = self.market_data_cache_service().coverage()
         except Exception:
             coverage = []
-        self.screening_results_panel.set_cache_coverage_summary(coverage)
+        try:
+            total_tickers = len(self.universe_scan_tickers())
+        except Exception:
+            total_tickers = None
+        self.screening_results_panel.set_cache_coverage_summary(
+            coverage,
+            total_tickers=total_tickers,
+        )
         return coverage
 
     # ----------------------------------------------------------
@@ -2654,8 +3192,11 @@ class MainWindow(QMainWindow):
 
         try:
             result = self.provider_diagnostics_service().run(connectivity_test=True)
+            resolved = getattr(result, "resolved_provider", None) or result.selected_provider
+            provider_class = getattr(result, "provider_class", None) or "--"
             status = (
-                f"Provider {result.selected_provider}: {result.credential_status}; "
+                f"Provider {resolved}: {result.credential_status}; "
+                f"class {provider_class}; "
                 f"connectivity {result.connectivity_status}; retries {result.max_retries}"
             )
         except Exception as exc:
@@ -3395,21 +3936,10 @@ class MainWindow(QMainWindow):
 
     def create_screening_worker(self, tickers):
 
-        repository = self.screening_repository()
-        pipeline_adapter = None
-        if repository is not None:
-            from services.candidate_pipeline_adapter import CandidatePipelineAdapter
-            pipeline_adapter = CandidatePipelineAdapter(repository)
-        from services.screening_orchestrator import ScreeningOrchestrator
-        orchestrator = ScreeningOrchestrator(
-            market_data_refresh_service=self.market_data_refresh_service(),
-            pipeline_adapter=pipeline_adapter,
-            repository=repository,
-        )
         return ScreeningWorker(
             tickers=tickers,
-            repository=repository,
-            orchestrator=orchestrator,
+            repository_factory=self.repository_factory(),
+            market_data_lookback_years=self.historical_ohlcv_lookback_years(),
             parent=self,
         )
 
@@ -3417,7 +3947,11 @@ class MainWindow(QMainWindow):
 
     def handle_screening_started(self, message):
 
+        self.set_run_screener_running(True)
         self.screening_results_panel.set_screening_active(True, message)
+        self.activity_panel.set_status(message)
+        self.activity_panel.set_progress(0)
+        self.add_activity(message, status="info")
 
     # ----------------------------------------------------------
 
@@ -3429,9 +3963,30 @@ class MainWindow(QMainWindow):
             total = message.get("total_tickers", 0)
             pct = message.get("progress_percentage", 0)
             status = message.get("status_message") or "Screening"
+            candidates = message.get(
+                "candidates_found",
+                message.get(
+                    "candidate_count",
+                    len(getattr(self, "candidates_by_ticker", {}) or {}),
+                ),
+            )
+            started_at = getattr(self, "screening_started_at", None)
+            elapsed = (
+                (datetime.now() - started_at).total_seconds()
+                if started_at is not None
+                else 0
+            )
             text = f"{status} ({processed}/{total}, {pct:.0f}%, current: {current})"
+            activity_text = (
+                f"{status}: {processed}/{total} tickers scanned, "
+                f"{candidates} candidates found, current stage: {status}, "
+                f"elapsed {elapsed:.1f}s"
+            )
+            self.activity_panel.set_progress(int(pct))
+            self.activity_panel.set_status(activity_text)
         else:
             text = str(message)
+            self.activity_panel.set_status(text)
         self.screening_results_panel.set_screening_status(text)
 
     # ----------------------------------------------------------
@@ -3439,10 +3994,24 @@ class MainWindow(QMainWindow):
     def handle_screening_completed(self, result):
 
         count = len(getattr(result, "ranked_candidates", []) or [])
+        ranked_candidates, display_candidates = self.sync_screening_candidates_to_ui(
+            result
+        )
+        count = len(ranked_candidates)
         self.screening_results_panel.set_screening_active(
             False,
             f"Screening complete: {count} ranked candidate(s)",
         )
+        self.activity_panel.set_progress(100)
+        self.activity_panel.set_status(
+            f"Screening complete: {count} candidates found"
+        )
+        self.add_activity(
+            f"Screener run complete: {len(display_candidates):,} candidates",
+            status="success",
+        )
+        self.mark_pipeline_complete("screener")
+        self.set_run_screener_running(False)
         self.screening_worker = None
         if self.app_preference("auto_refresh_results", True):
             self.refresh_screening_run_history_view()
@@ -3457,6 +4026,16 @@ class MainWindow(QMainWindow):
             False,
             f"Screening cancelled: {count} ranked candidate(s)",
         )
+        self.activity_panel.set_status(
+            f"Screening cancelled: {count} candidates found"
+        )
+        self.add_activity(
+            f"Screener cancelled: {count:,} candidates",
+            status="warning",
+        )
+        if hasattr(self, "pipeline_progress_panel"):
+            self.pipeline_progress_panel.update_step("screener", "Pending")
+        self.set_run_screener_running(False)
         self.screening_worker = None
         if self.app_preference("auto_refresh_results", True):
             self.refresh_screening_run_history_view()
@@ -3470,6 +4049,10 @@ class MainWindow(QMainWindow):
             False,
             f"Screening failed: {message}",
         )
+        self.activity_panel.set_status(f"Screening failed: {message}")
+        self.add_activity(f"Screener failed: {message}", status="error")
+        self.mark_pipeline_error("screener")
+        self.set_run_screener_running(False)
         self.screening_worker = None
 
     # ----------------------------------------------------------
@@ -4051,12 +4634,19 @@ class MainWindow(QMainWindow):
         if hasattr(self, "refresh_scheduler"):
             self.refresh_scheduler.stop()
 
-        worker = getattr(self, "screening_worker", None)
-        if worker is not None and hasattr(worker, "isRunning") and worker.isRunning():
-            if hasattr(worker, "request_cancel"):
-                worker.request_cancel()
-            worker.quit()
-            worker.wait(1000)
+        self.data_refresh_cancel_requested = True
+        self.full_market_cancel_requested = True
+        for worker_attr in (
+            "screening_worker",
+            "universe_worker",
+            "prices_worker",
+            "indicators_worker",
+            "support_worker",
+            "bounce_validation_worker",
+            "algorithm_validation_worker",
+            "beta_testing_worker",
+        ):
+            self.stop_worker(worker_attr)
 
         self.controller.close()
         self.indicator_controller.close()
@@ -4066,3 +4656,17 @@ class MainWindow(QMainWindow):
         self.chart_controller.close()
 
         super().closeEvent(event)
+
+    # ----------------------------------------------------------
+
+    def stop_worker(self, worker_attr):
+
+        worker = getattr(self, worker_attr, None)
+        if worker is not None and hasattr(worker, "isRunning") and worker.isRunning():
+            if hasattr(worker, "request_cancel"):
+                worker.request_cancel()
+            worker.quit()
+            if not worker.wait(1500):
+                worker.terminate()
+                worker.wait(1000)
+        setattr(self, worker_attr, None)

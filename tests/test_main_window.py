@@ -1,12 +1,15 @@
 from pathlib import Path
+import threading
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QApplication, QDockWidget, QHeaderView
 
 from ui import main_window as main_window_module
 from ui.main_window import MainWindow
+from tests.full_market_test_utils import build_manager
 
 
 @pytest.fixture(scope="module")
@@ -306,6 +309,56 @@ class FakeResultsExportService:
         }
 
 
+class FakeFullMarketScanRunner:
+    def __init__(self):
+        self.calls = 0
+        self.results = []
+
+    def run_scan(self, progress_callback=None, cancellation_callback=None):
+        self.calls += 1
+        if progress_callback:
+            progress_callback(
+                {
+                    "total_tickers": 1,
+                    "processed_tickers": 1,
+                    "current_ticker": "AAPL",
+                    "progress_percentage": 100,
+                    "status_message": "Processed AAPL",
+                }
+            )
+        candidates = self.results.pop(0) if self.results else [
+            SimpleNamespace(
+                rank=1,
+                ticker="AAPL",
+                final_score=91.0,
+                category_scores={
+                    "quality_score": 90.0,
+                    "institutional_score": 76.0,
+                    "technical_score": 84.0,
+                    "support_score": 91.0,
+                    "bounce_score": 80.0,
+                },
+                warnings=[],
+                source=SimpleNamespace(company_name="Apple Inc."),
+                opportunity_rating="Elite",
+                grade="A",
+                confidence_level="HIGH",
+                setup_label="Elite",
+            )
+        ]
+        return SimpleNamespace(
+            success=True,
+            processed=1,
+            persisted=len(candidates),
+            warnings=[],
+            errors=[],
+            details={
+                "run_id": "fake-full-market-run",
+                "ranked_candidates": candidates,
+            },
+        )
+
+
 class FakeScreeningWorker(QObject):
     started_signal = Signal(str)
     progress_signal = Signal(object)
@@ -318,6 +371,7 @@ class FakeScreeningWorker(QObject):
         super().__init__(parent)
         self.tickers = tickers or []
         self.repository = repository
+        self.repository_factory = kwargs.get("repository_factory")
         self.started = False
         self.cancel_requested = False
         FakeScreeningWorker.instances.append(self)
@@ -366,6 +420,7 @@ def patched_window(monkeypatch, app):
     )
 
     window = MainWindow()
+    window._full_market_scan_runner = FakeFullMarketScanRunner()
     yield window
     window.close()
 
@@ -703,6 +758,434 @@ def test_main_window_update_universe_uses_full_market_downloader(
     assert downloader.calls == 1
 
 
+def test_main_window_download_prices_uses_full_market_refresh_pipeline(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    window.mark_pipeline_complete("universe")
+    captured = {}
+    refresh_result = SimpleNamespace(
+        success=True,
+        processed=3,
+        persisted=12,
+        warnings=[],
+        errors=[],
+        details={
+            "ohlcv": SimpleNamespace(
+                success=True,
+                processed=3,
+                persisted=12,
+                warnings=[],
+                errors=[],
+            )
+        },
+    )
+    monkeypatch.setattr(
+        window.controller,
+        "download_prices",
+        lambda: (_ for _ in ()).throw(AssertionError("legacy path called")),
+    )
+    monkeypatch.setattr(window, "run_full_market_data_refresh", lambda: refresh_result)
+
+    def fake_start_background_task(*args):
+        captured["task_callable"] = args[2]
+        captured["status_message"] = args[4]
+        return "worker"
+
+    monkeypatch.setattr(window, "start_background_task", fake_start_background_task)
+
+    worker = window.download_prices()
+    result = captured["task_callable"]()
+
+    assert worker == "worker"
+    assert captured["task_callable"] == window.run_full_market_data_refresh
+    assert captured["status_message"] == "Refreshing full market data..."
+    assert result.persisted == 12
+
+
+def test_main_window_download_prices_completion_reports_cached_ohlcv_rows(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    monkeypatch.setattr(
+        window,
+        "market_data_cache_service",
+        lambda: SimpleNamespace(
+            coverage=lambda: [
+                SimpleNamespace(ticker="AAPL", row_count=5),
+                SimpleNamespace(ticker="MSFT", row_count=7),
+            ]
+        ),
+    )
+
+    window.on_download_prices_completed(
+        SimpleNamespace(
+            success=True,
+            processed=2,
+            persisted=12,
+            warnings=[],
+            errors=[],
+            details={
+                "ohlcv": SimpleNamespace(
+                    success=True,
+                    processed=2,
+                    persisted=12,
+                    warnings=[],
+                    errors=[],
+                )
+            },
+        )
+    )
+
+    assert "12 cached OHLCV rows" in window.dashboard.activity_entries[-1]["message"]
+
+
+def test_pipeline_blocks_indicators_until_prices_complete(patched_window):
+    window = patched_window
+    window.mark_pipeline_complete("universe")
+
+    worker = window.calculate_indicators()
+
+    assert worker is None
+    assert getattr(window, "indicators_worker", None) is None
+    assert window.pipeline_progress_panel.status_for("indicators") == "Pending"
+    assert "waiting for Download Prices" in window.activity_panel.status_text()
+
+
+def test_pipeline_restart_initializes_prices_from_populated_ohlcv_cache(
+    monkeypatch,
+    app,
+):
+    manager = build_manager()
+    manager.upsert_universe_symbols(
+        [
+            {
+                "ticker": "AAPL",
+                "company_name": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "security_type": "Common Stock",
+                "active": 1,
+            },
+        ]
+    )
+    manager.upsert_ohlcv(
+        "AAPL",
+        [
+            {
+                "date": "2026-07-02",
+                "open": 100,
+                "high": 101,
+                "low": 99,
+                "close": 100.5,
+                "volume": 1_000_000,
+            },
+        ],
+        "unit",
+    )
+
+    class RestartMarketController(FakeMarketController):
+        def __init__(self):
+            super().__init__()
+            self.market = SimpleNamespace(db=manager)
+
+    class FakeTaskWorker(QObject):
+        completed_signal = Signal(object)
+        failed_signal = Signal(str)
+        finished = Signal()
+
+        def __init__(self, task_name, task_callable, parent=None):
+            super().__init__(parent)
+            self.task_name = task_name
+            self.task_callable = task_callable
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+    monkeypatch.setattr(main_window_module, "MarketController", RestartMarketController)
+    monkeypatch.setattr(main_window_module, "IndicatorController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "SupportController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "BounceController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "ScoringController", FakeScoringController)
+    monkeypatch.setattr(main_window_module, "ChartController", FakeChartController)
+    monkeypatch.setattr(main_window_module, "WatchlistController", FakeWatchlistController)
+    monkeypatch.setattr(main_window_module, "TradeJournalController", FakeTradeJournalController)
+    monkeypatch.setattr(main_window_module, "MarketStatusService", FakeMarketStatusService)
+    monkeypatch.setattr(main_window_module, "RefreshScheduler", FakeRefreshScheduler)
+    monkeypatch.setattr(main_window_module, "WorkspaceStateService", FakeWorkspaceStateService)
+    monkeypatch.setattr(main_window_module, "AppSettingsService", FakeAppSettingsService)
+    monkeypatch.setattr(main_window_module, "TaskWorker", FakeTaskWorker)
+    FakeWorkspaceStateService.state = {}
+    FakeWorkspaceStateService.saved_states = []
+
+    window = MainWindow()
+    try:
+        assert window.pipeline_progress_panel.status_for("universe") == "Complete"
+        assert window.pipeline_progress_panel.status_for("prices") == "Complete"
+
+        worker = window.calculate_indicators()
+
+        assert worker is not None
+        assert worker.started is True
+        assert window.pipeline_progress_panel.status_for("indicators") == "Running"
+        assert "waiting for Download Prices" not in window.activity_panel.status_text()
+    finally:
+        window.close()
+
+
+def seed_pipeline_repository(
+    manager,
+    indicators=False,
+    support=False,
+    bounce_validation=False,
+):
+    manager.upsert_universe_symbols(
+        [
+            {
+                "ticker": "AAPL",
+                "company_name": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "security_type": "Common Stock",
+                "active": 1,
+            },
+        ]
+    )
+    manager.upsert_ohlcv(
+        "AAPL",
+        [
+            {
+                "date": "2026-07-02",
+                "open": 100,
+                "high": 101,
+                "low": 99,
+                "close": 100.5,
+                "volume": 1_000_000,
+            },
+        ],
+        "unit",
+    )
+    if indicators:
+        manager.cursor.execute(
+            """
+            INSERT INTO technical_indicators (ticker, date, sma20, sma50, sma200)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("AAPL", "2026-07-02", 100.0, 98.0, 95.0),
+        )
+    if support:
+        manager.cursor.execute(
+            """
+            INSERT INTO support_levels
+            (
+                ticker,
+                zone_low,
+                zone_high,
+                zone_mid,
+                touches,
+                strength_score,
+                current_price,
+                distance_from_current,
+                distance_from_current_pct,
+                first_touch_date,
+                last_touch_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("AAPL", 98.0, 100.0, 99.0, 4, 85.0, 100.5, 1.5, 1.49, "2026-06-01", "2026-07-02"),
+        )
+    if bounce_validation:
+        support_id = manager.cursor.execute(
+            "SELECT id FROM support_levels WHERE ticker = ?",
+            ("AAPL",),
+        ).fetchone()["id"]
+        manager.cursor.execute(
+            """
+            INSERT INTO bounce_validations
+            (
+                support_level_id,
+                ticker,
+                total_touches,
+                successful_bounces,
+                failed_breakdowns,
+                neutral_touches,
+                bounce_success_rate,
+                average_bounce_pct,
+                median_bounce_pct,
+                average_days_to_bounce_peak,
+                current_distance_to_support,
+                current_distance_to_support_pct
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (support_id, "AAPL", 4, 3, 0, 1, 75.0, 8.0, 7.5, 5.0, 1.5, 1.49),
+        )
+    manager.connection.commit()
+
+
+def build_restarted_window(monkeypatch, manager):
+    class RestartMarketController(FakeMarketController):
+        def __init__(self):
+            super().__init__()
+            self.market = SimpleNamespace(db=manager)
+
+    monkeypatch.setattr(main_window_module, "MarketController", RestartMarketController)
+    monkeypatch.setattr(main_window_module, "IndicatorController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "SupportController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "BounceController", FakeProcessingController)
+    monkeypatch.setattr(main_window_module, "ScoringController", FakeScoringController)
+    monkeypatch.setattr(main_window_module, "ChartController", FakeChartController)
+    monkeypatch.setattr(main_window_module, "WatchlistController", FakeWatchlistController)
+    monkeypatch.setattr(main_window_module, "TradeJournalController", FakeTradeJournalController)
+    monkeypatch.setattr(main_window_module, "MarketStatusService", FakeMarketStatusService)
+    monkeypatch.setattr(main_window_module, "RefreshScheduler", FakeRefreshScheduler)
+    monkeypatch.setattr(main_window_module, "WorkspaceStateService", FakeWorkspaceStateService)
+    monkeypatch.setattr(main_window_module, "AppSettingsService", FakeAppSettingsService)
+    FakeWorkspaceStateService.state = {}
+    FakeWorkspaceStateService.saved_states = []
+    window = MainWindow()
+    window._full_market_scan_runner = FakeFullMarketScanRunner()
+    return window
+
+
+def test_pipeline_partial_restart_restores_completed_stages_in_order(
+    monkeypatch,
+    app,
+):
+    manager = build_manager()
+    seed_pipeline_repository(manager, indicators=True)
+
+    window = build_restarted_window(monkeypatch, manager)
+    try:
+        assert window.pipeline_progress_panel.status_for("universe") == "Complete"
+        assert window.pipeline_progress_panel.status_for("prices") == "Complete"
+        assert window.pipeline_progress_panel.status_for("indicators") == "Complete"
+        assert window.pipeline_progress_panel.status_for("support") == "Pending"
+        assert window.pipeline_progress_panel.status_for("bounce_validation") == "Pending"
+
+        assert window.run_screener() is None
+        assert "waiting for Validate Bounces" in window.activity_panel.status_text()
+    finally:
+        window.close()
+
+
+def test_pipeline_completed_pipeline_restart_restores_all_prerequisites(
+    monkeypatch,
+    app,
+):
+    manager = build_manager()
+    seed_pipeline_repository(
+        manager,
+        indicators=True,
+        support=True,
+        bounce_validation=True,
+    )
+
+    window = build_restarted_window(monkeypatch, manager)
+    try:
+        assert window.pipeline_progress_panel.status_for("universe") == "Complete"
+        assert window.pipeline_progress_panel.status_for("prices") == "Complete"
+        assert window.pipeline_progress_panel.status_for("indicators") == "Complete"
+        assert window.pipeline_progress_panel.status_for("support") == "Complete"
+        assert window.pipeline_progress_panel.status_for("bounce_validation") == "Complete"
+
+        FakeScreeningWorker.instances = []
+        monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+        window.screening_results_panel.ticker_input.setText("AAPL")
+
+        result = window.run_screener()
+
+        assert result is not None
+        assert result.started is True
+        assert window._full_market_scan_runner.calls == 0
+        assert window.pipeline_progress_panel.status_for("screener") == "Running"
+        result.completed_signal.emit(SimpleNamespace(ranked_candidates=[]))
+        assert window.pipeline_progress_panel.status_for("screener") == "Complete"
+    finally:
+        window.close()
+
+
+def test_pipeline_restart_preserves_stage_order_for_inconsistent_persisted_data(
+    monkeypatch,
+    app,
+):
+    manager = build_manager()
+    seed_pipeline_repository(manager, indicators=False, support=True)
+
+    window = build_restarted_window(monkeypatch, manager)
+    try:
+        assert window.pipeline_progress_panel.status_for("prices") == "Complete"
+        assert window.pipeline_progress_panel.status_for("indicators") == "Pending"
+        assert window.pipeline_progress_panel.status_for("support") == "Pending"
+        assert window.pipeline_progress_panel.status_for("bounce_validation") == "Pending"
+    finally:
+        window.close()
+
+
+@pytest.mark.parametrize(
+    ("method_name", "worker_attr", "required_step"),
+    [
+        ("download_prices", "prices_worker", "Update Universe"),
+        ("calculate_indicators", "indicators_worker", "Download Prices"),
+        ("detect_support", "support_worker", "Calculate Indicators"),
+        ("validate_bounces", "bounce_validation_worker", "Detect Support"),
+        ("run_screener", None, "Validate Bounces"),
+    ],
+)
+def test_pipeline_blocks_each_stage_until_previous_stage_completes(
+    patched_window,
+    method_name,
+    worker_attr,
+    required_step,
+):
+    window = patched_window
+
+    result = getattr(window, method_name)()
+
+    assert result is None
+    if worker_attr is not None:
+        assert getattr(window, worker_attr, None) is None
+    assert f"waiting for {required_step}" in window.activity_panel.status_text()
+
+
+def test_pipeline_blocks_screener_while_prices_are_running(patched_window):
+    window = patched_window
+    window.mark_pipeline_complete("universe")
+    window.mark_pipeline_running("prices")
+
+    result = window.run_screener()
+
+    assert result is None
+    assert window._full_market_scan_runner.calls == 0
+    assert window.pipeline_progress_panel.status_for("prices") == "Running"
+    assert window.pipeline_progress_panel.status_for("screener") == "Pending"
+    assert "waiting for Validate Bounces" in window.activity_panel.status_text()
+
+
+def test_pipeline_restarting_prices_clears_downstream_complete_statuses(
+    patched_window,
+):
+    window = patched_window
+    for step_key in (
+        "universe",
+        "prices",
+        "indicators",
+        "support",
+        "bounce_validation",
+        "screener",
+    ):
+        window.mark_pipeline_complete(step_key)
+
+    window.mark_pipeline_running("prices")
+
+    assert window.pipeline_progress_panel.status_for("prices") == "Running"
+    assert window.pipeline_progress_panel.status_for("indicators") == "Pending"
+    assert window.pipeline_progress_panel.status_for("support") == "Pending"
+    assert window.pipeline_progress_panel.status_for("bounce_validation") == "Pending"
+    assert window.pipeline_progress_panel.status_for("screener") == "Pending"
+
+
 def test_main_window_universe_completion_handles_pipeline_result(
     patched_window,
     monkeypatch,
@@ -729,6 +1212,372 @@ def test_main_window_universe_completion_handles_pipeline_result(
     assert refreshed == [True]
     assert window.activity_panel.status_text() == "Ready"
     assert "1,100 persisted" in window.dashboard.activity_entries[-1]["message"]
+
+
+def test_main_window_status_uses_factory_resolved_provider(patched_window):
+    window = patched_window
+    FakeAppSettingsService.preferences = SimpleNamespace(
+        default_scan_mode="Manual ticker input",
+        default_scan_preset="Institutional Quality",
+        max_scan_size=250,
+        large_scan_warning_threshold=250,
+        default_export_directory="exports/results",
+        ui_density="NORMAL",
+        auto_refresh_results=True,
+        show_rejected_candidates=True,
+        selected_market_data_provider="local_csv",
+        polygon_api_key="polygon-key",
+        fmp_api_key="",
+        alpaca_api_key="",
+        alpaca_api_secret="",
+        request_timeout_seconds=10,
+        max_retries=2,
+        rate_limit_sleep_seconds=1,
+    )
+
+    assert window.current_provider_text() == "polygon"
+
+
+def test_provider_diagnostics_reports_factory_resolved_provider(patched_window):
+    window = patched_window
+    FakeAppSettingsService.preferences = SimpleNamespace(
+        default_scan_mode="Manual ticker input",
+        default_scan_preset="Institutional Quality",
+        max_scan_size=250,
+        large_scan_warning_threshold=250,
+        default_export_directory="exports/results",
+        ui_density="NORMAL",
+        auto_refresh_results=True,
+        show_rejected_candidates=True,
+        selected_market_data_provider="local_csv",
+        polygon_api_key="polygon-key",
+        fmp_api_key="",
+        alpaca_api_key="",
+        alpaca_api_secret="",
+        request_timeout_seconds=10,
+        max_retries=2,
+        rate_limit_sleep_seconds=1,
+    )
+
+    result = window.provider_diagnostics_service().run(connectivity_test=False)
+
+    assert result.selected_provider == "local_csv"
+    assert result.resolved_provider == "polygon"
+    assert result.provider_class == "PolygonMarketDataProvider"
+
+
+class ThreadBoundRepository:
+    def __init__(self):
+        self.owner = threading.get_ident()
+        self.universe = []
+        self.ohlcv = {}
+        self.fundamentals = {}
+        self.institutional = {}
+        self.sma_rows = 0
+        self.committed = False
+        self.closed = False
+
+    def assert_owner(self):
+        if threading.get_ident() != self.owner:
+            raise RuntimeError("SQLite objects created in a thread can only be used in that same thread")
+
+    def upsert_universe_symbols(self, records):
+        self.assert_owner()
+        self.universe = list(records or [])
+        return len(self.universe)
+
+    def deactivate_stale_universe_symbols(self, active_tickers):
+        self.assert_owner()
+        return 0
+
+    def fetch_eligible_universe_tickers(self):
+        self.assert_owner()
+        return [record["ticker"] for record in self.universe] or ["AAPL"]
+
+    def get_all_tickers(self):
+        self.assert_owner()
+        return ["AAPL", "MSFT"]
+
+    def fetch_ohlcv_cache_coverage(self, ticker=None):
+        self.assert_owner()
+        if ticker is not None:
+            return []
+        return [
+            {"ticker": ticker, "last_date": "2026-07-01"}
+            for ticker, rows in self.ohlcv.items()
+            if rows
+        ]
+
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        self.assert_owner()
+        rows = list(self.ohlcv.get(ticker, []))
+        if rows:
+            return rows
+        return [
+            {
+                "date": f"2026-01-{((index - 1) % 28) + 1:02d}",
+                "open": float(value),
+                "high": float(value + 1),
+                "low": float(value - 1),
+                "close": float(value),
+                "volume": 1000 + value,
+            }
+            for index, value in enumerate(range(1, 221), start=1)
+        ]
+
+    def get_price_history(self, ticker):
+        self.assert_owner()
+        return pd.DataFrame(
+            {
+                "Open": [float(value) for value in range(1, 221)],
+                "High": [float(value + 1) for value in range(1, 221)],
+                "Low": [float(value - 1) for value in range(1, 221)],
+                "Close": [float(value) for value in range(1, 221)],
+                "Volume": [1000 + value for value in range(1, 221)],
+            }
+        )
+
+    def upsert_ohlcv(self, ticker, rows, source=None):
+        self.assert_owner()
+        normalized = [
+            row.__dict__ if hasattr(row, "__dict__") else dict(row)
+            for row in (rows or [])
+        ]
+        self.ohlcv[ticker] = normalized
+        return len(normalized)
+
+    def save_sma(self, dataframe):
+        self.assert_owner()
+        self.sma_rows += len(dataframe)
+        return len(dataframe)
+
+    def upsert_fundamental_data(self, records):
+        self.assert_owner()
+        for record in records or []:
+            self.fundamentals[record["ticker"]] = record
+        return len(records or [])
+
+    def fetch_missing_fundamental_tickers(self, tickers):
+        self.assert_owner()
+        return [ticker for ticker in tickers or [] if ticker not in self.fundamentals]
+
+    def upsert_institutional_data(self, record):
+        self.assert_owner()
+        self.institutional[record["ticker"]] = record
+        return 1
+
+    def get_institutional_data_for_tickers(self, tickers):
+        self.assert_owner()
+        return {
+            ticker: self.institutional[ticker]
+            for ticker in tickers or []
+            if ticker in self.institutional
+        }
+
+    def commit(self):
+        self.assert_owner()
+        self.committed = True
+
+    def close(self):
+        self.assert_owner()
+        self.closed = True
+
+
+class ThreadBoundProvider:
+    def fetch_universe_symbols(self, exchange=None):
+        if exchange == "NYSE":
+            return []
+        return [
+            {
+                "ticker": "AAPL",
+                "company_name": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "security_type": "Common Stock",
+                "active": True,
+            }
+        ]
+
+    def fetch_daily_ohlcv(self, ticker, start_date=None, end_date=None):
+        return [
+            {
+                "ticker": ticker,
+                "date": "2026-07-01",
+                "open": 100,
+                "high": 105,
+                "low": 99,
+                "close": 104,
+                "volume": 1000000,
+            }
+        ]
+
+    def fetch_fundamentals(self, ticker):
+        return {"ticker": ticker, "company_name": f"{ticker} Corp"}
+
+    def fetch_institutional_data(self, ticker):
+        return {"ticker": ticker, "institutional_ownership_pct": 70}
+
+
+class ThreadBoundProviderFactory:
+    def create(self):
+        return SimpleNamespace(
+            success=True,
+            provider=ThreadBoundProvider(),
+            provider_name="thread_provider",
+            warnings=[],
+            errors=[],
+        )
+
+
+class ThreadBoundScreeningOrchestrator:
+    def __init__(self, repository):
+        self.repository = repository
+
+    def run(self, tickers, **kwargs):
+        self.repository.assert_owner()
+        return SimpleNamespace(
+            run_id="thread-run",
+            tickers_processed=len(tickers or []),
+            ranked_candidates=[SimpleNamespace(ticker="AAPL")],
+            warnings=[],
+            errors=[],
+        )
+
+
+def run_in_thread(callable_):
+    result = {}
+
+    def target():
+        try:
+            result["value"] = callable_()
+        except Exception as exc:
+            result["error"] = exc
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    if "error" in result:
+        raise result["error"]
+    return result.get("value")
+
+
+def test_update_universe_worker_uses_thread_owned_repository(patched_window):
+    window = patched_window
+    created = []
+    window._repository_factory = lambda: created.append(ThreadBoundRepository()) or created[-1]
+    window._provider_factory = ThreadBoundProviderFactory()
+
+    result = run_in_thread(window.run_full_market_universe_update)
+
+    assert result.success is True
+    assert result.persisted == 1
+    assert created[0].owner != threading.get_ident()
+
+
+def test_refresh_market_data_worker_uses_thread_owned_repository(patched_window):
+    window = patched_window
+    created = []
+    window._repository_factory = lambda: created.append(ThreadBoundRepository()) or created[-1]
+    window._provider_factory = ThreadBoundProviderFactory()
+
+    result = run_in_thread(window.run_full_market_data_refresh)
+
+    assert result.success is True
+    assert result.processed == 1
+    assert result.persisted >= 1
+    assert created[0].owner != threading.get_ident()
+
+
+def test_indicator_worker_uses_thread_owned_repository_and_closes_it(patched_window):
+    window = patched_window
+    created = []
+    window._repository_factory = lambda: created.append(ThreadBoundRepository()) or created[-1]
+
+    result = run_in_thread(window.run_worker_indicator_calculation)
+
+    assert result["processed"] == 2
+    assert result["rows"] == 440
+    assert created[0].owner != threading.get_ident()
+    assert created[0].committed is True
+    assert created[0].closed is True
+
+
+def test_multiple_indicator_workers_use_independent_thread_local_repositories(
+    patched_window,
+):
+    window = patched_window
+    created = []
+    created_lock = threading.Lock()
+    barrier = threading.Barrier(3)
+
+    def repository_factory():
+        repository = ThreadBoundRepository()
+        with created_lock:
+            created.append(repository)
+        return repository
+
+    window._repository_factory = repository_factory
+    results = []
+    errors = []
+
+    def target():
+        try:
+            barrier.wait(timeout=5)
+            results.append(window.run_worker_indicator_calculation())
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=target) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait(timeout=5)
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert errors == []
+    assert [result["processed"] for result in results] == [2, 2]
+    assert len(created) == 2
+    assert len({repository.owner for repository in created}) == 2
+    assert all(repository.owner != threading.get_ident() for repository in created)
+    assert all(repository.committed for repository in created)
+    assert all(repository.closed for repository in created)
+
+
+def test_full_market_scan_worker_uses_thread_owned_repository(patched_window):
+    window = patched_window
+
+    def repository_factory():
+        repository = ThreadBoundRepository()
+        repository.universe = [
+            {
+                "ticker": "AAPL",
+                "company_name": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "security_type": "Common Stock",
+                "active": True,
+            }
+        ]
+        repository.ohlcv["AAPL"] = [{"ticker": "AAPL", "date": "2026-07-01"}]
+        return repository
+
+    window._repository_factory = repository_factory
+
+    def scan_runner_factory():
+        repository = window.worker_repository()
+        return main_window_module.FullMarketScanRunner(
+            repository=repository,
+            screening_orchestrator=ThreadBoundScreeningOrchestrator(repository),
+        )
+
+    window.worker_full_market_scan_runner = scan_runner_factory
+
+    result = run_in_thread(window.run_full_market_scan_pipeline)
+
+    assert result.success is True
+    assert result.processed == 1
+    assert result.persisted == 1
 
 
 def test_main_window_dashboard_results_table_sorting_enabled(patched_window):
@@ -790,21 +1639,52 @@ def test_main_window_preset_actions_update_status(patched_window):
     assert window.active_preset_status.text() == "Active preset: Default"
 
 
-def test_main_window_run_screen_updates_results_and_status(patched_window):
+def test_main_window_run_screen_updates_results_and_status(
+    patched_window,
+    monkeypatch,
+):
     window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+    for step_key in ("universe", "prices", "indicators", "support", "bounce_validation"):
+        window.mark_pipeline_complete(step_key)
+    window.screening_results_panel.ticker_input.setText("AAPL")
 
-    window.run_screener()
+    worker = window.run_screener()
 
-    assert window.scoring_controller.calls == 1
-    assert window.candidates_table.rowCount() == 1
-    assert window.candidate_count_status.text() == "Candidate count: 1"
-    assert "Last screen time: --" not in window.last_screen_time_status.text()
-    assert window.dashboard.opportunity_labels["candidates_screened"].text() == "1"
-    assert window.dashboard.opportunity_labels["high_conviction"].text() == "1"
-    assert window.dashboard.best_opportunities_table.rowCount() == 1
-    assert window.dashboard.best_opportunities_table.item(0, 0).text() == "AAPL"
-    assert window.dashboard.section_frames["institutional_activity"].isHidden() is False
-    assert window.pipeline_progress_panel.status_for("screener") == "Complete"
+    assert window.scoring_controller.calls == 0
+    assert window._full_market_scan_runner.calls == 0
+    assert worker is window.screening_worker
+    assert worker.started is True
+    assert window.pipeline_progress_panel.status_for("screener") == "Running"
+    assert window.operations_toolbar.buttons["run_screener"].isEnabled() is False
+
+
+def test_run_screener_starts_worker_instead_of_blocking_pipeline(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+    for step_key in ("universe", "prices", "indicators", "support", "bounce_validation"):
+        window.mark_pipeline_complete(step_key)
+    window.screening_results_panel.ticker_input.setText("MSFT")
+    called = []
+    monkeypatch.setattr(
+        window,
+        "execute_screening_pipeline",
+        lambda *args, **kwargs: called.append(True),
+    )
+
+    toolbar_result = window.run_screener()
+
+    assert called == []
+    assert len(FakeScreeningWorker.instances) == 1
+    assert toolbar_result is FakeScreeningWorker.instances[0]
+    assert toolbar_result.started is True
+    assert toolbar_result.tickers == ["MSFT"]
+    assert window.operations_toolbar.buttons["run_screener"].isEnabled() is False
 
 
 def test_main_window_dashboard_refresh_handles_missing_data(patched_window):
@@ -822,6 +1702,8 @@ def test_main_window_dashboard_refresh_handles_missing_data(patched_window):
 
 def test_main_window_dashboard_clear_reset_behavior(patched_window):
     window = patched_window
+    for step_key in ("universe", "prices", "indicators", "support", "bounce_validation"):
+        window.mark_pipeline_complete(step_key)
     window.run_screener()
 
     window.dashboard.clear()
@@ -1028,7 +1910,7 @@ def test_main_window_screening_results_view_construction(patched_window):
         "Export Full Run Package JSON"
     )
     assert panel.scroll_area.widgetResizable() is True
-    assert panel.scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+    assert panel.scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarAsNeeded
 
 
 def test_main_window_results_tables_have_professional_configuration(patched_window):
@@ -1040,8 +1922,10 @@ def test_main_window_results_tables_have_professional_configuration(patched_wind
     assert ranked.isSortingEnabled() is True
     assert ranked.showGrid() is False
     assert ranked.verticalHeader().defaultSectionSize() >= 30
-    assert ranked.horizontalHeader().sectionResizeMode(6) == QHeaderView.Stretch
-    assert history.horizontalHeader().sectionResizeMode(0) == QHeaderView.Stretch
+    assert ranked.horizontalHeader().sectionResizeMode(6) == QHeaderView.Interactive
+    assert ranked.horizontalHeader().stretchLastSection() is False
+    assert history.horizontalHeader().sectionResizeMode(0) == QHeaderView.Interactive
+    assert history.horizontalHeader().stretchLastSection() is False
 
 
 def test_main_window_results_status_rendering(patched_window):
@@ -1926,7 +2810,8 @@ def test_main_window_run_screening_button_starts_worker(
 
     assert len(FakeScreeningWorker.instances) == 1
     assert FakeScreeningWorker.instances[0].tickers == ["AAPL", "MSFT"]
-    assert FakeScreeningWorker.instances[0].repository is repository
+    assert FakeScreeningWorker.instances[0].repository is None
+    assert FakeScreeningWorker.instances[0].repository_factory() is repository
     assert FakeScreeningWorker.instances[0].started is True
 
 
@@ -2028,9 +2913,55 @@ def test_main_window_screening_completion_refreshes_results(
         "Screening complete: 1 ranked candidate(s)"
     )
     assert window.screening_results_panel.ranked_candidates_table.item(0, 1).text() == "AAPL"
+    assert window.candidates_table.rowCount() == 1
+    assert window.candidate_count_status.text() == "Candidate count: 1"
+    assert window.dashboard.opportunity_labels["candidates_screened"].text() == "1"
     assert window.screening_results_panel.run_history_table.item(0, 0).text() == "run-complete"
     assert repository.ranked_calls == 1
     assert repository.history_calls == 1
+
+
+def test_main_window_screening_completion_syncs_ranked_candidates_to_dashboard(
+    patched_window,
+    monkeypatch,
+):
+    window = patched_window
+    FakeScreeningWorker.instances = []
+    monkeypatch.setattr(main_window_module, "ScreeningWorker", FakeScreeningWorker)
+    ranked_candidates = [
+        SimpleNamespace(
+            rank=index,
+            ticker=f"T{index:02d}",
+            final_score=90 - index / 10,
+            category_scores={
+                "quality_score": 80,
+                "institutional_score": 50,
+                "technical_score": 82,
+                "support_score": 84,
+                "bounce_score": 86,
+            },
+            grade="A",
+            confidence_level="HIGH",
+            setup_label="Validated Bounce",
+            warnings=[],
+            rejection_reasons=[],
+        )
+        for index in range(1, 25)
+    ]
+
+    worker = window.start_screening_from_input("AAPL")
+    worker.completed_signal.emit(SimpleNamespace(ranked_candidates=ranked_candidates))
+
+    assert window.candidates_table.rowCount() == 24
+    assert len(window.candidates_by_ticker) == 24
+    assert window.candidate_count_status.text() == "Candidate count: 24"
+    assert window.dashboard.opportunity_labels["candidates_screened"].text() == "24"
+    assert window.dashboard.best_opportunities_table.rowCount() == 5
+    assert window.dashboard.best_opportunities_table.item(0, 0).text() == "T01"
+    assert window.activity_panel.log_text().count("ranked_candidates produced: 24") == 1
+    assert "display_candidates: 24" in window.activity_panel.log_text()
+    assert "table rows populated: 24" in window.activity_panel.log_text()
+    assert "candidate KPI: 24" in window.activity_panel.log_text()
 
 
 def test_main_window_auto_refresh_results_setting_can_disable_refresh(
@@ -2161,6 +3092,8 @@ def test_main_window_refresh_results_action_is_wired_to_dashboard_refresh(patche
 
 def test_main_window_reset_clears_results_and_filters(patched_window):
     window = patched_window
+    for step_key in ("universe", "prices", "indicators", "support", "bounce_validation"):
+        window.mark_pipeline_complete(step_key)
     window.run_screener()
 
     result = window.reset_screener_filters()

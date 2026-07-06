@@ -12,6 +12,7 @@ from analysis.relative_strength import (
 )
 from config.logging_config import logger
 from database.manager import DatabaseManager
+from services.ohlcv_cache_access import fetch_ohlcv_frame
 
 
 class RelativeStrengthService:
@@ -41,7 +42,7 @@ class RelativeStrengthService:
 
         started_at = perf_counter()
 
-        benchmark_history = self.db.get_price_history(self.benchmark_ticker)
+        benchmark_history = fetch_ohlcv_frame(self.db, self.benchmark_ticker)
 
         if benchmark_history.empty:
             results["benchmark_available"] = False
@@ -66,7 +67,7 @@ class RelativeStrengthService:
             if ticker == self.benchmark_ticker:
                 continue
 
-            stock_history = self.db.get_price_history(ticker)
+            stock_history = fetch_ohlcv_frame(self.db, ticker)
 
             if stock_history.empty:
                 logger.info("Skipping %s because no price history exists", ticker)

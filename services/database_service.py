@@ -13,14 +13,18 @@ class DatabaseService:
 
     def save_price_history(self, ticker, history):
 
-        return self.manager.save_price_history(
+        return self.manager.upsert_ohlcv(
             ticker,
             history,
+            "database_service",
         )
 
     def total_rows(self):
 
-        return self.manager.get_total_rows()
+        return sum(
+            int(row.get("row_count") or 0)
+            for row in self.manager.fetch_ohlcv_cache_coverage()
+        )
 
     def close(self):
 

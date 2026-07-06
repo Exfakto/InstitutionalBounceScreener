@@ -27,6 +27,9 @@ class FakeChartDatabase:
 
         return self.prices
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return self.get_price_history(ticker)
+
     def get_technical_indicators(self, ticker):
         return self.indicators
 

@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from types import SimpleNamespace
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
@@ -77,6 +78,19 @@ def test_provider_factory_selection_polygon():
     assert result.success is True
     assert result.provider_name == "polygon"
     assert isinstance(result.provider, PolygonMarketDataProvider)
+
+
+def test_polygon_ohlcv_without_start_date_uses_bounded_default_window():
+    opener = FakeOpener(responses=[FakeResponse({"results": []})])
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=opener, max_retries=0),
+    )
+
+    provider.fetch_daily_ohlcv("AAPL", end_date="2026-07-05")
+
+    assert "/1900-01-01/" not in opener.calls[0][0]
+    assert "/2021-07-05/2026-07-05" in opener.calls[0][0]
 
 
 def test_provider_factory_defaults_to_polygon_when_local_csv_and_env_key_present(monkeypatch):
@@ -174,6 +188,27 @@ def test_polygon_successful_mocked_ohlcv_response():
     assert rows[0].close == 104
     assert rows[0].source == "polygon"
     assert "apiKey=key" in opener.calls[0][0]
+    query = parse_qs(urlparse(opener.calls[0][0]).query)
+    assert query["limit"] == ["50000"]
+
+
+def test_polygon_ohlcv_default_range_ends_today():
+    opener = FakeOpener(responses=[FakeResponse({"results": []})])
+    provider = PolygonMarketDataProvider(
+        api_key="key",
+        http_client=HttpClient(opener=opener),
+    )
+
+    rows = provider.fetch_daily_ohlcv("A")
+
+    expected_start = date.today().replace(year=date.today().year - 5).isoformat()
+    expected_end = date.today().isoformat()
+    assert rows == []
+    assert "/1900-01-01/" not in opener.calls[0][0]
+    assert f"/range/1/day/{expected_start}/{expected_end}" in opener.calls[0][0]
+    assert provider.last_warnings == [
+        f"Polygon returned zero OHLCV rows for A from {expected_start} to {expected_end}"
+    ]
 
 
 def test_polygon_universe_symbols_nasdaq_maps_to_xnas():
@@ -204,7 +239,7 @@ def test_polygon_universe_symbols_nasdaq_maps_to_xnas():
     symbols = provider.fetch_universe_symbols(exchange="NASDAQ")
     query = parse_qs(urlparse(opener.calls[0][0]).query)
 
-    assert query["exchange"] == ["XNAS"]
+    assert query["primary_exchange"] == ["XNAS"]
     assert query["market"] == ["stocks"]
     assert query["active"] == ["true"]
     assert query["limit"] == ["1000"]
@@ -253,7 +288,7 @@ def test_polygon_universe_symbols_nyse_maps_to_xnys():
     symbols = provider.fetch_universe_symbols(exchange="NYSE")
     query = parse_qs(urlparse(opener.calls[0][0]).query)
 
-    assert query["exchange"] == ["XNYS"]
+    assert query["primary_exchange"] == ["XNYS"]
     assert symbols[0]["ticker"] == "IBM"
     assert symbols[0]["exchange"] == "NYSE"
 
@@ -421,11 +456,11 @@ def test_http_client_rate_limit_behavior():
     sleeps = []
     opener = FakeOpener(
         responses=[FakeResponse({"ok": True})],
-        errors=[http_error(429), None],
+        errors=[http_error(429), http_error(429), http_error(429), None],
     )
     client = HttpClient(
         opener=opener,
-        max_retries=1,
+        max_retries=3,
         rate_limit_sleep_seconds=2,
         sleeper=sleeps.append,
     )
@@ -433,7 +468,8 @@ def test_http_client_rate_limit_behavior():
     response = client.get_json("https://example.test/data")
 
     assert response.success is True
-    assert sleeps == [2]
+    assert response.attempts == 4
+    assert sleeps == [2, 4, 8]
     assert "Rate limit" in response.warnings[0]
 
 

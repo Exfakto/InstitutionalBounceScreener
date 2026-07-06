@@ -9,7 +9,7 @@ class FakeLiveDataService:
         self.results = results or {}
         self.calls = []
 
-    def get_price_history(self, ticker, start=None, end=None):
+    def fetch_daily_ohlcv(self, ticker, start=None, end=None):
         self.calls.append((ticker, start, end))
         result = self.results.get(ticker)
 
@@ -18,15 +18,43 @@ class FakeLiveDataService:
 
         return result
 
+    def get_price_history(self, ticker, start=None, end=None):
+        return self.fetch_daily_ohlcv(ticker, start=start, end=end)
+
 
 class FakeDatabaseManager:
     def __init__(self):
         self.rows = {}
+        self.ohlcv_rows = {}
         self.commit_count = 0
         self.cursor = FakeCursor(self)
 
     def commit(self):
         self.commit_count += 1
+
+    def upsert_ohlcv(self, ticker, rows, source=None):
+        normalized_rows = []
+        for row in rows or []:
+            stored = dict(row)
+            stored["source"] = source
+            normalized_rows.append(stored)
+            self.rows[(ticker, stored["date"])] = stored
+        self.ohlcv_rows[ticker] = {
+            "rows": normalized_rows,
+            "source": source,
+        }
+        return len(rows or [])
+
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        rows = []
+        for (row_ticker, row_date), row in self.rows.items():
+            if (
+                row_ticker == ticker
+                and (start_date is None or row_date >= start_date)
+                and (end_date is None or row_date <= end_date)
+            ):
+                rows.append({"date": row_date, **dict(row)})
+        return sorted(rows, key=lambda row: row["date"])
 
 
 class FakeCursor:
@@ -100,6 +128,8 @@ def test_sync_one_ticker_inserts_new_rows():
     assert summary["updated"] == 0
     assert summary["skipped"] == 0
     assert database.rows[("AAPL", "2026-01-02")]["close"] == 104.0
+    assert database.ohlcv_rows["AAPL"]["rows"][0]["close"] == 104.0
+    assert database.ohlcv_rows["AAPL"]["source"] == "fake"
     assert live.calls == [("AAPL", "2026-01-01", "2026-01-31")]
 
 

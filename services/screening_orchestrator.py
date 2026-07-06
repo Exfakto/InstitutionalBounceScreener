@@ -4,6 +4,7 @@ Backend orchestration for institutional bounce screening runs.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -12,9 +13,17 @@ from services.bounce_composite_scoring_engine import BounceCompositeScoringEngin
 from services.bounce_detection_engine import BounceDetectionEngine
 from services.candidate_pipeline_adapter import CandidatePipelineAdapter
 from services.candidate_ranking_engine import CandidateRankingEngine
+from services.institutional_data_provider import (
+    LocalInstitutionalDataProvider,
+    UnavailableInstitutionalDataProvider,
+)
 from services.institutional_intelligence_engine import InstitutionalIntelligenceEngine
+from services.ohlcv_cache_access import fetch_ohlcv_rows
 from services.support_zone_engine import SupportZoneEngine
 from services.technical_indicator_engine import TechnicalIndicatorEngine
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -42,6 +51,7 @@ class ScreeningOrchestrator:
         bounce_engine=None,
         technical_engine=None,
         institutional_engine=None,
+        institutional_data_provider=None,
         composite_engine=None,
         pipeline_adapter=None,
         repository=None,
@@ -54,13 +64,33 @@ class ScreeningOrchestrator:
         self.support_engine = support_engine or SupportZoneEngine()
         self.bounce_engine = bounce_engine or BounceDetectionEngine()
         self.technical_engine = technical_engine or TechnicalIndicatorEngine()
-        self.institutional_engine = institutional_engine or InstitutionalIntelligenceEngine()
-        self.composite_engine = composite_engine or BounceCompositeScoringEngine()
         self.pipeline_adapter = pipeline_adapter
         if self.pipeline_adapter is None and repository is not None:
             self.pipeline_adapter = CandidatePipelineAdapter(repository)
         self.repository = repository or getattr(self.pipeline_adapter, "repository", None)
+        institutional_data_provider = (
+            institutional_data_provider
+            or self.default_institutional_data_provider(self.repository)
+        )
+        self.institutional_engine = institutional_engine or InstitutionalIntelligenceEngine(
+            provider=institutional_data_provider
+        )
+        self.composite_engine = composite_engine or BounceCompositeScoringEngine()
         self.batch_size = max(1, int(batch_size or 50))
+
+    @staticmethod
+    def default_institutional_data_provider(repository):
+        if repository is None:
+            return UnavailableInstitutionalDataProvider()
+        if not all(
+            hasattr(repository, method_name)
+            for method_name in (
+                "get_institutional_data",
+                "get_institutional_data_for_tickers",
+            )
+        ):
+            return UnavailableInstitutionalDataProvider()
+        return LocalInstitutionalDataProvider(repository)
 
     def run(
         self,
@@ -86,6 +116,10 @@ class ScreeningOrchestrator:
             "institutional": {},
             "composite": {},
         }
+        self.log_institutional_provider()
+        run_cache["institutional"].update(
+            self.load_institutional_signals(normalized_tickers)
+        )
         processed = 0
         cancelled = False
         self.create_run_record(
@@ -331,6 +365,10 @@ class ScreeningOrchestrator:
         )
 
     def fetch_price_history(self, ticker):
+        rows = fetch_ohlcv_rows(self.repository, ticker)
+        if rows:
+            return self.normalize_price_rows(rows)
+
         if self.market_data_refresh_service is not None:
             result = self.market_data_refresh_service.refresh_ticker(ticker)
             warnings = []
@@ -349,7 +387,11 @@ class ScreeningOrchestrator:
         if self.price_history_provider is None:
             return []
 
-        if hasattr(self.price_history_provider, "get_price_history"):
+        if hasattr(self.price_history_provider, "fetch_ohlcv"):
+            prices = self.price_history_provider.fetch_ohlcv(ticker)
+        elif hasattr(self.price_history_provider, "fetch_daily_ohlcv"):
+            prices = self.price_history_provider.fetch_daily_ohlcv(ticker)
+        elif hasattr(self.price_history_provider, "get_price_history"):
             prices = self.price_history_provider.get_price_history(ticker)
         elif hasattr(self.price_history_provider, "fetch_price_history"):
             prices = self.price_history_provider.fetch_price_history(ticker)
@@ -357,6 +399,42 @@ class ScreeningOrchestrator:
             prices = self.price_history_provider(ticker)
 
         return self.normalize_price_rows(prices)
+
+    def load_institutional_signals(self, tickers):
+        provider = self.institutional_provider()
+        signals = {}
+        if hasattr(self.institutional_engine, "score_tickers"):
+            try:
+                signals = self.institutional_engine.score_tickers(tickers) or {}
+            except Exception as exc:
+                logger.warning("Institutional records loaded: 0")
+                logger.warning("Institutional data preload failed: %s", exc)
+                return {}
+        count = self.count_loaded_institutional_records(signals)
+        logger.info("Institutional records loaded: %s", count)
+        return signals
+
+    def log_institutional_provider(self):
+        provider = self.institutional_provider()
+        logger.info(
+            "Institutional provider: %s",
+            provider.__class__.__name__ if provider is not None else "None",
+        )
+
+    def institutional_provider(self):
+        return getattr(self.institutional_engine, "provider", None)
+
+    @staticmethod
+    def count_loaded_institutional_records(signals):
+        count = 0
+        for signal in (signals or {}).values():
+            raw_data = ScreeningOrchestrator.value(signal, "raw_institutional_data")
+            if raw_data is None:
+                continue
+            if InstitutionalIntelligenceEngine.all_core_fields_missing(raw_data):
+                continue
+            count += 1
+        return count
 
     def score_ticker_cached(self, ticker, cache):
         prices = self.cached_value(cache["prices"], ticker, self.fetch_price_history)

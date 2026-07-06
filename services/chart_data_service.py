@@ -7,6 +7,7 @@ from __future__ import annotations
 import pandas as pd
 
 from database.manager import DatabaseManager
+from services.ohlcv_cache_access import fetch_ohlcv_rows
 from services.chart_models import (
     BounceMarker,
     CandidateChartModel,
@@ -32,7 +33,7 @@ class ChartDataService:
         """
 
         warnings = []
-        prices = self.price_history_records(self.db.get_price_history(ticker))
+        prices = self.row_records(fetch_ohlcv_rows(self.db, ticker))
         indicators = self.row_records(self.db.get_technical_indicators(ticker))
         prices = self.merge_indicators(prices, indicators)
 

@@ -18,7 +18,7 @@ class LiveDataService:
     def __init__(self, provider_manager: ProviderManager | None = None) -> None:
         self.provider_manager = provider_manager or ProviderManager()
 
-    def get_price_history(
+    def fetch_daily_ohlcv(
         self,
         ticker: str,
         start: Any = None,
@@ -35,6 +35,15 @@ class LiveDataService:
             start=start,
             end=end,
         )
+
+    def get_price_history(
+        self,
+        ticker: str,
+        start: Any = None,
+        end: Any = None,
+    ) -> ProviderResult:
+        """Compatibility alias for provider-backed OHLCV fetches."""
+        return self.fetch_daily_ohlcv(ticker, start=start, end=end)
 
     def get_company_profile(self, ticker: str) -> ProviderResult:
         """Return provider company profile data."""

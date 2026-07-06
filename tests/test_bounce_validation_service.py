@@ -44,6 +44,9 @@ class FakeBounceDatabase:
             index=pd.date_range("2026-01-01", periods=3),
         )
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return self.get_price_history(ticker)
+
     def save_bounce_validations(self, validations):
         self.saved = validations
         return len(validations)

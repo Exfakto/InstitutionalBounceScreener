@@ -19,6 +19,9 @@ class FakeTrendStrengthDatabase:
     def get_price_history(self, ticker):
         return self.histories.get(ticker, pd.DataFrame())
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return self.get_price_history(ticker)
+
     def close(self):
         self.closed = True
 

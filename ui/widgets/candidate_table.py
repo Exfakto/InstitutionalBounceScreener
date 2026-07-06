@@ -53,10 +53,12 @@ class CandidateTable(QTableWidget):
         self.setIconSize(QSize(32, 32))
         self.setSortingEnabled(False)
         self.setWordWrap(False)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(46)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.horizontalHeader().setStretchLastSection(True)
+        self.horizontalHeader().setStretchLastSection(False)
         self.horizontalHeader().setMinimumSectionSize(104)
         self.horizontalHeader().setSectionsClickable(True)
         self.horizontalHeader().sectionClicked.connect(self.handle_header_sort)
@@ -98,7 +100,7 @@ class CandidateTable(QTableWidget):
                 self.setItem(row, column, item)
 
         self.apply_default_column_widths()
-        self.horizontalHeader().setStretchLastSection(True)
+        self.horizontalHeader().setStretchLastSection(False)
         self._populating = False
 
     def handle_header_sort(self, column):

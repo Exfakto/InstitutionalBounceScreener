@@ -8,7 +8,7 @@ class FakeLiveDataService:
         self.calls = []
         self.failure = failure
 
-    def get_price_history(self, ticker, start=None, end=None):
+    def fetch_daily_ohlcv(self, ticker, start=None, end=None):
         self.calls.append((ticker, start, end))
 
         if self.failure:
@@ -23,6 +23,9 @@ class FakeLiveDataService:
             message="refresh ok",
             source="fake_live_data",
         )
+
+    def get_price_history(self, ticker, start=None, end=None):
+        return self.fetch_daily_ohlcv(ticker, start=start, end=end)
 
 
 class FakeTimer:

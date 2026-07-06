@@ -134,9 +134,8 @@ def test_historical_data_update_incremental_and_continue():
     result = HistoricalDataUpdateService(repository=manager, refresh_service=refresh).update_history(["AAPL", "MSFT"])
 
     assert result.processed == 2
-    assert refresh.calls[0][0] == "AAPL"
-    assert refresh.calls[0][1] == "2026-01-02"
-    assert refresh.calls[1][0] == "MSFT"
+    assert ("AAPL", "2026-01-02", None, False) in refresh.calls
+    assert any(call[0] == "MSFT" for call in refresh.calls)
     manager.close()
 
 

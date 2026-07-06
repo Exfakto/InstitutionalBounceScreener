@@ -2,6 +2,7 @@ from time import perf_counter
 
 from config.logging_config import logger
 from database.manager import DatabaseManager
+from services.ohlcv_cache_access import fetch_ohlcv_frame
 from support import SupportStrength, SupportZoneClusterer, SwingLowDetector
 
 
@@ -39,7 +40,7 @@ class SupportDetectionService:
 
         for ticker in tickers:
 
-            dataframe = self.db.get_price_history(ticker)
+            dataframe = fetch_ohlcv_frame(self.db, ticker)
 
             if dataframe.empty:
                 logger.info("Skipping %s because no price history exists", ticker)

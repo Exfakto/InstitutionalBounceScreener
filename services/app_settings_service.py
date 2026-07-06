@@ -26,8 +26,9 @@ class AppPreferences:
     alpaca_api_key: str = ""
     alpaca_api_secret: str = ""
     request_timeout_seconds: int = 10
-    max_retries: int = 2
+    max_retries: int = 3
     rate_limit_sleep_seconds: int = 1
+    historical_ohlcv_lookback_years: int = 5
 
 
 class AppSettingsService:
@@ -135,6 +136,10 @@ class AppSettingsService:
                     data.get("rate_limit_sleep_seconds"),
                     cls.DEFAULTS.rate_limit_sleep_seconds,
                 ),
+            ),
+            historical_ohlcv_lookback_years=cls.positive_int(
+                data.get("historical_ohlcv_lookback_years"),
+                cls.DEFAULTS.historical_ohlcv_lookback_years,
             ),
         )
 

@@ -145,7 +145,16 @@ class PipelineProgressPanel(QFrame):
 
         self.update_overall_progress()
 
+    def reset_downstream_steps(self, step_key):
+        step_keys = [key for key, _ in self.STEPS]
+        if step_key not in step_keys:
+            return
+
+        for downstream_key in step_keys[step_keys.index(step_key) + 1:]:
+            self.update_step(downstream_key, "Pending")
+
     def mark_running(self, step_key):
+        self.reset_downstream_steps(step_key)
         self.update_step(step_key, "Running")
 
     def mark_complete(self, step_key, timestamp=None):

@@ -25,8 +25,8 @@ class CandidateDetailWindow(QDialog):
     def __init__(self, candidate=None, detail=None, parent=None):
         super().__init__(parent)
 
-        self.candidate = candidate
         self.detail = detail or {}
+        self.candidate = candidate or self.detail.get("candidate")
         self.summary_labels = {}
         self.overview_cards = {}
         self.section_labels = {}
@@ -68,8 +68,8 @@ class CandidateDetailWindow(QDialog):
         return scroll
 
     def set_candidate(self, candidate=None, detail=None):
-        self.candidate = candidate
         self.detail = detail or {}
+        self.candidate = candidate or self.detail.get("candidate")
         self.summary_labels = {}
         self.overview_cards = {}
         self.section_labels = {}
@@ -2074,6 +2074,9 @@ class CandidateDetailWindow(QDialog):
 
     def metrics(self):
         value = self.candidate_value("metrics")
+        if isinstance(value, dict):
+            return value
+        value = self.detail.get("metrics")
         return value if isinstance(value, dict) else {}
 
     def candidate_value(self, name):

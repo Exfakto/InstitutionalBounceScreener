@@ -119,7 +119,7 @@ class ScreeningResultsPanel(QWidget):
         scroll_area.setObjectName("ScreeningResultsScrollArea")
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         content = QWidget()
         content_layout = QVBoxLayout(content)
@@ -476,16 +476,22 @@ class ScreeningResultsPanel(QWidget):
         self.market_data_status_label.setText(status_text or "")
         self.apply_status_property(self.market_data_status_label, status_text)
 
-    def set_cache_coverage_summary(self, coverage_rows):
+    def set_cache_coverage_summary(self, coverage_rows, total_tickers=None):
         rows = list(coverage_rows or [])
-        total_tickers = len(rows)
+        cached_tickers = len(rows)
+        universe_total = int(total_tickers or 0)
         total_rows = sum(int(self.value(row, "row_count") or 0) for row in rows)
         stale_count = sum(1 for row in rows if self.value(row, "stale"))
-        if total_tickers == 0:
-            self.cache_coverage_label.setText("Cache: empty")
+        if universe_total > 0:
+            percent = (cached_tickers / universe_total) * 100
+            self.cache_coverage_label.setText(
+                f"OHLCV Coverage: {cached_tickers} / {universe_total} cached ({percent:.1f}%)"
+            )
+        elif cached_tickers == 0:
+            self.cache_coverage_label.setText("OHLCV Coverage: 0 / 0 cached (0.0%)")
         else:
             self.cache_coverage_label.setText(
-                f"Cache: {total_tickers} tickers / {total_rows} rows / {stale_count} stale"
+                f"OHLCV Coverage: {cached_tickers} cached / {total_rows} rows / {stale_count} stale"
             )
 
     def build_backtest_section(self):
@@ -1065,12 +1071,13 @@ class ScreeningResultsPanel(QWidget):
             48 if title == "Ranked Candidates" else 34
         )
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        table.horizontalHeader().setStretchLastSection(True)
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
+        table.horizontalHeader().setStretchLastSection(False)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         table.horizontalHeader().setMinimumSectionSize(56)
         table.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         if title == "Ranked Candidates":
-            table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
             table.setColumnWidth(0, 72)
             table.setColumnWidth(1, 132)
             table.setColumnWidth(2, 220)
@@ -1080,7 +1087,9 @@ class ScreeningResultsPanel(QWidget):
             table.setColumnWidth(7, 92)
             table.setColumnWidth(8, 104)
         else:
-            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+            table.setColumnWidth(0, 220)
+            table.setColumnWidth(1, 112)
+            table.setColumnWidth(2, 136)
         table.setStyleSheet(DesignSystem.table_style())
         table.setMinimumHeight(96)
         layout.addWidget(table)

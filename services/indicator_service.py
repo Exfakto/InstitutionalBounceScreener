@@ -3,6 +3,7 @@ from time import perf_counter
 from database.manager import DatabaseManager
 from config.logging_config import logger
 from indicators.moving_averages.sma import SMAIndicator
+from services.ohlcv_cache_access import fetch_ohlcv_frame
 
 
 class IndicatorService:
@@ -46,7 +47,7 @@ class IndicatorService:
 
             logger.info("Calculating SMA for %s", ticker)
 
-            dataframe = self.db.get_price_history(ticker)
+            dataframe = fetch_ohlcv_frame(self.db, ticker)
 
             if dataframe.empty:
                 logger.info("Skipping %s because no price history exists", ticker)

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from database.manager import DatabaseManager
 from services.bounce_composite_scoring_engine import BounceCompositeScoreResult
 from services.candidate_pipeline_adapter import CandidatePipelineAdapter
+from services.institutional_data_provider import LocalInstitutionalDataProvider
 from services.screening_orchestrator import ScreeningOrchestrator
 
 
@@ -23,7 +24,7 @@ class FakePriceProvider:
         ]
         self.calls = []
 
-    def get_price_history(self, ticker):
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
         self.calls.append(ticker)
         return list(self.rows)
 
@@ -490,4 +491,139 @@ def test_screening_orchestrator_missing_market_data_adds_warning_not_error():
     assert "AAA: Provider unavailable" in result.warnings
     assert "AAA: Missing OHLCV data" in result.warnings
     assert result.errors == []
+    manager.close()
+
+
+def test_screening_orchestrator_ranks_candidates_without_institutional_provider():
+    manager = build_manager()
+    orchestrator = ScreeningOrchestrator(
+        price_history_provider=FakePriceProvider(),
+        support_engine=FakeSupportEngine(),
+        bounce_engine=FakeBounceEngine(),
+        technical_engine=FakeTechnicalEngine(),
+        composite_engine=None,
+        pipeline_adapter=CandidatePipelineAdapter(manager),
+    )
+
+    result = orchestrator.run(["AAA"], run_id="no-institutional-provider")
+
+    assert [item.ticker for item in result.ranked_candidates] == ["AAA"]
+    assert result.ranked_candidates[0].category_scores["institutional_score"] == 50.0
+    assert result.errors == []
+    assert any("no institutional rows found" in warning for warning in result.warnings)
+    assert any("institutional score unavailable" in warning.lower() for warning in result.warnings)
+    manager.close()
+
+
+def test_screening_orchestrator_uses_repository_institutional_provider_when_available():
+    manager = build_manager()
+    manager.upsert_institutional_data(
+        {
+            "ticker": "AAA",
+            "institutional_ownership_pct": 75,
+            "institutional_ownership_change_qoq": 5,
+            "net_institutional_buying": 500_000_000,
+            "insider_buying_flag": 1,
+            "insider_selling_flag": 0,
+            "source": "unit",
+            "as_of_date": "2026-07-01",
+        }
+    )
+    orchestrator = ScreeningOrchestrator(
+        price_history_provider=FakePriceProvider(),
+        support_engine=FakeSupportEngine(),
+        bounce_engine=FakeBounceEngine(),
+        technical_engine=FakeTechnicalEngine(),
+        repository=manager,
+    )
+
+    result = orchestrator.run(["AAA"], run_id="with-institutional-provider")
+
+    assert [item.ticker for item in result.ranked_candidates] == ["AAA"]
+    assert result.ranked_candidates[0].category_scores["institutional_score"] > 90.0
+    assert result.errors == []
+    assert not any("provider unavailable" in warning.lower() for warning in result.warnings)
+    manager.close()
+
+
+def test_screening_orchestrator_integrates_local_institutional_provider_from_repository(caplog):
+    manager = build_manager()
+    manager.upsert_ohlcv(
+        "AAA",
+        [
+            {
+                "date": "2026-01-01",
+                "open": 10,
+                "high": 11,
+                "low": 9,
+                "close": 10,
+                "volume": 1000,
+            }
+        ],
+        source="unit",
+    )
+    manager.upsert_institutional_data(
+        {
+            "ticker": "AAA",
+            "institutional_ownership_pct": 75,
+            "institutional_ownership_change_qoq": 5,
+            "net_institutional_buying": 500_000_000,
+            "insider_buying_flag": 1,
+            "insider_selling_flag": 0,
+            "source": "unit",
+            "as_of_date": "2026-07-01",
+        }
+    )
+    orchestrator = ScreeningOrchestrator(
+        support_engine=FakeSupportEngine(),
+        bounce_engine=FakeBounceEngine(),
+        technical_engine=FakeTechnicalEngine(),
+        repository=manager,
+    )
+
+    with caplog.at_level("INFO", logger="services.screening_orchestrator"):
+        result = orchestrator.run(["AAA"], run_id="integration-local-provider")
+
+    assert isinstance(orchestrator.institutional_engine.provider, LocalInstitutionalDataProvider)
+    assert [item.ticker for item in result.ranked_candidates] == ["AAA"]
+    assert result.ranked_candidates[0].category_scores["institutional_score"] > 90.0
+    assert result.errors == []
+    assert "Institutional provider: LocalInstitutionalDataProvider" in caplog.text
+    assert "Institutional records loaded: 1" in caplog.text
+    manager.close()
+
+
+def test_screening_orchestrator_ranks_candidates_when_institutional_table_missing(caplog):
+    manager = build_manager()
+    manager.cursor.execute("DROP TABLE institutional_metrics")
+    manager.connection.commit()
+    manager.upsert_ohlcv(
+        "AAA",
+        [
+            {
+                "date": "2026-01-01",
+                "open": 10,
+                "high": 11,
+                "low": 9,
+                "close": 10,
+                "volume": 1000,
+            }
+        ],
+        source="unit",
+    )
+    orchestrator = ScreeningOrchestrator(
+        support_engine=FakeSupportEngine(),
+        bounce_engine=FakeBounceEngine(),
+        technical_engine=FakeTechnicalEngine(),
+        repository=manager,
+    )
+
+    with caplog.at_level("INFO"):
+        result = orchestrator.run(["AAA"], run_id="missing-institutional-table")
+
+    assert [item.ticker for item in result.ranked_candidates] == ["AAA"]
+    assert result.ranked_candidates[0].category_scores["institutional_score"] == 50.0
+    assert result.errors == []
+    assert any("Institutional data unavailable" in warning for warning in result.warnings)
+    assert "Institutional records loaded: 0" in caplog.text
     manager.close()

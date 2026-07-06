@@ -23,7 +23,7 @@ class FakeLiveDataService:
         self.results = dict(results)
         self.calls = []
 
-    def get_price_history(self, ticker):
+    def fetch_daily_ohlcv(self, ticker, start=None, end=None):
         self.calls.append(ticker)
         result = self.results.get(ticker)
 
@@ -31,6 +31,9 @@ class FakeLiveDataService:
             return ProviderResult.fail("missing", source="fake")
 
         return result
+
+    def get_price_history(self, ticker):
+        return self.fetch_daily_ohlcv(ticker)
 
 
 class FakeMarketStatusService:

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+import time
 
 from providers.provider_result import ProviderResult
 from services.market_data_refresh_service import MarketDataRefreshService
 from services.screening_orchestrator import ScreeningOrchestrator
 
+
+logger = logging.getLogger(__name__)
 
 EXCLUDED_SECURITY_KEYWORDS = (
     "ETF",
@@ -47,11 +51,21 @@ class UniverseDownloaderService:
                 warnings=["Market data provider factory is not configured"],
                 errors=["provider factory unavailable"],
             )
+        configured_provider = self.selected_provider_name()
         provider_result = self.provider_factory.create()
+        provider = provider_result.provider
+        provider_class = type(provider).__name__ if provider is not None else None
+        logger.info(
+            "Update Universe provider resolution: selected_market_data_provider=%s; "
+            "provider_factory.create().provider_name=%s; provider_class=%s",
+            configured_provider,
+            provider_result.provider_name,
+            provider_class,
+        )
         if not provider_result.success:
             return PipelineResult(False, warnings=provider_result.warnings, errors=provider_result.errors)
-        provider = provider_result.provider
         symbols = []
+        fetched_by_exchange = {}
         for exchange in exchanges or []:
             try:
                 fetched = provider.fetch_universe_symbols(exchange=exchange)
@@ -60,10 +74,29 @@ class UniverseDownloaderService:
                     exchange,
                 )
                 symbols.extend(rows)
+                fetched_by_exchange[exchange] = len(rows)
                 warnings.extend(fetched_warnings)
                 errors.extend(fetched_errors)
+                logger.info(
+                    "Update Universe fetch_universe_symbols: provider=%s; "
+                    "provider_class=%s; exchange=%s; rows=%s; warnings=%s; errors=%s",
+                    provider_result.provider_name,
+                    provider_class,
+                    exchange,
+                    len(rows),
+                    len(fetched_warnings),
+                    len(fetched_errors),
+                )
             except Exception as exc:
                 errors.append(f"{exchange}: {exc}")
+                fetched_by_exchange[exchange] = 0
+                logger.exception(
+                    "Update Universe fetch_universe_symbols failed: provider=%s; "
+                    "provider_class=%s; exchange=%s",
+                    provider_result.provider_name,
+                    provider_class,
+                    exchange,
+                )
         eligible = self.unique_records(
             record
             for record in (
@@ -83,8 +116,25 @@ class UniverseDownloaderService:
             persisted=persisted,
             warnings=warnings,
             errors=errors,
-            details={"eligible_count": len(eligible)},
+            details={
+                "eligible_count": len(eligible),
+                "selected_market_data_provider": configured_provider,
+                "provider_name": provider_result.provider_name,
+                "provider_class": provider_class,
+                "fetched_by_exchange": fetched_by_exchange,
+            },
         )
+
+    def selected_provider_name(self):
+        settings_service = getattr(self.provider_factory, "settings_service", None)
+        if settings_service is None or not hasattr(settings_service, "get_preferences"):
+            return None
+        try:
+            preferences = settings_service.get_preferences()
+        except Exception:
+            logger.exception("Unable to read selected market data provider preference")
+            return None
+        return getattr(preferences, "selected_market_data_provider", None)
 
     @classmethod
     def normalize_symbol(cls, record, source=None):
@@ -160,52 +210,491 @@ class UniverseDownloaderService:
 
 
 class HistoricalDataUpdateService:
-    def __init__(self, repository=None, refresh_service=None):
+    SYNC_METADATA_KEY = "ohlcv_sync_metadata"
+    SKIPPABLE_SYNC_STATUSES = {"no_data", "inactive", "error"}
+
+    def __init__(self, repository=None, refresh_service=None, lookback_years=5):
         self.repository = repository
         self.refresh_service = refresh_service or MarketDataRefreshService(repository=repository)
+        self.lookback_years = max(1, int(lookback_years or 5))
 
     def update_history(self, tickers, start_date=None, end_date=None, force_refresh=False, progress_callback=None, cancellation_callback=None):
         warnings = []
         errors = []
         persisted = 0
         normalized = self.unique_tickers(tickers)
-        total = len(normalized)
-        for index, ticker in enumerate(normalized, start=1):
+        original_total = len(normalized)
+        logger.info(
+            "HistoricalDataUpdateService.update_history: repository_class=%s database_path=%s tickers=%s force_refresh=%s",
+            MarketDataRefreshService.repository_class_name(self.repository),
+            MarketDataRefreshService.repository_database_path(self.repository),
+            original_total,
+            force_refresh,
+        )
+        coverage = self.coverage_by_ticker()
+        sync_status = self.sync_metadata_by_ticker(normalized)
+        plan = self.build_sync_plan(
+            normalized,
+            coverage=coverage,
+            sync_status=sync_status,
+            force_refresh=force_refresh,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        target_tickers = plan["target_tickers"]
+        completed = []
+        metadata_completed = []
+        existing_metadata = self.load_sync_metadata()
+        if not force_refresh and start_date is None:
+            remaining = [
+                ticker
+                for ticker in (existing_metadata.get("remaining_tickers") or [])
+                if ticker in target_tickers
+            ]
+            if remaining:
+                metadata_completed = [
+                    ticker
+                    for ticker in (existing_metadata.get("completed_tickers") or [])
+                    if ticker in normalized and ticker not in remaining
+                ]
+                target_tickers = remaining
+        total = len(target_tickers)
+        self.save_sync_metadata(
+            normalized,
+            target_tickers,
+            metadata_completed,
+            last_downloaded_ticker=existing_metadata.get("last_downloaded_ticker"),
+            status="running",
+        )
+        refreshed = 0
+        cache_hits = len(plan["current_tickers"])
+        no_data = 0
+        failed = 0
+        skipped_current = len(plan["current_tickers"])
+        skipped_no_data = len(plan["skipped_no_data_tickers"])
+        skipped_error = len(plan["skipped_error_tickers"])
+        skipped_inactive = len(plan["skipped_inactive_tickers"])
+        cancelled = False
+        started_at = time.perf_counter()
+        for ticker in plan["current_tickers"]:
+            cached = coverage.get(ticker, {})
+            logger.info(
+                "Historical OHLCV refresh skipped current ticker=%s cached_first_date=%s cached_last_date=%s requested_start_date=%s requested_end_date=%s rows_returned=0 rows_persisted=0 skipped_current=True",
+                ticker,
+                cached.get("first_date"),
+                cached.get("last_date"),
+                self.next_start_date(ticker, coverage),
+                end_date or date.today().isoformat(),
+            )
+        for index, ticker in enumerate(target_tickers, start=1):
             if cancellation_callback and cancellation_callback():
                 warnings.append("Historical update cancelled")
+                cancelled = True
+                self.save_sync_metadata(
+                    normalized,
+                    target_tickers[index - 1 :],
+                    [*metadata_completed, *completed],
+                    last_downloaded_ticker=completed[-1] if completed else None,
+                    status="cancelled",
+                )
                 break
+            cached = coverage.get(ticker, {})
             incremental_start = start_date
             if not force_refresh and incremental_start is None:
-                incremental_start = self.next_start_date(ticker)
+                incremental_start = self.next_start_date(ticker, coverage)
+            if incremental_start is None:
+                incremental_start = self.default_start_date(end_date=end_date)
             if progress_callback:
-                progress_callback({"stage": "ohlcv", "current_ticker": ticker, "processed": index - 1, "total": total})
+                progress_callback(
+                    self.progress_event(
+                        ticker,
+                        index,
+                        total,
+                        original_total,
+                        started_at,
+                    )
+                )
             try:
+                if force_refresh:
+                    self.clear_cached_ticker(ticker)
                 result = self.refresh_service.refresh_ticker(
                     ticker,
                     start_date=incremental_start,
                     end_date=end_date,
-                    force_refresh=force_refresh,
+                    force_refresh=force_refresh or ticker not in coverage,
                 )
-                persisted += len(result.rows or []) if result.refreshed else 0
+                if result.refreshed:
+                    refreshed += 1
+                    persisted += len(result.rows or [])
+                    self.record_ticker_sync_success(ticker, status="current")
+                elif getattr(result, "cache_hit", False):
+                    cache_hits += 1
+                    self.record_ticker_sync_success(ticker, status="current")
+                elif not result.rows and not result.errors:
+                    no_data += 1
+                    self.record_ticker_sync_empty(ticker, result)
+                rows_returned = len(result.rows or [])
+                rows_persisted = getattr(result, "persisted", rows_returned if result.refreshed else 0)
+                logger.info(
+                    "Historical OHLCV refresh ticker=%s cached_first_date=%s cached_last_date=%s requested_start_date=%s requested_end_date=%s rows_returned=%s rows_persisted=%s skipped_current=False",
+                    ticker,
+                    cached.get("first_date"),
+                    cached.get("last_date"),
+                    incremental_start,
+                    end_date or date.today().isoformat(),
+                    rows_returned,
+                    rows_persisted,
+                )
                 warnings.extend(f"{ticker}: {warning}" for warning in result.warnings)
                 errors.extend(f"{ticker}: {error}" for error in result.errors)
+                if result.errors:
+                    failed += 1
+                    self.record_ticker_sync_error(ticker, "; ".join(result.errors))
+                completed.append(ticker)
+                self.save_sync_metadata(
+                    normalized,
+                    target_tickers[index:],
+                    [*metadata_completed, *completed],
+                    last_downloaded_ticker=ticker,
+                    status="running" if index < total else "complete",
+                )
             except Exception as exc:
                 errors.append(f"{ticker}: {exc}")
-        return PipelineResult(not errors, processed=total, persisted=persisted, warnings=self.unique(warnings), errors=self.unique(errors))
+                failed += 1
+                self.record_ticker_sync_error(ticker, str(exc))
+                completed.append(ticker)
+                self.save_sync_metadata(
+                    normalized,
+                    target_tickers[index:],
+                    [*metadata_completed, *completed],
+                    last_downloaded_ticker=ticker,
+                    status="running" if index < total else "complete",
+                )
+        if not cancelled:
+            self.save_sync_metadata(
+                normalized,
+                [],
+                [*metadata_completed, *completed],
+                last_downloaded_ticker=completed[-1] if completed else None,
+                status="complete",
+            )
+        result = PipelineResult(
+            not errors,
+            processed=original_total,
+            persisted=persisted,
+            warnings=self.unique(warnings),
+            errors=self.unique(errors),
+            details={
+                "refreshed_tickers": refreshed,
+                "cache_hit_tickers": cache_hits,
+                "no_data_tickers": no_data,
+                "failed_tickers": failed,
+                "skipped_current_tickers": skipped_current,
+                "skipped_no_data_tickers": skipped_no_data,
+                "skipped_error_tickers": skipped_error,
+                "skipped_inactive_tickers": skipped_inactive,
+                "cached_tickers": plan["cached_tickers"],
+                "uncached_tickers": plan["uncached_tickers"],
+                "stale_tickers": plan["stale_tickers"],
+                "download_tickers": target_tickers,
+                "coverage_before": len(coverage),
+            },
+        )
+        logger.info(
+            "HistoricalDataUpdateService.update_history complete: persisted=%s refreshed=%s cache_hits=%s no_data=%s errors=%s",
+            persisted,
+            refreshed,
+            cache_hits,
+            no_data,
+            len(result.errors),
+        )
+        return result
 
-    def next_start_date(self, ticker):
-        if self.repository is None or not hasattr(self.repository, "fetch_ohlcv_cache_coverage"):
+    def build_sync_plan(
+        self,
+        tickers,
+        coverage=None,
+        sync_status=None,
+        force_refresh=False,
+        start_date=None,
+        end_date=None,
+    ):
+        coverage = coverage if coverage is not None else self.coverage_by_ticker()
+        sync_status = sync_status if sync_status is not None else self.sync_metadata_by_ticker(tickers)
+        skippable_tickers = [] if force_refresh else [
+            ticker
+            for ticker in tickers
+            if (sync_status.get(ticker, {}) or {}).get("status") in self.SKIPPABLE_SYNC_STATUSES
+        ]
+        skipped_no_data_tickers = [
+            ticker
+            for ticker in skippable_tickers
+            if (sync_status.get(ticker, {}) or {}).get("status") == "no_data"
+        ]
+        skipped_error_tickers = [
+            ticker
+            for ticker in skippable_tickers
+            if (sync_status.get(ticker, {}) or {}).get("status") == "error"
+        ]
+        skipped_inactive_tickers = [
+            ticker
+            for ticker in skippable_tickers
+            if (sync_status.get(ticker, {}) or {}).get("status") == "inactive"
+        ]
+        active_tickers = [ticker for ticker in tickers if ticker not in skippable_tickers]
+        cached_tickers = [
+            ticker
+            for ticker in active_tickers
+            if int((coverage.get(ticker, {}) or {}).get("row_count") or 0) > 0
+        ]
+        uncached_tickers = [ticker for ticker in active_tickers if ticker not in cached_tickers]
+        current_tickers = []
+        stale_tickers = []
+        for ticker in cached_tickers:
+            next_start = self.next_start_date(ticker, coverage)
+            if (
+                not force_refresh
+                and start_date is None
+                and next_start is not None
+                and not self.refresh_window_available(next_start, end_date)
+            ):
+                current_tickers.append(ticker)
+            else:
+                stale_tickers.append(ticker)
+        target_tickers = list(tickers) if force_refresh else [*uncached_tickers, *stale_tickers]
+        return {
+            "cached_tickers": cached_tickers,
+            "uncached_tickers": uncached_tickers,
+            "stale_tickers": stale_tickers,
+            "current_tickers": current_tickers,
+            "skipped_no_data_tickers": skipped_no_data_tickers,
+            "skipped_error_tickers": skipped_error_tickers,
+            "skipped_inactive_tickers": skipped_inactive_tickers,
+            "target_tickers": target_tickers,
+        }
+
+    def sync_metadata_by_ticker(self, tickers=None):
+        if self.repository is None or not hasattr(self.repository, "fetch_ohlcv_sync_metadata"):
+            return {}
+        try:
+            rows = self.repository.fetch_ohlcv_sync_metadata(tickers) or []
+        except Exception:
+            return {}
+        return {
+            str(row.get("ticker") or "").strip().upper(): dict(row)
+            for row in rows
+            if row.get("ticker")
+        }
+
+    def record_ticker_sync_success(self, ticker, status="current"):
+        self.upsert_ticker_sync_metadata(
+            ticker,
+            last_attempted_at=self.timestamp(),
+            last_success_at=self.timestamp(),
+            last_error="",
+            empty_response_count=0,
+            status=status,
+        )
+
+    def record_ticker_sync_empty(self, ticker, result=None):
+        current = self.sync_metadata_by_ticker([ticker]).get(str(ticker or "").strip().upper(), {})
+        self.upsert_ticker_sync_metadata(
+            ticker,
+            last_attempted_at=self.timestamp(),
+            last_success_at=current.get("last_success_at"),
+            last_error="",
+            empty_response_count=int(current.get("empty_response_count") or 0) + 1,
+            status="no_data",
+        )
+
+    def record_ticker_sync_error(self, ticker, error):
+        current = self.sync_metadata_by_ticker([ticker]).get(str(ticker or "").strip().upper(), {})
+        self.upsert_ticker_sync_metadata(
+            ticker,
+            last_attempted_at=self.timestamp(),
+            last_success_at=current.get("last_success_at"),
+            last_error=error,
+            empty_response_count=current.get("empty_response_count"),
+            status="error",
+        )
+
+    def upsert_ticker_sync_metadata(self, ticker, **values):
+        if self.repository is None or not hasattr(self.repository, "upsert_ohlcv_sync_metadata"):
+            return 0
+        try:
+            return self.repository.upsert_ohlcv_sync_metadata(ticker, **values)
+        except Exception:
+            return 0
+
+    @staticmethod
+    def timestamp():
+        return datetime.now(timezone.utc).isoformat()
+
+    def next_start_date(self, ticker, coverage=None):
+        coverage = coverage if coverage is not None else self.coverage_by_ticker(ticker)
+        row = coverage.get(str(ticker or "").strip().upper())
+        if row is None:
             return None
-        coverage = self.repository.fetch_ohlcv_cache_coverage(ticker) or []
-        if not coverage:
-            return None
-        last_date = coverage[0].get("last_date")
+        last_date = row.get("last_date")
         if not last_date:
             return None
         try:
             return (datetime.fromisoformat(str(last_date)).date() + timedelta(days=1)).isoformat()
         except ValueError:
             return None
+
+    def default_start_date(self, end_date=None):
+        end = self.parse_date(end_date) or date.today()
+        try:
+            return end.replace(year=end.year - self.lookback_years).isoformat()
+        except ValueError:
+            return (end - timedelta(days=365 * self.lookback_years)).isoformat()
+
+    def clear_cached_ticker(self, ticker):
+        if self.repository is None or not hasattr(self.repository, "clear_ohlcv"):
+            return 0
+        deleted = self.repository.clear_ohlcv(ticker)
+        logger.info("Historical OHLCV force refresh cleared ticker=%s rows=%s", ticker, deleted)
+        return deleted
+
+    def load_sync_metadata(self):
+        if self.repository is None or not hasattr(self.repository, "cursor"):
+            return {}
+        try:
+            self.repository.cursor.execute(
+                "SELECT value_json FROM app_settings WHERE key = ?",
+                (self.SYNC_METADATA_KEY,),
+            )
+            row = self.repository.cursor.fetchone()
+        except Exception:
+            logger.exception("Unable to load OHLCV sync metadata")
+            return {}
+        if row is None:
+            return {}
+        try:
+            import json
+
+            return json.loads(row["value_json"]) or {}
+        except Exception:
+            return {}
+
+    def save_sync_metadata(
+        self,
+        all_tickers,
+        remaining_tickers,
+        completed_tickers,
+        last_downloaded_ticker=None,
+        status="running",
+    ):
+        if self.repository is None or not hasattr(self.repository, "cursor"):
+            return {}
+        now = datetime.now().isoformat(timespec="seconds")
+        previous = self.load_sync_metadata()
+        completed_unique = self.unique_tickers(completed_tickers)
+        remaining_unique = self.unique_tickers(remaining_tickers)
+        metadata = {
+            "status": status,
+            "updated_at": now,
+            "last_full_sync": previous.get("last_full_sync"),
+            "last_incremental_sync": previous.get("last_incremental_sync"),
+            "last_downloaded_ticker": last_downloaded_ticker,
+            "completed_tickers": completed_unique,
+            "remaining_tickers": remaining_unique,
+            "requested_tickers": self.unique_tickers(all_tickers),
+        }
+        if status == "complete":
+            metadata["last_incremental_sync"] = now
+            if not remaining_unique:
+                metadata["last_full_sync"] = now
+        try:
+            import json
+
+            self.repository.cursor.execute(
+                """
+                INSERT INTO app_settings (key, value_json, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (self.SYNC_METADATA_KEY, json.dumps(metadata, sort_keys=True)),
+            )
+            self.repository.connection.commit()
+        except Exception:
+            logger.exception("Unable to save OHLCV sync metadata")
+        return metadata
+
+    @staticmethod
+    def progress_event(ticker, index, total, original_total, started_at):
+        elapsed = max(0.0, time.perf_counter() - started_at)
+        processed = max(0, index - 1)
+        average = elapsed / processed if processed else 0
+        remaining = max(0, total - processed)
+        eta = int(average * remaining) if average else None
+        return {
+            "stage": "ohlcv",
+            "current_ticker": ticker,
+            "processed": processed,
+            "total": total,
+            "universe_total": original_total,
+            "estimated_remaining_seconds": eta,
+            "status_message": (
+                f"Downloading {index} of {original_total}; "
+                f"Ticker: {ticker}; "
+                f"ETA: {HistoricalDataUpdateService.format_eta(eta)}"
+            ),
+        }
+
+    @staticmethod
+    def format_eta(seconds):
+        if seconds is None:
+            return "calculating"
+        minutes, sec = divmod(int(seconds), 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours}h {minutes}m"
+        if minutes:
+            return f"{minutes}m {sec}s"
+        return f"{sec}s"
+
+    @staticmethod
+    def parse_date(value):
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        try:
+            return datetime.fromisoformat(str(value)).date()
+        except ValueError:
+            return None
+
+    def coverage_by_ticker(self, ticker=None):
+        if self.repository is None or not hasattr(self.repository, "fetch_ohlcv_cache_coverage"):
+            return {}
+        rows = self.repository.fetch_ohlcv_cache_coverage(ticker) or []
+        return {
+            str(row.get("ticker") or "").strip().upper(): row
+            for row in rows
+            if row.get("ticker")
+        }
+
+    @staticmethod
+    def refresh_window_available(start_date, end_date=None):
+        try:
+            start = datetime.fromisoformat(str(start_date)).date()
+        except ValueError:
+            return True
+        end = HistoricalDataUpdateService.latest_trading_day(end_date)
+        return start <= end
+
+    @staticmethod
+    def latest_trading_day(end_date=None):
+        end = HistoricalDataUpdateService.parse_date(end_date) or date.today()
+        while end.weekday() >= 5:
+            end -= timedelta(days=1)
+        return end
 
     @staticmethod
     def unique_tickers(tickers):

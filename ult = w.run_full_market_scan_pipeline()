@@ -1,0 +1,596 @@
+warning: in the working copy of 'services/full_market_pipeline.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ui/main_window.py', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/services/full_market_pipeline.py b/services/full_market_pipeline.py[m
+[1mindex 6bd8c8e..c7c3d47 100644[m
+[1m--- a/services/full_market_pipeline.py[m
+[1m+++ b/services/full_market_pipeline.py[m
+[36m@@ -1,5 +1,6 @@[m
+ from __future__ import annotations[m
+ [m
+[32m+[m[32mimport logging[m
+ from dataclasses import dataclass, field[m
+ from datetime import date, datetime, timedelta[m
+ [m
+[36m@@ -8,6 +9,8 @@[m [mfrom services.market_data_refresh_service import MarketDataRefreshService[m
+ from services.screening_orchestrator import ScreeningOrchestrator[m
+ [m
+ [m
+[32m+[m[32mlogger = logging.getLogger(__name__)[m
+[32m+[m
+ EXCLUDED_SECURITY_KEYWORDS = ([m
+     "ETF",[m
+     "ADR",[m
+[36m@@ -47,11 +50,21 @@[m [mclass UniverseDownloaderService:[m
+                 warnings=["Market data provider factory is not configured"],[m
+                 errors=["provider factory unavailable"],[m
+             )[m
+[32m+[m[32m        configured_provider = self.selected_provider_name()[m
+         provider_result = self.provider_factory.create()[m
+[32m+[m[32m        provider = provider_result.provider[m
+[32m+[m[32m        provider_class = type(provider).__name__ if provider is not None else None[m
+[32m+[m[32m        logger.info([m
+[32m+[m[32m            "Update Universe provider resolution: selected_market_data_provider=%s; "[m
+[32m+[m[32m            "provider_factory.create().provider_name=%s; provider_class=%s",[m
+[32m+[m[32m            configured_provider,[m
+[32m+[m[32m            provider_result.provider_name,[m
+[32m+[m[32m            provider_class,[m
+[32m+[m[32m        )[m
+         if not provider_result.success:[m
+             return PipelineResult(False, warnings=provider_result.warnings, errors=provider_result.errors)[m
+[31m-        provider = provider_result.provider[m
+         symbols = [][m
+[32m+[m[32m        fetched_by_exchange = {}[m
+         for exchange in exchanges or []:[m
+             try:[m
+                 fetched = provider.fetch_universe_symbols(exchange=exchange)[m
+[36m@@ -60,10 +73,29 @@[m [mclass UniverseDownloaderService:[m
+                     exchange,[m
+                 )[m
+                 symbols.extend(rows)[m
+[32m+[m[32m                fetched_by_exchange[exchange] = len(rows)[m
+                 warnings.extend(fetched_warnings)[m
+                 errors.extend(fetched_errors)[m
+[32m+[m[32m                logger.info([m
+[32m+[m[32m                    "Update Universe fetch_universe_symbols: provider=%s; "[m
+[32m+[m[32m                    "provider_class=%s; exchange=%s; rows=%s; warnings=%s; errors=%s",[m
+[32m+[m[32m                    provider_result.provider_name,[m
+[32m+[m[32m                    provider_class,[m
+[32m+[m[32m                    exchange,[m
+[32m+[m[32m                    len(rows),[m
+[32m+[m[32m                    len(fetched_warnings),[m
+[32m+[m[32m                    len(fetched_errors),[m
+[32m+[m[32m                )[m
+             except Exception as exc:[m
+                 errors.append(f"{exchange}: {exc}")[m
+[32m+[m[32m                fetched_by_exchange[exchange] = 0[m
+[32m+[m[32m                logger.exception([m
+[32m+[m[32m                    "Update Universe fetch_universe_symbols failed: provider=%s; "[m
+[32m+[m[32m                    "provider_class=%s; exchange=%s",[m
+[32m+[m[32m                    provider_result.provider_name,[m
+[32m+[m[32m                    provider_class,[m
+[32m+[m[32m                    exchange,[m
+[32m+[m[32m                )[m
+         eligible = self.unique_records([m
+             record[m
+             for record in ([m
+[36m@@ -83,9 +115,26 @@[m [mclass UniverseDownloaderService:[m
+             persisted=persisted,[m
+             warnings=warnings,[m
+             errors=errors,[m
+[31m-            details={"eligible_count": len(eligible)},[m
+[32m+[m[32m            details={[m
+[32m+[m[32m                "eligible_count": len(eligible),[m
+[32m+[m[32m                "selected_market_data_provider": configured_provider,[m
+[32m+[m[32m                "provider_name": provider_result.provider_name,[m
+[32m+[m[32m                "provider_class": provider_class,[m
+[32m+[m[32m                "fetched_by_exchange": fetched_by_exchange,[m
+[32m+[m[32m            },[m
+         )[m
+ [m
+[32m+[m[32m    def selected_provider_name(self):[m
+[32m+[m[32m        settings_service = getattr(self.provider_factory, "settings_service", None)[m
+[32m+[m[32m        if settings_service is None or not hasattr(settings_service, "get_preferences"):[m
+[32m+[m[32m            return None[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            preferences = settings_service.get_preferences()[m
+[32m+[m[32m        except Exception:[m
+[32m+[m[32m            logger.exception("Unable to read selected market data provider preference")[m
+[32m+[m[32m            return None[m
+[32m+[m[32m        return getattr(preferences, "selected_market_data_provider", None)[m
+[32m+[m
+     @classmethod[m
+     def normalize_symbol(cls, record, source=None):[m
+         ticker = cls.value(record, "ticker") or cls.value(record, "symbol")[m
+[1mdiff --git a/ui/main_window.py b/ui/main_window.py[m
+[1mindex 07e3a1f..7111137 100644[m
+[1m--- a/ui/main_window.py[m
+[1m+++ b/ui/main_window.py[m
+[36m@@ -1,3 +1,4 @@[m
+[32m+[m[32mimport logging[m
+ import sys[m
+ from datetime import datetime, timedelta[m
+ from pathlib import Path[m
+[36m@@ -97,6 +98,9 @@[m [mfrom ui.about_dialog import AboutDialog[m
+ from ui.design_system import DashboardDesignSystem as DesignSystem[m
+ [m
+ [m
+[32m+[m[32mlogger = logging.getLogger(__name__)[m
+[32m+[m
+[32m+[m
+ class _LiveRefreshBridge(QObject):[m
+     live_refresh_received = Signal(str, object)[m
+ [m
+[36m@@ -1526,14 +1530,12 @@[m [mclass MainWindow(QMainWindow):[m
+     def current_provider_text(self):[m
+ [m
+         try:[m
+[31m-            provider_status = self.settings_service.provider_status()[m
+[32m+[m[32m            result = self.provider_factory().create()[m
+         except Exception:[m
+[32m+[m[32m            logger.exception("Unable to resolve current market data provider")[m
+             return None[m
+ [m
+[31m-        if not isinstance(provider_status, dict):[m
+[31m-            return None[m
+[31m-[m
+[31m-        return provider_status.get("current_provider")[m
+[32m+[m[32m        return getattr(result, "provider_name", None)[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[36m@@ -1758,7 +1760,7 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     def run_full_market_universe_update(self):[m
+ [m
+[31m-        return self.universe_downloader_service().update_universe()[m
+[32m+[m[32m        return self.worker_universe_downloader_service().update_universe()[m
+ [m
+     def on_universe_update_completed(self, result):[m
+ [m
+[36m@@ -1968,6 +1970,17 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     def run_screener(self):[m
+ [m
+[32m+[m[32m        return self.execute_screening_pipeline()[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+[32m+[m[32m    def execute_screening_pipeline([m
+[32m+[m[32m        self,[m
+[32m+[m[32m        status_prefix="Screener",[m
+[32m+[m[32m        cancellation_callback=None,[m
+[32m+[m[32m        update_full_market_status=False,[m
+[32m+[m[32m    ):[m
+[32m+[m
+         self.mark_pipeline_running("screener")[m
+         self.activity_panel.set_status("Running screener...")[m
+         self.activity_panel.set_progress(10)[m
+[36m@@ -1977,35 +1990,50 @@[m [mclass MainWindow(QMainWindow):[m
+         self.activity_panel.set_status("Processing candidates...")[m
+         self.activity_panel.set_progress(50)[m
+ [m
+[31m-        results = self.scoring_controller.run_screener()[m
+[32m+[m[32m        def progress(message):[m
+[32m+[m[32m            self.handle_screening_progress(message)[m
+[32m+[m[32m            if update_full_market_status:[m
+[32m+[m[32m                self.screening_results_panel.set_full_market_status([m
+[32m+[m[32m                    self.screening_results_panel.screening_status_label.text()[m
+[32m+[m[32m                )[m
+[32m+[m
+[32m+[m[32m        result = self.run_full_market_scan_pipeline([m
+[32m+[m[32m            progress_callback=progress,[m
+[32m+[m[32m            cancellation_callback=cancellation_callback,[m
+[32m+[m[32m        )[m
+[32m+[m[32m        ranked_candidates = self.ranked_candidates_from_pipeline_result(result)[m
+[32m+[m[32m        display_candidates = [[m
+[32m+[m[32m            self.pipeline_candidate_to_display_candidate(candidate)[m
+[32m+[m[32m            for candidate in ranked_candidates[m
+[32m+[m[32m        ][m
+ [m
+         self.candidates_by_ticker = {[m
+             candidate.ticker: candidate[m
+[31m-            for candidate in results["candidates"][m
+[32m+[m[32m            for candidate in display_candidates[m
+         }[m
+[31m-        self.register_refresh_tickers(results["candidates"])[m
+[31m-        self.candidates_table.populate(results["candidates"])[m
+[32m+[m[32m        self.register_refresh_tickers(display_candidates)[m
+[32m+[m[32m        self.candidates_table.populate(display_candidates)[m
+         self.refresh_candidate_kpi()[m
+         self.update_open_detail_state()[m
+         self.last_screen_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")[m
+         self.update_screener_status([m
+[31m-            candidate_count=len(results["candidates"]),[m
+[32m+[m[32m            candidate_count=len(display_candidates),[m
+             last_screen_time=self.last_screen_time,[m
+         )[m
+         self.refresh_dashboard()[m
+[31m-        self.update_dashboard_result_state(results["candidates"])[m
+[32m+[m[32m        self.update_dashboard_result_state(display_candidates)[m
+ [m
+         self.activity_panel.set_progress(100)[m
+ [m
+         self.activity_panel.set_status("Screener Complete")[m
+ [m
+[31m-        highest = self.highest_candidate(results["candidates"])[m
+[31m-        average_score = self.average_candidate_score(results["candidates"])[m
+[32m+[m[32m        highest = self.highest_candidate(display_candidates)[m
+[32m+[m[32m        average_score = self.average_candidate_score(display_candidates)[m
+ [m
+         self.log("Candidate screening complete")[m
+[31m-        self.log(f'Tickers analyzed: {results["processed"]:,}')[m
+[31m-        self.log(f'Skipped: {results["skipped"]:,}')[m
+[31m-        self.log(f'Candidates generated: {len(results["candidates"]):,}')[m
+[32m+[m[32m        self.log(f"Tickers analyzed: {getattr(result, 'processed', 0):,}")[m
+[32m+[m[32m        self.log("Skipped: 0")[m
+[32m+[m[32m        self.log(f"Candidates generated: {len(display_candidates):,}")[m
+ [m
+         if highest is None:[m
+             self.log("Highest score: None")[m
+[36m@@ -2016,15 +2044,102 @@[m [mclass MainWindow(QMainWindow):[m
+             )[m
+ [m
+         self.log(f"Average score: {average_score:.1f}")[m
+[31m-        self.log(f'Elapsed time: {results["elapsed_seconds"]:.2f}s')[m
+[32m+[m[32m        for warning in getattr(result, "warnings", []) or []:[m
+[32m+[m[32m            self.log(f"Warning: {warning}")[m
+[32m+[m[32m        for error in getattr(result, "errors", []) or []:[m
+[32m+[m[32m            self.log(f"Error: {error}")[m
+         self.mark_pipeline_complete("screener")[m
+         self.add_activity([m
+[31m-            f"Screener run complete: {len(results['candidates']):,} candidates",[m
+[31m-            status="success",[m
+[32m+[m[32m            f"{status_prefix} run complete: {len(display_candidates):,} candidates",[m
+[32m+[m[32m            status="success" if getattr(result, "success", True) else "warning",[m
+[32m+[m[32m        )[m
+[32m+[m[32m        if update_full_market_status:[m
+[32m+[m[32m            self.screening_results_panel.set_full_market_status([m
+[32m+[m[32m                f"Full market scan complete: {len(display_candidates)} ranked candidate(s)"[m
+[32m+[m[32m            )[m
+[32m+[m[32m        self.refresh_screening_run_history_view()[m
+[32m+[m[32m        self.refresh_ranked_candidates_view()[m
+[32m+[m[32m        self.refresh_full_market_coverage_report()[m
+[32m+[m[32m        return result[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def ranked_candidates_from_pipeline_result(result):[m
+[32m+[m
+[32m+[m[32m        details = getattr(result, "details", {}) or {}[m
+[32m+[m[32m        return list(details.get("ranked_candidates") or getattr(result, "ranked_candidates", []) or [])[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+[32m+[m[32m    @classmethod[m
+[32m+[m[32m    def pipeline_candidate_to_display_candidate(cls, candidate):[m
+[32m+[m
+[32m+[m[32m        if hasattr(candidate, "primary_score_value"):[m
+[32m+[m[32m            return candidate[m
+[32m+[m[32m        category_scores = getattr(candidate, "category_scores", {}) or {}[m
+[32m+[m[32m        source = getattr(candidate, "source", None)[m
+[32m+[m[32m        company_name = cls.first_candidate_value([m
+[32m+[m[32m            [candidate, source],[m
+[32m+[m[32m            "company_name",[m
+[32m+[m[32m            "company",[m
+[32m+[m[32m            "name",[m
+[32m+[m[32m        )[m
+[32m+[m[32m        return SimpleNamespace([m
+[32m+[m[32m            rank=getattr(candidate, "rank", None),[m
+[32m+[m[32m            ticker=getattr(candidate, "ticker", None),[m
+[32m+[m[32m            company_name=company_name,[m
+[32m+[m[32m            primary_score_value=cls.numeric_candidate_value(candidate, "final_score"),[m
+[32m+[m[32m            composite_score=SimpleNamespace([m
+[32m+[m[32m                value=cls.numeric_candidate_value(candidate, "final_score")[m
+[32m+[m[32m            ),[m
+[32m+[m[32m            score_map={[m
+[32m+[m[32m                "quality_score": category_scores.get("quality_score"),[m
+[32m+[m[32m                "institutional_score": category_scores.get("institutional_score"),[m
+[32m+[m[32m                "technical_score": category_scores.get("technical_score"),[m
+[32m+[m[32m                "support_score": category_scores.get("support_score"),[m
+[32m+[m[32m                "bounce_score": category_scores.get("bounce_score"),[m
+[32m+[m[32m            },[m
+[32m+[m[32m            scores=[],[m
+[32m+[m[32m            warnings=list(getattr(candidate, "warnings", []) or []),[m
+[32m+[m[32m            opportunity_rating=getattr(candidate, "opportunity_rating", None),[m
+[32m+[m[32m            grade=getattr(candidate, "grade", None),[m
+[32m+[m[32m            confidence_level=getattr(candidate, "confidence_level", None),[m
+[32m+[m[32m            setup_label=getattr(candidate, "setup_label", None),[m
+[32m+[m[32m            source=candidate,[m
+         )[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def first_candidate_value(sources, *keys):[m
+[32m+[m
+[32m+[m[32m        for source in sources:[m
+[32m+[m[32m            for key in keys:[m
+[32m+[m[32m                if isinstance(source, dict):[m
+[32m+[m[32m                    value = source.get(key)[m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    value = getattr(source, key, None)[m
+[32m+[m[32m                if value not in (None, ""):[m
+[32m+[m[32m                    return value[m
+[32m+[m[32m        return None[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def numeric_candidate_value(candidate, key):[m
+[32m+[m
+[32m+[m[32m        if isinstance(candidate, dict):[m
+[32m+[m[32m            value = candidate.get(key)[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            value = getattr(candidate, key, None)[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            return float(value)[m
+[32m+[m[32m        except (TypeError, ValueError):[m
+[32m+[m[32m            return 0.0[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def open_stock_detail(self, ticker):[m
+ [m
+         candidate = getattr(self, "candidates_by_ticker", {}).get(ticker)[m
+[36m@@ -2262,6 +2377,24 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def repository_factory(self):[m
+[32m+[m
+[32m+[m[32m        explicit = getattr(self, "_repository_factory", None)[m
+[32m+[m[32m        if explicit is not None:[m
+[32m+[m[32m            return explicit[m
+[32m+[m[32m        controller_factory = getattr(self.controller, "repository_factory", None)[m
+[32m+[m[32m        if callable(controller_factory):[m
+[32m+[m[32m            return controller_factory()[m
+[32m+[m[32m        return self.screening_repository[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+[32m+[m[32m    def worker_repository(self):[m
+[32m+[m
+[32m+[m[32m        return self.repository_factory()()[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def parse_screening_tickers(self, ticker_text):[m
+ [m
+         tickers = [][m
+[36m@@ -2320,7 +2453,10 @@[m [mclass MainWindow(QMainWindow):[m
+         explicit = getattr(self, "_provider_diagnostics_service", None)[m
+         if explicit is not None:[m
+             return explicit[m
+[31m-        return ProviderDiagnosticsService(settings_service=self.app_settings_service)[m
+[32m+[m[32m        return ProviderDiagnosticsService([m
+[32m+[m[32m            settings_service=self.app_settings_service,[m
+[32m+[m[32m            provider_factory=self.provider_factory(),[m
+[32m+[m[32m        )[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[36m@@ -2333,6 +2469,15 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def worker_provider_factory(self):[m
+[32m+[m
+[32m+[m[32m        explicit = getattr(self, "_provider_factory", None)[m
+[32m+[m[32m        if explicit is not None:[m
+[32m+[m[32m            return explicit[m
+[32m+[m[32m        return ProviderFactory(settings_service=AppSettingsService())[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def universe_downloader_service(self):[m
+ [m
+         explicit = getattr(self, "_universe_downloader_service", None)[m
+[36m@@ -2345,6 +2490,18 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def worker_universe_downloader_service(self, repository=None, provider_factory=None):[m
+[32m+[m
+[32m+[m[32m        explicit = getattr(self, "_universe_downloader_service", None)[m
+[32m+[m[32m        if explicit is not None:[m
+[32m+[m[32m            return explicit[m
+[32m+[m[32m        return UniverseDownloaderService([m
+[32m+[m[32m            repository=repository or self.worker_repository(),[m
+[32m+[m[32m            provider_factory=provider_factory or self.worker_provider_factory(),[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def historical_data_update_service(self):[m
+ [m
+         explicit = getattr(self, "_historical_data_update_service", None)[m
+[36m@@ -2357,6 +2514,20 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def worker_historical_data_update_service(self, repository=None, provider_factory=None):[m
+[32m+[m
+[32m+[m[32m        repository = repository or self.worker_repository()[m
+[32m+[m[32m        provider_factory = provider_factory or self.worker_provider_factory()[m
+[32m+[m[32m        return HistoricalDataUpdateService([m
+[32m+[m[32m            repository=repository,[m
+[32m+[m[32m            refresh_service=MarketDataRefreshService([m
+[32m+[m[32m                repository=repository,[m
+[32m+[m[32m                provider_factory=provider_factory,[m
+[32m+[m[32m            ),[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def fundamental_downloader_service(self):[m
+ [m
+         explicit = getattr(self, "_fundamental_downloader_service", None)[m
+[36m@@ -2369,6 +2540,15 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def worker_fundamental_downloader_service(self, repository=None, provider_factory=None):[m
+[32m+[m
+[32m+[m[32m        return FundamentalDownloaderService([m
+[32m+[m[32m            repository=repository or self.worker_repository(),[m
+[32m+[m[32m            provider_factory=provider_factory or self.worker_provider_factory(),[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def institutional_data_refresh_service(self):[m
+ [m
+         explicit = getattr(self, "_institutional_data_refresh_service", None)[m
+[36m@@ -2381,6 +2561,15 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def worker_institutional_data_refresh_service(self, repository=None, provider_factory=None):[m
+[32m+[m
+[32m+[m[32m        return InstitutionalDataRefreshService([m
+[32m+[m[32m            repository=repository or self.worker_repository(),[m
+[32m+[m[32m            provider_factory=provider_factory or self.worker_provider_factory(),[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def full_market_refresh_orchestrator(self):[m
+ [m
+         explicit = getattr(self, "_full_market_refresh_orchestrator", None)[m
+[36m@@ -2396,6 +2585,35 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def worker_full_market_refresh_orchestrator(self):[m
+[32m+[m
+[32m+[m[32m        explicit = getattr(self, "_full_market_refresh_orchestrator", None)[m
+[32m+[m[32m        if explicit is not None:[m
+[32m+[m[32m            return explicit[m
+[32m+[m[32m        repository = self.worker_repository()[m
+[32m+[m[32m        provider_factory = self.worker_provider_factory()[m
+[32m+[m[32m        return FullMarketRefreshOrchestrator([m
+[32m+[m[32m            repository=repository,[m
+[32m+[m[32m            universe_service=self.worker_universe_downloader_service([m
+[32m+[m[32m                repository=repository,[m
+[32m+[m[32m                provider_factory=provider_factory,[m
+[32m+[m[32m            ),[m
+[32m+[m[32m            historical_service=self.worker_historical_data_update_service([m
+[32m+[m[32m                repository=repository,[m
+[32m+[m[32m                provider_factory=provider_factory,[m
+[32m+[m[32m            ),[m
+[32m+[m[32m            fundamental_service=self.worker_fundamental_downloader_service([m
+[32m+[m[32m                repository=repository,[m
+[32m+[m[32m                provider_factory=provider_factory,[m
+[32m+[m[32m            ),[m
+[32m+[m[32m            institutional_service=self.worker_institutional_data_refresh_service([m
+[32m+[m[32m                repository=repository,[m
+[32m+[m[32m                provider_factory=provider_factory,[m
+[32m+[m[32m            ),[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def full_market_scan_runner(self):[m
+ [m
+         explicit = getattr(self, "_full_market_scan_runner", None)[m
+[36m@@ -2405,6 +2623,15 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def worker_full_market_scan_runner(self):[m
+[32m+[m
+[32m+[m[32m        explicit = getattr(self, "_full_market_scan_runner", None)[m
+[32m+[m[32m        if explicit is not None:[m
+[32m+[m[32m            return explicit[m
+[32m+[m[32m        return FullMarketScanRunner(repository=self.worker_repository())[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def data_coverage_readiness_service(self):[m
+ [m
+         explicit = getattr(self, "_data_coverage_readiness_service", None)[m
+[36m@@ -2453,7 +2680,7 @@[m [mclass MainWindow(QMainWindow):[m
+             )[m
+ [m
+         try:[m
+[31m-            result = self.full_market_refresh_orchestrator().refresh_all([m
+[32m+[m[32m            result = self.run_full_market_data_refresh([m
+                 progress_callback=progress,[m
+                 cancellation_callback=lambda: getattr([m
+                     self,[m
+[36m@@ -2477,25 +2704,33 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def run_full_market_data_refresh([m
+[32m+[m[32m        self,[m
+[32m+[m[32m        progress_callback=None,[m
+[32m+[m[32m        cancellation_callback=None,[m
+[32m+[m[32m    ):[m
+[32m+[m
+[32m+[m[32m        return self.worker_full_market_refresh_orchestrator().refresh_all([m
+[32m+[m[32m            progress_callback=progress_callback,[m
+[32m+[m[32m            cancellation_callback=cancellation_callback,[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def run_full_market_scan(self):[m
+ [m
+         self.full_market_cancel_requested = False[m
+         self.screening_results_panel.set_full_market_active(True, "Running full market scan")[m
+         try:[m
+[31m-            result = self.full_market_scan_runner().run_scan([m
+[32m+[m[32m            return self.execute_screening_pipeline([m
+[32m+[m[32m                status_prefix="Full market scan",[m
+[32m+[m[32m                update_full_market_status=True,[m
+                 cancellation_callback=lambda: getattr([m
+                     self,[m
+                     "full_market_cancel_requested",[m
+                     False,[m
+                 ),[m
+             )[m
+[31m-            self.screening_results_panel.set_full_market_status([m
+[31m-                f"Full market scan complete: {result.persisted} ranked candidate(s)"[m
+[31m-            )[m
+[31m-            self.refresh_screening_run_history_view()[m
+[31m-            self.refresh_ranked_candidates_view()[m
+[31m-            self.refresh_full_market_coverage_report()[m
+[31m-            return result[m
+         except Exception as exc:[m
+             self.screening_results_panel.set_full_market_status([m
+                 f"Full market scan failed: {exc}"[m
+[36m@@ -2506,6 +2741,19 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+     # ----------------------------------------------------------[m
+ [m
+[32m+[m[32m    def run_full_market_scan_pipeline([m
+[32m+[m[32m        self,[m
+[32m+[m[32m        progress_callback=None,[m
+[32m+[m[32m        cancellation_callback=None,[m
+[32m+[m[32m    ):[m
+[32m+[m
+[32m+[m[32m        return self.worker_full_market_scan_runner().run_scan([m
+[32m+[m[32m            progress_callback=progress_callback,[m
+[32m+[m[32m            cancellation_callback=cancellation_callback,[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    # ----------------------------------------------------------[m
+[32m+[m
+     def cancel_full_market_operation(self):[m
+ [m
+         self.full_market_cancel_requested = True[m
+[36m@@ -2654,8 +2902,11 @@[m [mclass MainWindow(QMainWindow):[m
+ [m
+         try:[m
+             result = self.provider_diagnostics_service().run(connectivity_test=True)[m
+[32m+[m[32m            resolved = getattr(result, "resolved_provider", None) or result.selected_provider[m
+[32m+[m[32m            provider_class = getattr(result, "provider_class", None) or "--"[m
+             status = ([m
+[31m-                f"Provider {result.selected_provider}: {result.credential_status}; "[m
+[32m+[m[32m                f"Provider {resolved}: {result.credential_status}; "[m
+[32m+[m[32m                f"class {provider_class}; "[m
+                 f"connectivity {result.connectivity_status}; retries {result.max_retries}"[m
+             )[m
+         except Exception as exc:[m

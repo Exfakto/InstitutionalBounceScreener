@@ -171,6 +171,13 @@ class OperationsToolbar(QWidget):
 
         self.buttons["open_detail"].setEnabled(enabled)
 
+    def set_run_screener_enabled(self, enabled):
+        """
+        Enable or disable the Run Screener action.
+        """
+
+        self.buttons["run_screener"].setEnabled(enabled)
+
     def is_open_detail_enabled(self):
         """
         Return whether Open Detail is currently enabled.

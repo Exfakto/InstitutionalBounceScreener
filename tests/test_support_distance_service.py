@@ -20,6 +20,9 @@ class FakeSupportDistanceDatabase:
     def get_price_history(self, ticker):
         return self.histories.get(ticker, pd.DataFrame())
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return self.get_price_history(ticker)
+
     def get_support_levels(self, ticker):
         return self.supports.get(ticker, [])
 

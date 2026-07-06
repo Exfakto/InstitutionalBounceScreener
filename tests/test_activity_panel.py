@@ -1,5 +1,5 @@
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QTextEdit
 
 from ui.widgets.activity_panel import ActivityPanel
 
@@ -36,6 +36,17 @@ def test_activity_panel_appends_and_clears_log(app):
     panel.clear_log()
 
     assert panel.log_text() == ""
+
+
+def test_activity_panel_wraps_long_messages_and_exposes_tooltip(app):
+    panel = ActivityPanel()
+    message = "Provider polygon returned a long diagnostic message for AAPL with pagination and retry details"
+
+    panel.append_log(message)
+
+    assert panel.maximumHeight() > 260
+    assert panel.activity_log.lineWrapMode() == QTextEdit.WidgetWidth
+    assert panel.activity_log.toolTip() == message
 
 
 def test_activity_panel_reset_restores_ready_state(app):

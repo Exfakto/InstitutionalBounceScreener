@@ -202,6 +202,19 @@ class BounceCompositeScoringEngine:
             explanation.append("Institutional strength is unavailable; using neutral score.")
             return DEFAULT_COMPONENT_SCORE
 
+        if self.value(institutional, "institutional_score_available") is False:
+            self.extend_warnings(
+                warnings,
+                [
+                    warning
+                    for warning in self.value(institutional, "warnings") or []
+                    if not str(warning).lower().startswith("missing")
+                ],
+            )
+            warnings.append("Institutional score unavailable")
+            explanation.append("Institutional strength is unavailable; using neutral score.")
+            return DEFAULT_COMPONENT_SCORE
+
         score_result = self.value(institutional, "score_result") or institutional
         score = self.number(
             self.first_existing(

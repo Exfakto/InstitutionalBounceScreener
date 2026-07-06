@@ -40,6 +40,13 @@ class MarketService:
 
         return self.db.get_active_market_universe_records()
 
+    def repository_factory(self):
+        """
+        Return a fresh DatabaseManager factory for worker-thread operations.
+        """
+
+        return DatabaseManager
+
     # --------------------------------------------------
     # Market Data
     # --------------------------------------------------
@@ -65,9 +72,10 @@ class MarketService:
 
         for ticker, history in market.items():
 
-            rows = self.db.save_price_history(
+            rows = self.db.upsert_ohlcv(
                 ticker,
                 history,
+                "legacy_downloader",
             )
 
             results[ticker] = rows
@@ -82,7 +90,10 @@ class MarketService:
         return self.db.stock_count()
 
     def total_price_rows(self):
-        return self.db.get_total_rows()
+        return sum(
+            int(row.get("row_count") or 0)
+            for row in self.db.fetch_ohlcv_cache_coverage()
+        )
 
     def total_indicator_rows(self):
         return self.db.indicator_count()

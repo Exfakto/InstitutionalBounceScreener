@@ -9,6 +9,8 @@ from analysis import (
 )
 from database.manager import DatabaseManager
 from config.logging_config import logger
+from services.candidate_detail_data_service import CandidateDetailDataService
+from services.ohlcv_cache_access import fetch_ohlcv_frame
 
 
 class ScoringService:
@@ -121,71 +123,10 @@ class ScoringService:
 
         context = self.build_context(ticker)
         candidate = self.score_candidate_from_context(ticker, context)
-
-        return {
-            "ticker": ticker,
-            "candidate": candidate,
-            "timestamp": candidate.timestamp,
-            "fundamentals": self.pick(
-                context,
-                [
-                    "market_cap",
-                    "revenue_growth_ttm",
-                    "eps_growth_ttm",
-                    "roe",
-                    "gross_margin",
-                    "free_cash_flow",
-                    "debt_to_equity",
-                    "current_ratio",
-                    "quality_score",
-                ],
-            ),
-            "institutional": self.pick(
-                context,
-                [
-                    "institutional_ownership_pct",
-                    "institutional_ownership_change_qoq",
-                    "net_institutional_buying",
-                    "insider_buying_flag",
-                    "insider_selling_flag",
-                    "institutional_score",
-                ],
-            ),
-            "technical": self.pick(
-                context,
-                [
-                    "close",
-                    "sma20",
-                    "sma50",
-                    "sma200",
-                    "rsi14",
-                ],
-            ),
-            "support": self.pick(
-                context,
-                [
-                    "zone_low",
-                    "zone_high",
-                    "zone_mid",
-                    "touches",
-                    "strength_score",
-                    "distance_from_current_pct",
-                ],
-            ),
-            "bounce": self.pick(
-                context,
-                [
-                    "total_touches",
-                    "successful_bounces",
-                    "failed_breakdowns",
-                    "neutral_touches",
-                    "bounce_success_rate",
-                    "average_bounce_pct",
-                    "median_bounce_pct",
-                    "average_days_to_bounce_peak",
-                ],
-            ),
-        }
+        service = CandidateDetailDataService(db=self.db)
+        detail = service.get_candidate_detail(ticker, scored_candidate=candidate)
+        detail["timestamp"] = candidate.timestamp
+        return detail
 
     def build_context(self, ticker):
         """
@@ -199,7 +140,12 @@ class ScoringService:
         self.merge_row(context, self.db.get_fundamentals(ticker))
         self.normalize_fundamental_context(context)
         self.merge_row(context, self.db.get_institutional_metrics(ticker))
-        self.merge_latest_price(context, self.db.get_price_history(ticker))
+        self.merge_latest_price(context, fetch_ohlcv_frame(self.db, ticker))
+        if hasattr(self.db, "get_technical_indicators"):
+            self.merge_row(
+                context,
+                self.last_row(self.db.get_technical_indicators(ticker)),
+            )
         self.merge_row(context, self.first_row(self.db.get_support_levels(ticker)))
         self.merge_row(context, self.first_row(self.db.get_bounce_validations(ticker)))
 
@@ -226,6 +172,14 @@ class ScoringService:
             return None
 
         return rows[0]
+
+    @staticmethod
+    def last_row(rows):
+
+        if not rows:
+            return None
+
+        return rows[-1]
 
     @staticmethod
     def merge_latest_price(context, dataframe):

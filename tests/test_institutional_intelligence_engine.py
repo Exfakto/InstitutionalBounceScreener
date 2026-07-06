@@ -1,10 +1,15 @@
 from types import SimpleNamespace
 
+from services.institutional_data_provider import UnavailableInstitutionalDataProvider
 from services.institutional_intelligence_engine import InstitutionalIntelligenceEngine
 
 
+def engine():
+    return InstitutionalIntelligenceEngine(UnavailableInstitutionalDataProvider())
+
+
 def test_institutional_intelligence_strong_accumulation_case():
-    result = InstitutionalIntelligenceEngine().analyze(
+    result = engine().analyze(
         {
             "ticker": "AAA",
             "institutional_ownership_pct": 72,
@@ -29,7 +34,7 @@ def test_institutional_intelligence_strong_accumulation_case():
 
 
 def test_institutional_intelligence_neutral_case():
-    result = InstitutionalIntelligenceEngine().analyze(
+    result = engine().analyze(
         SimpleNamespace(
             ticker="NEU",
             metrics={
@@ -51,7 +56,7 @@ def test_institutional_intelligence_neutral_case():
 
 
 def test_institutional_intelligence_distribution_case():
-    result = InstitutionalIntelligenceEngine().analyze(
+    result = engine().analyze(
         ticker="DIST",
         institutional_ownership_pct=18,
         institutional_ownership_change_qoq=-3,
@@ -69,7 +74,7 @@ def test_institutional_intelligence_distribution_case():
 
 
 def test_institutional_intelligence_missing_data_case():
-    result = InstitutionalIntelligenceEngine().analyze({"ticker": "MISS"})
+    result = engine().analyze({"ticker": "MISS"})
 
     assert result.sponsorship_rating == "Unknown"
     assert result.flow_rating == "Unknown"
@@ -80,17 +85,17 @@ def test_institutional_intelligence_missing_data_case():
 
 
 def test_institutional_intelligence_insider_positive_negative_logic():
-    engine = InstitutionalIntelligenceEngine()
+    institutional_engine = engine()
 
-    positive = engine.analyze({"ticker": "BUY", "insider_buying": True})
-    negative = engine.analyze({"ticker": "SELL", "insider_selling": True})
+    positive = institutional_engine.analyze({"ticker": "BUY", "insider_buying": True})
+    negative = institutional_engine.analyze({"ticker": "SELL", "insider_selling": True})
 
     assert positive.insider_rating == "Positive"
     assert negative.insider_rating == "Negative"
 
 
 def test_institutional_intelligence_score_boundaries():
-    result = InstitutionalIntelligenceEngine().analyze(
+    result = engine().analyze(
         {
             "ticker": "BOUND",
             "institutional_ownership_pct": 500,

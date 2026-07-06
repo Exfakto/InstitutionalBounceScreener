@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGroupBox, QSizePolicy, QVBoxLayout, QWidget
 
 from ui.widgets.activity_log import ActivityLog
 from ui.widgets.progress_panel import ProgressPanel
@@ -13,7 +13,8 @@ class ActivityPanel(QWidget):
         super().__init__(parent)
 
         self.setObjectName("ActivityPanel")
-        self.setMaximumHeight(260)
+        self.setMinimumSize(260, 180)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -26,12 +27,13 @@ class ActivityPanel(QWidget):
         log_layout = QVBoxLayout()
         log_layout.setContentsMargins(8, 10, 8, 8)
         self.activity_log = ActivityLog()
-        self.activity_log.setMinimumHeight(96)
+        self.activity_log.setMinimumHeight(140)
+        self.activity_log.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         log_layout.addWidget(self.activity_log)
         self.log_group.setLayout(log_layout)
 
         layout.addWidget(self.progress_panel)
-        layout.addWidget(self.log_group)
+        layout.addWidget(self.log_group, stretch=1)
 
     def append_log(self, message):
         """

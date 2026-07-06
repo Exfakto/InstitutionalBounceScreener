@@ -31,6 +31,9 @@ class FakeSupportDatabase:
             index=pd.date_range("2026-01-01", periods=7),
         )
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return self.get_price_history(ticker)
+
     def save_support_levels(self, ticker, zones):
         self.saved[ticker] = zones
         return len(zones)

@@ -39,9 +39,12 @@ class FakeLiveDataService:
         self.results = results
         self.calls = []
 
-    def get_price_history(self, ticker, start=None, end=None):
+    def fetch_daily_ohlcv(self, ticker, start=None, end=None):
         self.calls.append((ticker, start, end))
         return self.results.get(ticker, ProviderResult.ok(data=[], source="fake"))
+
+    def get_price_history(self, ticker, start=None, end=None):
+        return self.fetch_daily_ohlcv(ticker, start=start, end=end)
 
 
 class WorkflowDatabase:
@@ -81,6 +84,30 @@ class WorkflowDatabase:
             inplace=True,
         )
         return frame[["Open", "High", "Low", "Close", "Volume"]]
+
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        rows = [
+            {"date": row_date, **values}
+            for (row_ticker, row_date), values in sorted(self.price_rows.items())
+            if row_ticker == ticker
+        ]
+        if start_date is not None:
+            rows = [row for row in rows if row["date"] >= str(start_date)]
+        if end_date is not None:
+            rows = [row for row in rows if row["date"] <= str(end_date)]
+        return rows
+
+    def upsert_ohlcv(self, ticker, rows, source=None):
+        for row in rows or []:
+            row_date = str(row.get("date"))
+            self.price_rows[(ticker, row_date)] = {
+                "open": row.get("open", row.get("Open")),
+                "high": row.get("high", row.get("High")),
+                "low": row.get("low", row.get("Low")),
+                "close": row.get("close", row.get("Close")),
+                "volume": row.get("volume", row.get("Volume")),
+            }
+        return len(rows or [])
 
     def save_sma(self, dataframe):
         self.sma_rows.extend(dataframe.reset_index().to_dict("records"))

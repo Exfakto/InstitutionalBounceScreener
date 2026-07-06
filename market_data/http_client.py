@@ -29,7 +29,7 @@ class HttpClient:
         self,
         opener=None,
         timeout=10,
-        max_retries=2,
+        max_retries=3,
         rate_limit_sleep_seconds=1,
         sleeper=None,
     ):
@@ -74,11 +74,16 @@ class HttpClient:
             except HTTPError as exc:
                 status_code = exc.code
                 if status_code == 429 and attempt < self.max_retries:
-                    warnings.append("Rate limit response received; retrying")
-                    self.sleeper(self.rate_limit_sleep_seconds)
+                    delay = self.backoff_seconds(attempt)
+                    warnings.append(
+                        f"Rate limit response received; retrying in {delay:g}s"
+                    )
+                    self.sleeper(delay)
                     continue
                 if attempt < self.max_retries and status_code >= 500:
-                    warnings.append(f"HTTP {status_code}; retrying")
+                    delay = self.backoff_seconds(attempt)
+                    warnings.append(f"HTTP {status_code}; retrying in {delay:g}s")
+                    self.sleeper(delay)
                     continue
                 return HttpResponse(
                     False,
@@ -90,7 +95,9 @@ class HttpClient:
                 )
             except (TimeoutError, URLError, OSError) as exc:
                 if attempt < self.max_retries:
-                    warnings.append(f"Request failed; retrying: {exc}")
+                    delay = self.backoff_seconds(attempt)
+                    warnings.append(f"Request failed; retrying in {delay:g}s: {exc}")
+                    self.sleeper(delay)
                     continue
                 return HttpResponse(
                     False,
@@ -100,3 +107,6 @@ class HttpClient:
                 )
 
         return HttpResponse(False, error="Request failed", attempts=attempts, warnings=warnings)
+
+    def backoff_seconds(self, attempt):
+        return self.rate_limit_sleep_seconds * (2 ** attempt)

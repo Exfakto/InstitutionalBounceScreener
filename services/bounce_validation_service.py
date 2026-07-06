@@ -3,6 +3,7 @@ from time import perf_counter
 from bounce import BounceValidator
 from config.logging_config import logger
 from database.manager import DatabaseManager
+from services.ohlcv_cache_access import fetch_ohlcv_frame
 
 
 class BounceValidationService:
@@ -45,7 +46,7 @@ class BounceValidationService:
             ticker = support_level["ticker"]
 
             if ticker not in price_history_by_ticker:
-                price_history_by_ticker[ticker] = self.db.get_price_history(ticker)
+                price_history_by_ticker[ticker] = fetch_ohlcv_frame(self.db, ticker)
 
             dataframe = price_history_by_ticker[ticker]
 

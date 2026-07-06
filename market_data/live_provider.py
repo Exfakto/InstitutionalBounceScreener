@@ -18,7 +18,7 @@ class LiveMarketDataProvider(MarketDataProvider):
         api_secret=None,
         http_client=None,
         timeout=10,
-        max_retries=2,
+        max_retries=3,
         rate_limit_sleep_seconds=1,
         base_url=None,
     ):

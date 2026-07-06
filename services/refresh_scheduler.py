@@ -109,7 +109,7 @@ class RefreshScheduler:
         results = {}
 
         for ticker in tickers:
-            result = self.live_data_service.get_price_history(ticker)
+            result = self.live_data_service.fetch_daily_ohlcv(ticker)
             results[ticker] = result
             self._notify_callbacks(ticker, result, callbacks)
 

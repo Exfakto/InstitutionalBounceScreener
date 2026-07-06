@@ -14,7 +14,7 @@ from services.live_data_service import LiveDataService
 
 class HistoricalSyncService:
     """
-    Synchronize provider price history into the local SQLite price table.
+    Synchronize provider price history into the canonical OHLCV cache.
     """
 
     REQUIRED_FIELDS = ("date", "Open", "High", "Low", "Close", "Volume")
@@ -45,7 +45,7 @@ class HistoricalSyncService:
             summary["warnings"].append("Ticker is required.")
             return self.finish_summary(summary, started_at)
 
-        provider_result = self.live_data_service.get_price_history(
+        provider_result = self.live_data_service.fetch_daily_ohlcv(
             normalized_ticker,
             start=start,
             end=end,
@@ -60,7 +60,6 @@ class HistoricalSyncService:
 
         summary["provider"] = provider_result.source or None
         rows = self.price_rows(provider_result.data)
-
         if not rows:
             summary["warnings"].append("Provider returned no price history rows.")
             return self.finish_summary(summary, started_at)
@@ -77,6 +76,7 @@ class HistoricalSyncService:
             action = self.store_price_row(
                 normalized_ticker,
                 normalized_row,
+                source=summary["provider"],
                 force_update=force_update,
             )
 
@@ -128,110 +128,41 @@ class HistoricalSyncService:
         self,
         ticker: str,
         row: dict[str, Any],
+        source: str | None = None,
         force_update: bool = False,
     ) -> str:
         existing = self.existing_price_row(ticker, row["date"])
 
         if existing is None:
-            self.insert_price_row(ticker, row)
+            self.store_ohlcv_cache_rows(ticker, [row], source=source)
             return "inserted"
 
         if not force_update and self.rows_match(existing, row):
             return "skipped"
 
-        self.update_price_row(ticker, row)
+        self.store_ohlcv_cache_rows(ticker, [row], source=source)
         return "updated"
 
     def existing_price_row(self, ticker: str, row_date: str) -> dict[str, Any] | None:
-        cursor = getattr(self.database_manager, "cursor", None)
-
-        if cursor is None:
-            getter = getattr(self.database_manager, "get_price_history", None)
-
-            if getter is None:
-                return None
-
-            history = getter(ticker)
-
-            if history is None or getattr(history, "empty", True):
-                return None
-
-            try:
-                candidate = history.loc[pd.to_datetime(row_date)]
-            except (KeyError, TypeError):
-                return None
-
-            return {
-                "open": candidate["Open"],
-                "high": candidate["High"],
-                "low": candidate["Low"],
-                "close": candidate["Close"],
-                "volume": candidate["Volume"],
-            }
-
-        cursor.execute(
-            """
-            SELECT open, high, low, close, volume
-            FROM price_history
-            WHERE ticker = ? AND date = ?
-            """,
-            (ticker, row_date),
-        )
-        existing = cursor.fetchone()
-
-        if existing is None:
+        fetch = getattr(self.database_manager, "fetch_ohlcv", None)
+        if not callable(fetch):
             return None
 
-        return dict(existing)
+        rows = fetch(ticker, start_date=row_date, end_date=row_date) or []
+        return dict(rows[0]) if rows else None
 
-    def insert_price_row(self, ticker: str, row: dict[str, Any]) -> None:
-        self.database_manager.cursor.execute(
-            """
-            INSERT INTO price_history
-            (
-                ticker,
-                date,
-                open,
-                high,
-                low,
-                close,
-                volume
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                ticker,
-                row["date"],
-                row["open"],
-                row["high"],
-                row["low"],
-                row["close"],
-                row["volume"],
-            ),
-        )
-
-    def update_price_row(self, ticker: str, row: dict[str, Any]) -> None:
-        self.database_manager.cursor.execute(
-            """
-            UPDATE price_history
-            SET
-                open = ?,
-                high = ?,
-                low = ?,
-                close = ?,
-                volume = ?
-            WHERE ticker = ? AND date = ?
-            """,
-            (
-                row["open"],
-                row["high"],
-                row["low"],
-                row["close"],
-                row["volume"],
-                ticker,
-                row["date"],
-            ),
-        )
+    def store_ohlcv_cache_rows(
+        self,
+        ticker: str,
+        rows: list[dict[str, Any]],
+        source: str | None = None,
+    ) -> int:
+        if not rows:
+            return 0
+        upsert = getattr(self.database_manager, "upsert_ohlcv", None)
+        if not callable(upsert):
+            return 0
+        return upsert(ticker, rows, source=source or "historical_sync")
 
     def commit(self) -> None:
         commit = getattr(self.database_manager, "commit", None)

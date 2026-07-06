@@ -43,6 +43,23 @@ class FakeDetailDatabase:
     def get_price_history(self, ticker):
         return pd.DataFrame({"Close": [100, 120]})
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return [
+            {"date": "2026-07-01", "close": 100},
+            {"date": "2026-07-02", "close": 120},
+        ]
+
+    def get_technical_indicators(self, ticker):
+        return [
+            {
+                "date": "2026-07-02",
+                "sma20": 110,
+                "sma50": 105,
+                "sma200": 95,
+                "rsi14": 62,
+            }
+        ]
+
     def get_support_levels(self, ticker):
         return [
             {
@@ -80,6 +97,12 @@ class EmptyDetailDatabase(FakeDetailDatabase):
 
     def get_price_history(self, ticker):
         return pd.DataFrame()
+
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return []
+
+    def get_technical_indicators(self, ticker):
+        return []
 
     def get_support_levels(self, ticker):
         return []
@@ -123,7 +146,7 @@ class StockDetailDataTest(unittest.TestCase):
 
         self.assertEqual(detail["ticker"], "EMPTY")
         self.assertEqual(detail["fundamentals"], {})
-        self.assertEqual(detail["institutional"], {})
+        self.assertEqual(detail["institutional"]["status"], "Not Available")
         self.assertEqual(detail["technical"], {})
         self.assertEqual(detail["support"], {})
         self.assertEqual(detail["bounce"], {})

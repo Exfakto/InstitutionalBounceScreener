@@ -1,5 +1,7 @@
 import sqlite3
 
+import pandas as pd
+
 from database.manager import DatabaseManager
 from market_data.local_csv_provider import LocalCsvMarketDataProvider, LocalCsvUniverseProvider
 from market_data.validation import MarketDataValidator
@@ -78,6 +80,46 @@ def test_ohlcv_cache_insert_fetch_clear():
     assert rows[0]["source"] == "unit"
     assert manager.clear_ohlcv("AAPL") == 1
     assert manager.fetch_ohlcv("AAPL") == []
+    manager.close()
+
+
+def test_save_price_history_also_populates_ohlcv_cache():
+    manager = build_manager()
+    history = pd.DataFrame(
+        [
+            {
+                "Open": 100,
+                "High": 105,
+                "Low": 99,
+                "Close": 104,
+                "Volume": 1000000,
+            }
+        ],
+        index=pd.to_datetime(["2026-01-02"]),
+    )
+    revised_history = pd.DataFrame(
+        [
+            {
+                "Open": 101,
+                "High": 106,
+                "Low": 100,
+                "Close": 105,
+                "Volume": 1100000,
+            }
+        ],
+        index=pd.to_datetime(["2026-01-02"]),
+    )
+
+    inserted = manager.save_price_history("AAPL", history)
+    duplicate_inserted = manager.save_price_history("AAPL", revised_history)
+    cache_rows = manager.fetch_ohlcv("AAPL")
+
+    assert inserted == 1
+    assert duplicate_inserted == 0
+    assert cache_rows[0]["date"] == "2026-01-02"
+    assert cache_rows[0]["close"] == 105
+    assert cache_rows[0]["volume"] == 1100000
+    assert cache_rows[0]["source"] == "legacy_price_history"
     manager.close()
 
 

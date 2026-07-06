@@ -53,7 +53,7 @@ class WatchlistController:
             if normalized_ticker is None:
                 continue
 
-            result = self.live_data_service.get_price_history(normalized_ticker)
+            result = self.live_data_service.fetch_daily_ohlcv(normalized_ticker)
 
             if not result.success:
                 quotes[normalized_ticker] = {

@@ -17,6 +17,8 @@ from database.schema import (
     FUNDAMENTALS_TABLE,
     HISTORICAL_OHLCV_CACHE_INDEXES,
     HISTORICAL_OHLCV_CACHE_TABLE,
+    OHLCV_SYNC_METADATA_INDEXES,
+    OHLCV_SYNC_METADATA_TABLE,
     INSTITUTIONAL_METRICS_TABLE,
     MARKET_UNIVERSE_INDEXES,
     MARKET_UNIVERSE_TABLE,
@@ -89,6 +91,9 @@ class DatabaseManager:
         self.cursor.execute(PRICE_HISTORY_TABLE)
         self.cursor.execute(HISTORICAL_OHLCV_CACHE_TABLE)
         for index_statement in HISTORICAL_OHLCV_CACHE_INDEXES:
+            self.cursor.execute(index_statement)
+        self.cursor.execute(OHLCV_SYNC_METADATA_TABLE)
+        for index_statement in OHLCV_SYNC_METADATA_INDEXES:
             self.cursor.execute(index_statement)
         self.cursor.execute(TECHNICAL_INDICATORS_TABLE)
         self.cursor.execute(SUPPORT_LEVELS_TABLE)
@@ -219,7 +224,8 @@ class DatabaseManager:
         self.cursor.execute(
             """
             SELECT COUNT(*)
-            FROM stocks
+            FROM universe_symbols
+            WHERE active = 1
             """
         )
 
@@ -231,71 +237,48 @@ class DatabaseManager:
 
     def save_price_history(self, ticker, history):
 
-        inserted = 0
+        normalized_ticker = self._normalize_ticker(ticker)
+        if normalized_ticker is None:
+            return 0
 
-        for date, row in history.iterrows():
-
-            self.cursor.execute(
-                """
-                INSERT OR IGNORE INTO price_history
-                (
-                    ticker,
-                    date,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
+        rows = []
+        if hasattr(history, "iterrows"):
+            for date, row in history.iterrows():
+                rows.append(
+                    {
+                        "date": str(date.date()) if hasattr(date, "date") else str(date),
+                        "open": row.get("Open", row.get("open")),
+                        "high": row.get("High", row.get("high")),
+                        "low": row.get("Low", row.get("low")),
+                        "close": row.get("Close", row.get("close")),
+                        "volume": row.get("Volume", row.get("volume")),
+                    }
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    ticker,
-                    str(date.date()),
-                    float(row["Open"]),
-                    float(row["High"]),
-                    float(row["Low"]),
-                    float(row["Close"]),
-                    int(row["Volume"]),
-                ),
-            )
+        else:
+            rows = list(history or [])
 
-            inserted += self.cursor.rowcount
-
-        self.connection.commit()
-
+        existing_dates = {
+            row.get("date")
+            for row in self.fetch_ohlcv(normalized_ticker)
+        }
+        inserted = sum(1 for row in rows if str(row.get("date")) not in existing_dates)
+        self.upsert_ohlcv(normalized_ticker, rows, "legacy_price_history")
         return inserted
 
     def get_price_history(self, ticker):
         """
-        Returns all historical prices for a ticker.
+        Compatibility wrapper around the canonical historical OHLCV cache.
 
         Returns
         -------
         pandas.DataFrame
         """
 
-        query = """
-        SELECT
-            date,
-            open,
-            high,
-            low,
-            close,
-            volume
-        FROM price_history
-        WHERE ticker = ?
-        ORDER BY date
-        """
-
-        dataframe = pd.read_sql_query(
-            query,
-            self.connection,
-            params=(ticker,),
-        )
+        rows = self.fetch_ohlcv(ticker)
+        dataframe = pd.DataFrame(rows)
 
         if dataframe.empty:
-            return dataframe
+            return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
 
         dataframe.rename(
             columns={
@@ -451,16 +434,131 @@ class DatabaseManager:
         )
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def get_total_rows(self):
+    def upsert_ohlcv_sync_metadata(
+        self,
+        ticker,
+        last_attempted_at=None,
+        last_success_at=None,
+        last_error=None,
+        empty_response_count=None,
+        status=None,
+    ):
+        normalized = self._normalize_ticker(ticker)
+        if normalized is None:
+            return 0
 
+        current = self.get_ohlcv_sync_metadata(normalized)
+        values = {
+            "last_attempted_at": (
+                last_attempted_at
+                if last_attempted_at is not None
+                else (current or {}).get("last_attempted_at")
+            ),
+            "last_success_at": (
+                last_success_at
+                if last_success_at is not None
+                else (current or {}).get("last_success_at")
+            ),
+            "last_error": (
+                last_error
+                if last_error is not None
+                else (current or {}).get("last_error")
+            ),
+            "empty_response_count": (
+                int(empty_response_count)
+                if empty_response_count is not None
+                else int((current or {}).get("empty_response_count") or 0)
+            ),
+            "status": status or (current or {}).get("status") or "stale",
+        }
         self.cursor.execute(
             """
-            SELECT COUNT(*)
-            FROM price_history
-            """
+            INSERT INTO ohlcv_sync_metadata
+            (
+                ticker,
+                last_attempted_at,
+                last_success_at,
+                last_error,
+                empty_response_count,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET
+                last_attempted_at = excluded.last_attempted_at,
+                last_success_at = excluded.last_success_at,
+                last_error = excluded.last_error,
+                empty_response_count = excluded.empty_response_count,
+                status = excluded.status
+            """,
+            (
+                normalized,
+                values["last_attempted_at"],
+                values["last_success_at"],
+                values["last_error"],
+                values["empty_response_count"],
+                values["status"],
+            ),
         )
+        self.connection.commit()
+        return 1
 
-        return self.cursor.fetchone()[0]
+    def get_ohlcv_sync_metadata(self, ticker):
+        normalized = self._normalize_ticker(ticker)
+        if normalized is None:
+            return None
+        self.cursor.execute(
+            """
+            SELECT
+                ticker,
+                last_attempted_at,
+                last_success_at,
+                last_error,
+                empty_response_count,
+                status
+            FROM ohlcv_sync_metadata
+            WHERE ticker = ?
+            """,
+            (normalized,),
+        )
+        row = self.cursor.fetchone()
+        return dict(row) if row is not None else None
+
+    def fetch_ohlcv_sync_metadata(self, tickers=None):
+        normalized = [
+            ticker
+            for ticker in (self._normalize_ticker(ticker) for ticker in (tickers or []))
+            if ticker is not None
+        ]
+        if normalized:
+            placeholders = ", ".join("?" for _ in normalized)
+            where_clause = f"WHERE ticker IN ({placeholders})"
+            params = normalized
+        else:
+            where_clause = ""
+            params = []
+        self.cursor.execute(
+            f"""
+            SELECT
+                ticker,
+                last_attempted_at,
+                last_success_at,
+                last_error,
+                empty_response_count,
+                status
+            FROM ohlcv_sync_metadata
+            {where_clause}
+            ORDER BY ticker
+            """,
+            params,
+        )
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_total_rows(self):
+
+        return sum(
+            int(row.get("row_count") or 0)
+            for row in self.fetch_ohlcv_cache_coverage()
+        )
 
     # ==========================================================
     # Technical Indicators

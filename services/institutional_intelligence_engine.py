@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 
 from database.institutional_data import InstitutionalData
+from services.institutional_data_provider import UnavailableInstitutionalDataProvider
 from services.institutional_intelligence_service import (
     InstitutionalIntelligenceService,
     InstitutionalScoreResult,
@@ -53,6 +54,7 @@ class InstitutionalSignal:
     score_result: InstitutionalScoreResult
     as_of_date: str | None = None
     source: str | None = None
+    institutional_score_available: bool = True
     warnings: list[str] = field(default_factory=list)
 
 
@@ -62,7 +64,7 @@ class InstitutionalIntelligenceEngine:
     """
 
     def __init__(self, provider=None, scoring_service=None):
-        self.provider = provider
+        self.provider = provider or UnavailableInstitutionalDataProvider()
         self.scoring_service = scoring_service or InstitutionalIntelligenceService()
 
     def score_ticker(self, ticker):
@@ -77,9 +79,14 @@ class InstitutionalIntelligenceEngine:
                 warnings=["Missing ticker", *score_result.warnings],
             )
 
-        self.require_provider()
+        if self.provider_unavailable():
+            return self.unavailable_signal(normalized)
         raw_data = self.provider.fetch_for_ticker(normalized)
-        return self.build_signal(normalized, raw_data)
+        return self.build_signal(
+            normalized,
+            raw_data,
+            provider_warnings=getattr(self.provider, "last_warnings", []),
+        )
 
     def score_tickers(self, tickers):
         normalized = [
@@ -90,16 +97,29 @@ class InstitutionalIntelligenceEngine:
         if not normalized:
             return {}
 
-        self.require_provider()
+        if self.provider_unavailable():
+            return {
+                ticker: self.unavailable_signal(ticker)
+                for ticker in normalized
+            }
         raw_records = self.provider.fetch_for_tickers(normalized) or {}
+        provider_warnings = getattr(self.provider, "last_warnings", [])
         return {
-            ticker: self.build_signal(ticker, raw_records.get(ticker))
+            ticker: self.build_signal(
+                ticker,
+                raw_records.get(ticker),
+                provider_warnings=provider_warnings,
+            )
             for ticker in normalized
         }
 
-    def build_signal(self, ticker, raw_data):
+    def build_signal(self, ticker, raw_data, provider_warnings=None):
         score_result = self.scoring_service.calculate_from_record(raw_data)
-        warnings = [*self.missing_field_warnings(raw_data), *score_result.warnings]
+        warnings = [
+            *(provider_warnings or []),
+            *self.missing_field_warnings(raw_data),
+            *score_result.warnings,
+        ]
 
         return InstitutionalSignal(
             ticker=ticker,
@@ -107,12 +127,26 @@ class InstitutionalIntelligenceEngine:
             score_result=score_result,
             as_of_date=self.value(raw_data, "as_of_date"),
             source=self.value(raw_data, "source"),
+            institutional_score_available=not self.all_core_fields_missing(raw_data),
             warnings=self.unique_warnings(warnings),
         )
 
-    def require_provider(self):
-        if self.provider is None:
-            raise ValueError("InstitutionalIntelligenceEngine requires an institutional data provider.")
+    def unavailable_signal(self, ticker):
+        score_result = self.scoring_service.calculate()
+        return InstitutionalSignal(
+            ticker=ticker,
+            raw_institutional_data=None,
+            score_result=score_result,
+            institutional_score_available=False,
+            warnings=self.unique_warnings(
+                [
+                    "Institutional data provider unavailable; institutional score unavailable",
+                ]
+            ),
+        )
+
+    def provider_unavailable(self):
+        return isinstance(self.provider, UnavailableInstitutionalDataProvider)
 
     @staticmethod
     def missing_field_warnings(raw_data):
@@ -131,6 +165,21 @@ class InstitutionalIntelligenceEngine:
             for field, message in fields.items()
             if InstitutionalIntelligenceEngine.value(raw_data, field) in (None, "")
         ]
+
+    @staticmethod
+    def all_core_fields_missing(raw_data):
+        if raw_data is None:
+            return True
+        return all(
+            InstitutionalIntelligenceEngine.value(raw_data, field) in (None, "")
+            for field in (
+                "institutional_ownership_pct",
+                "institutional_ownership_change_qoq",
+                "net_institutional_buying",
+                "insider_buying_flag",
+                "insider_selling_flag",
+            )
+        )
 
     @staticmethod
     def normalize_ticker(ticker):

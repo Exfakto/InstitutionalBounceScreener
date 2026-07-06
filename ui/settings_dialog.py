@@ -130,6 +130,7 @@ class SettingsDialog(QDialog):
             "request_timeout_seconds": self.request_timeout_spin.value(),
             "max_retries": self.max_retries_spin.value(),
             "rate_limit_sleep_seconds": self.rate_limit_sleep_spin.value(),
+            "historical_ohlcv_lookback_years": self.historical_ohlcv_lookback_years_spin.value(),
         }
 
     def validate_provider_credentials(self) -> str:
@@ -260,9 +261,12 @@ class SettingsDialog(QDialog):
         self.request_timeout_spin.setValue(
             int(preferences.get("request_timeout_seconds") or 10)
         )
-        self.max_retries_spin.setValue(int(preferences.get("max_retries") or 2))
+        self.max_retries_spin.setValue(int(preferences.get("max_retries") or 3))
         self.rate_limit_sleep_spin.setValue(
             int(preferences.get("rate_limit_sleep_seconds") or 1)
+        )
+        self.historical_ohlcv_lookback_years_spin.setValue(
+            int(preferences.get("historical_ohlcv_lookback_years") or 5)
         )
 
     def _build_general_tab(self) -> None:
@@ -379,6 +383,9 @@ class SettingsDialog(QDialog):
         self.rate_limit_sleep_spin = QSpinBox()
         self.rate_limit_sleep_spin.setRange(0, 120)
         self.rate_limit_sleep_spin.setSuffix(" sec")
+        self.historical_ohlcv_lookback_years_spin = QSpinBox()
+        self.historical_ohlcv_lookback_years_spin.setRange(1, 30)
+        self.historical_ohlcv_lookback_years_spin.setSuffix(" years")
 
         layout.addRow("Default scan mode", self.default_scan_mode_combo)
         layout.addRow("Default scan preset", self.default_scan_preset_input)
@@ -396,6 +403,7 @@ class SettingsDialog(QDialog):
         layout.addRow("Request timeout", self.request_timeout_spin)
         layout.addRow("Max retries", self.max_retries_spin)
         layout.addRow("Rate limit sleep", self.rate_limit_sleep_spin)
+        layout.addRow("Historical OHLCV lookback", self.historical_ohlcv_lookback_years_spin)
 
         self.tabs.addTab(tab, "App Preferences")
 

@@ -17,6 +17,9 @@ class FakeDatabaseManager:
 
         return self.histories.get(ticker, pd.DataFrame())
 
+    def fetch_ohlcv(self, ticker, start_date=None, end_date=None):
+        return self.get_price_history(ticker)
+
 
 def price_history(dates):
     return pd.DataFrame(

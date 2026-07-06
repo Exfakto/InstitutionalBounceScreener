@@ -10,6 +10,7 @@ from analysis.trend_strength import TrendStrengthCalculator, TrendStrengthResult
 from config.logging_config import logger
 from database.manager import DatabaseManager
 from indicators.moving_averages.sma import SMAIndicator
+from services.ohlcv_cache_access import fetch_ohlcv_frame
 
 
 class TrendStrengthService:
@@ -24,7 +25,7 @@ class TrendStrengthService:
 
     def calculate_for_ticker(self, ticker):
         started_at = perf_counter()
-        price_history = self.db.get_price_history(ticker)
+        price_history = fetch_ohlcv_frame(self.db, ticker)
 
         result = {
             "ticker": ticker,
